@@ -43,6 +43,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# claude code — arquivos de instruções locais (não commitar)
+# claude code / design brief — arquivos locais (não commitar)
 CLAUDE.md
 AGENTS.md
+
+# Design handoff e referências locais
+docs/
+prototype/
+lhg-suprimentos-kickoff.md
