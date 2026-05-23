@@ -115,20 +115,13 @@ export async function syncFornecedores(
 
     total = items.length;
 
-    // Deduplica por CNPJ — Omie pode retornar o mesmo cadastro como cliente e fornecedor.
-    // Mantém o último registro (merge natural: itens posteriores sobrescrevem anteriores).
-    const uniqueMap = new Map<string, ReturnType<typeof mapFornecedor>>();
-    for (const item of items) {
-      const mapped = mapFornecedor(item, unidadeId);
-      uniqueMap.set(mapped.cnpj, mapped);
-    }
-    const uniqueItems = Array.from(uniqueMap.values());
-    total = uniqueItems.length;
-
+    // Filtro por tag "Fornecedor" já é feito no cliente Omie,
+    // então todos os itens aqui são fornecedores legítimos.
+    const mappedItems = items.map((item) => mapFornecedor(item, unidadeId));
     const BATCH = 50;
 
-    for (let i = 0; i < uniqueItems.length; i += BATCH) {
-      const batch = uniqueItems.slice(i, i + BATCH);
+    for (let i = 0; i < mappedItems.length; i += BATCH) {
+      const batch = mappedItems.slice(i, i + BATCH);
 
       const { error } = await supabase
         .from("fornecedores")

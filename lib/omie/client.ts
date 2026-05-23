@@ -234,7 +234,9 @@ export async function omiePost<TParam, TResponse>(
 
 /**
  * Busca uma página de fornecedores no Omie.
- * Omie considera "fornecedor" via tag ou flag específico.
+ * Filtra pela tag "Fornecedor" para excluir registros que são apenas clientes.
+ * No Omie o cadastro é unificado (cliente + fornecedor na mesma tabela),
+ * então a tag é a forma correta de distinguir fornecedores.
  */
 export async function listFornecedoresPage(
   creds: OmieCredentials,
@@ -248,9 +250,10 @@ export async function listFornecedoresPage(
     {
       pagina,
       registros_por_pagina: registrosPorPagina,
-      // Sem filtro de tipo: retorna clientes e fornecedores.
-      // Filtramos apenas ativos via clientesFiltro.
-      clientesFiltro: { inativo: "N" },
+      clientesFiltro: {
+        inativo: "N",
+        tags: [{ tag: "Fornecedor" }], // apenas quem tem a tag Fornecedor
+      },
     },
   );
 }
