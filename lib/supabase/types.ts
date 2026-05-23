@@ -325,49 +325,120 @@ export type Database = {
         Row: {
           ativo: boolean
           categoria: string | null
+          cep: string | null
+          cidade: string | null
           cnpj: string
           competitividade_pct: number | null
+          contato: string | null
           created_at: string
           email: string | null
+          endereco: string | null
           id: string
           nome_fantasia: string | null
           omie_codigo: string | null
+          omie_sincronizado_em: string | null
+          omie_unidade_id: string | null
           pontualidade_pct: number | null
           rating: number | null
           razao_social: string
           telefone: string | null
+          uf: string | null
         }
         Insert: {
           ativo?: boolean
           categoria?: string | null
+          cep?: string | null
+          cidade?: string | null
           cnpj: string
           competitividade_pct?: number | null
+          contato?: string | null
           created_at?: string
           email?: string | null
+          endereco?: string | null
           id?: string
           nome_fantasia?: string | null
           omie_codigo?: string | null
+          omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
           pontualidade_pct?: number | null
           rating?: number | null
           razao_social: string
           telefone?: string | null
+          uf?: string | null
         }
         Update: {
           ativo?: boolean
           categoria?: string | null
+          cep?: string | null
+          cidade?: string | null
           cnpj?: string
           competitividade_pct?: number | null
+          contato?: string | null
           created_at?: string
           email?: string | null
+          endereco?: string | null
           id?: string
           nome_fantasia?: string | null
           omie_codigo?: string | null
+          omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
           pontualidade_pct?: number | null
           rating?: number | null
           razao_social?: string
           telefone?: string | null
+          uf?: string | null
         }
         Relationships: []
+      }
+      integracao_logs: {
+        Row: {
+          created_at: string
+          detalhe: Json | null
+          duracao_ms: number | null
+          entidade: string
+          erros: number | null
+          id: string
+          novos: number | null
+          operacao: string
+          status: string
+          total: number | null
+          unidade_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          detalhe?: Json | null
+          duracao_ms?: number | null
+          entidade: string
+          erros?: number | null
+          id?: string
+          novos?: number | null
+          operacao: string
+          status: string
+          total?: number | null
+          unidade_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          detalhe?: Json | null
+          duracao_ms?: number | null
+          entidade?: string
+          erros?: number | null
+          id?: string
+          novos?: number | null
+          operacao?: string
+          status?: string
+          total?: number | null
+          unidade_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_logs_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       nf_itens: {
         Row: {
@@ -682,8 +753,14 @@ export type Database = {
           categoria: string
           codigo: string
           created_at: string
+          ean: string | null
           id: string
+          ncm: string | null
           nome: string
+          omie_codigo: string | null
+          omie_descricao: string | null
+          omie_sincronizado_em: string | null
+          preco_custo: number | null
           unidade_med: string
         }
         Insert: {
@@ -691,8 +768,14 @@ export type Database = {
           categoria: string
           codigo: string
           created_at?: string
+          ean?: string | null
           id?: string
+          ncm?: string | null
           nome: string
+          omie_codigo?: string | null
+          omie_descricao?: string | null
+          omie_sincronizado_em?: string | null
+          preco_custo?: number | null
           unidade_med: string
         }
         Update: {
@@ -700,8 +783,14 @@ export type Database = {
           categoria?: string
           codigo?: string
           created_at?: string
+          ean?: string | null
           id?: string
+          ncm?: string | null
           nome?: string
+          omie_codigo?: string | null
+          omie_descricao?: string | null
+          omie_sincronizado_em?: string | null
+          preco_custo?: number | null
           unidade_med?: string
         }
         Relationships: []
@@ -881,6 +970,8 @@ export type Database = {
           created_at: string
           id: string
           nome: string
+          omie_app_key: string | null
+          omie_app_secret: string | null
           omie_cnpj: string | null
           omie_empresa_id: string | null
           slug: string
@@ -893,6 +984,8 @@ export type Database = {
           created_at?: string
           id?: string
           nome: string
+          omie_app_key?: string | null
+          omie_app_secret?: string | null
           omie_cnpj?: string | null
           omie_empresa_id?: string | null
           slug: string
@@ -905,6 +998,8 @@ export type Database = {
           created_at?: string
           id?: string
           nome?: string
+          omie_app_key?: string | null
+          omie_app_secret?: string | null
           omie_cnpj?: string | null
           omie_empresa_id?: string | null
           slug?: string
