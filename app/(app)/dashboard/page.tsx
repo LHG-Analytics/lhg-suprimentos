@@ -4,25 +4,16 @@
  * Busca KPIs e cotações do Supabase; passa para componentes filhos.
  */
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Download, Plus, Calendar } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/utils";
 import { KpiCard } from "./_components/kpi-card";
 import { GastosChart } from "./_components/gastos-chart";
 import { AcoesFeed } from "./_components/acoes-feed";
 import { CotacoesTable, type CotacaoRow } from "./_components/cotacoes-table";
+import { DashboardHeader } from "./_components/dashboard-header";
 
 // ── Metadados ─────────────────────────────────────────────────────────────────
 export const metadata = { title: "Dashboard" };
-
-// ── Saudação por horário ───────────────────────────────────────────────────────
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
-}
 
 // ── Formata data do Brasil ─────────────────────────────────────────────────────
 function datePtBr(d: Date): string {
@@ -136,15 +127,6 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Busca nome do usuário
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("nome")
-    .eq("id", user.id)
-    .single();
-
-  const firstName = (profile?.nome ?? user.email ?? "").split(" ")[0];
-
   const [kpis, { rows: cotacoes, total: totalCots }] = await Promise.all([
     fetchKpis(supabase),
     fetchCotacoes(supabase),
@@ -152,37 +134,12 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodoLabel = `${datePtBr(monthStart)} – ${datePtBr(now)}`;
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-3 pb-8">
-      {/* ── Header ────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 py-2">
-        <div className="min-w-0">
-          <div className="text-xs text-zinc-500">{getGreeting()}, {firstName}</div>
-          <h1 className="mt-1 text-[26px] leading-none font-semibold tracking-tight text-zinc-50">
-            Dashboard
-          </h1>
-          <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-            <Calendar size={12} />
-            <span>
-              Este mês · {datePtBr(monthStart)} até {datePtBr(now)}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 text-sm transition-colors">
-            <Download size={14} />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
-          <Link
-            href="/cotacoes/nova"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-lhg-500 hover:bg-lhg-400 text-zinc-950 font-medium text-sm transition-colors"
-          >
-            <Plus size={14} />
-            Nova cotação
-          </Link>
-        </div>
-      </div>
+      {/* ── Header: filtros de período + ações ────────────────────── */}
+      <DashboardHeader periodoLabel={periodoLabel} />
 
       {/* ── KPIs ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
