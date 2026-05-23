@@ -191,34 +191,23 @@ export async function omiePost<TParam, TResponse>(
       // Omie retorna HTTP 200 mas com faultstring para erros de negócio
       if ("faultstring" in json) {
         const fault = json as OmieFaultResponse;
+        const fs: string = fault.faultstring ?? "";
+        const fc: string = fault.faultcode ?? "";
 
-        // REDUNDANT: Omie bloqueia chamadas idênticas em curto período.
-        // O código REDUNDANT aparece no faultstring, não no faultcode.
-        // Extrai o tempo de espera do próprio faultstring ("Aguarde X segundos")
-        // e espera X+5 segundos antes de retentar.
-        const isRedundant =
-          fault.faultcode === "REDUNDANT" ||
-          fault.faultstring?.toUpperCase().includes("REDUNDANT");
-        if (isRedundant) {
-          if (attempt === maxRetries) {
-            throw new OmieError(fault.faultstring, fault.faultcode, res.status);
-          }
-          const waitMatch = fault.faultstring?.match(/Aguarde\s+(\d+)\s+segundo/i);
-          const waitSec = waitMatch ? parseInt(waitMatch[1], 10) + 5 : 65;
-          console.warn(`[omie] REDUNDANT — aguardando ${waitSec}s...`);
-          await new Promise((r) => setTimeout(r, waitSec * 1000));
-          lastError = new OmieError(fault.faultstring, fault.faultcode, res.status);
-          continue;
-        }
+        // "Sem registros" é resposta legítima — não é erro transitório, não retenta
+        const fsLow = fs.toLowerCase();
+        const isEmpty =
+          fsLow.includes("não existem registros") ||
+          fsLow.includes("nao existem registros") ||
+          fsLow.includes("nenhum registro");
 
-        // Erros 5xx do Omie (servidor) são retentáveis; 4xx não
+        // Outros erros: retentáveis (SOAP-ENV / 5xx) ou definitivos
         const retryable =
-          fault.faultcode?.startsWith("SOAP-ENV") ||
-          fault.faultcode?.startsWith("5");
+          !isEmpty && (fc.startsWith("SOAP-ENV") || fc.startsWith("5"));
         if (!retryable || attempt === maxRetries) {
-          throw new OmieError(fault.faultstring, fault.faultcode, res.status);
+          throw new OmieError(fs, fc, res.status);
         }
-        lastError = new OmieError(fault.faultstring, fault.faultcode, res.status);
+        lastError = new OmieError(fs, fc, res.status);
       } else if (!res.ok) {
         if (attempt === maxRetries) {
           throw new OmieError(`HTTP ${res.status}`, undefined, res.status);
@@ -228,7 +217,7 @@ export async function omiePost<TParam, TResponse>(
         return json as TResponse;
       }
     } catch (err) {
-      if (err instanceof OmieError) throw err; // Não retry em erro definitivo
+      if (err instanceof OmieError) throw err; // erros definitivos: não retenta
       if (err instanceof Error) lastError = err;
       if (attempt === maxRetries) break;
     }
@@ -270,6 +259,20 @@ export async function listFornecedoresPage(
  * Itera todas as páginas de fornecedores e retorna a lista completa.
  * @param onPage callback opcional chamado a cada página (progress reporting)
  */
+// Mensagens Omie que indicam "sem registros" — tratar como lista vazia.
+const OMIE_EMPTY_MSGS = [
+  "não existem registros",
+  "nao existem registros",
+  "no records",
+  "nenhum registro",
+];
+
+function isOmieEmptyError(err: unknown): boolean {
+  if (!(err instanceof OmieError)) return false;
+  const msg = err.message.toLowerCase();
+  return OMIE_EMPTY_MSGS.some((m) => msg.includes(m));
+}
+
 export async function listAllFornecedores(
   creds: OmieCredentials,
   onPage?: (page: number, total: number, items: OmieClienteItem[]) => void,
@@ -279,7 +282,13 @@ export async function listAllFornecedores(
   let totalPaginas = 1;
 
   do {
-    const res = await listFornecedoresPage(creds, pagina);
+    let res: OmieListaClientesResponse;
+    try {
+      res = await listFornecedoresPage(creds, pagina);
+    } catch (err) {
+      if (isOmieEmptyError(err)) break; // sem registros — encerra paginação
+      throw err;
+    }
     totalPaginas = res.total_de_paginas;
     all.push(...res.clientes_cadastro);
     onPage?.(pagina, totalPaginas, res.clientes_cadastro);
@@ -293,6 +302,11 @@ export async function listAllFornecedores(
 
 /**
  * Busca uma página de produtos no Omie.
+ *
+ * Parâmetros obrigatórios para retornar produtos cadastrados manualmente:
+ *   - apenas_importado_api: "N"  → inclui produtos não importados via API
+ *   - filtrar_apenas_omiepdv: "N" → inclui produtos que não são exclusivos do PDV
+ * (sem esses dois flags o Omie retorna lista vazia para cadastros manuais)
  */
 export async function listProdutosPage(
   creds: OmieCredentials,
@@ -301,11 +315,13 @@ export async function listProdutosPage(
 ): Promise<OmieListaProdutosResponse> {
   return omiePost<OmieProdutoParam, OmieListaProdutosResponse>(
     "/geral/produtos/",
-    "ListarCadProdutos",
+    "ListarProdutos",
     creds,
     {
       pagina,
       registros_por_pagina: registrosPorPagina,
+      apenas_importado_api: "N",    // inclui produtos cadastrados manualmente
+      filtrar_apenas_omiepdv: "N",  // inclui produtos não-PDV
     },
   );
 }
@@ -322,12 +338,18 @@ export async function listAllProdutos(
   let totalPaginas = 1;
 
   do {
-    const res = await listProdutosPage(creds, pagina);
+    let res: OmieListaProdutosResponse;
+    try {
+      res = await listProdutosPage(creds, pagina);
+    } catch (err) {
+      if (isOmieEmptyError(err)) break; // sem produtos — encerra normalmente
+      throw err; // propaga qualquer outro erro (inclusive REDUNDANT) para diagnóstico
+    }
     totalPaginas = res.total_de_paginas;
     // Omie usa "produto_servico_cadastro" ou "cadastros" dependendo da versão
     const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
     all.push(...items);
-    onPage?.(pagina, totalPaginas, res.produto_servico_cadastro);
+    onPage?.(pagina, totalPaginas, items);
     pagina++;
   } while (pagina <= totalPaginas);
 
