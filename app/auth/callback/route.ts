@@ -3,6 +3,10 @@
  * Route Handler para o callback PKCE do Supabase Auth.
  * Supabase redireciona para esta rota após Magic Link / OAuth com ?code=xxx.
  * Troca o code por uma sessão JWT e grava nos cookies.
+ *
+ * Segurança: somente usuários com perfil em `user_profiles` conseguem entrar.
+ * Isso garante que apenas quem recebeu convite explícito via inviteUserByEmail
+ * tem acesso — novos logins Google sem convite são bloqueados aqui.
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -46,6 +50,26 @@ export async function GET(request: NextRequest) {
     console.error("[auth/callback] exchangeCodeForSession error:", error.message);
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
+
+  // ── Verificação de acesso: somente usuários convidados ─────────────────────
+  // Após trocar o code, checamos se existe um perfil em user_profiles.
+  // Usuários que chegaram pelo Google sem convite NÃO terão perfil — são barrados.
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile) {
+      // Não tem perfil → não foi convidado → encerrar sessão e bloquear
+      await supabase.auth.signOut();
+      return NextResponse.redirect(`${origin}/login?error=not_invited`);
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Redirecionar para a rota original ou dashboard
   const forwardedHost = request.headers.get("x-forwarded-host");

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, ShieldAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { sendMagicLink, signInWithGoogle } from "../actions";
 
@@ -78,8 +79,19 @@ function MagicLinkSent({
   );
 }
 
+// ─── Mapa de mensagens de erro por query param ────────────────────────────────
+const ERROR_MESSAGES: Record<string, string> = {
+  not_invited: "Seu email não está na lista de acesso. Solicite um convite ao administrador.",
+  auth_failed:  "Falha na autenticação. Tente novamente.",
+  missing_code: "Link inválido ou expirado. Solicite um novo.",
+};
+
 // ─── Componente principal ──────────────────────────────────────────────────────
 export function LoginForm() {
+  const searchParams = useSearchParams();
+  const errorKey = searchParams.get("error");
+  const errorMsg = errorKey ? ERROR_MESSAGES[errorKey] ?? "Erro inesperado. Tente novamente." : null;
+
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -149,6 +161,14 @@ export function LoginForm() {
       <p className="mt-1.5 text-sm text-zinc-500">
         Acesso restrito a colaboradores LHG.
       </p>
+
+      {/* Banner de erro do callback (not_invited, auth_failed, etc.) */}
+      {errorMsg && (
+        <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-3">
+          <ShieldAlert size={15} className="text-red-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-300 leading-snug">{errorMsg}</p>
+        </div>
+      )}
 
       {sent ? (
         <div className="mt-8">
