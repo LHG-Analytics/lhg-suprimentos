@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { Logo } from "@/components/lhg/logo";
 import { LoginForm } from "./_components/login-form";
 
 export const metadata: Metadata = { title: "Entrar" };
@@ -29,13 +30,8 @@ export default async function LoginPage() {
         <div className="absolute -bottom-40 -right-32 w-[520px] h-[520px] rounded-full bg-emerald-700/10 blur-[140px]" />
 
         {/* Logo */}
-        <div className="relative z-10 p-10 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-md bg-lhg-500 text-zinc-950 flex items-center justify-center font-mono font-bold text-sm select-none">
-            L
-          </div>
-          <span className="text-zinc-100 font-medium tracking-tight">
-            LHG <span className="text-zinc-500">Suprimentos</span>
-          </span>
+        <div className="relative z-10 p-10">
+          <Logo size="md" />
         </div>
 
         {/* Conteúdo central */}

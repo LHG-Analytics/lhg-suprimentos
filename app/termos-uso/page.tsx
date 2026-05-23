@@ -4,6 +4,7 @@
  */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo } from "@/components/lhg/logo";
 
 export const metadata: Metadata = {
   title: "Termos de Uso — LHG Suprimentos",
@@ -16,13 +17,8 @@ export default function TermosUsoPage() {
       {/* Header */}
       <header className="border-b border-zinc-900 bg-zinc-950/80 sticky top-0 backdrop-blur-sm z-10">
         <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/login" className="flex items-center gap-2.5 group">
-            <div className="w-7 h-7 rounded-md bg-lhg-500 text-zinc-950 flex items-center justify-center font-mono font-bold text-sm select-none">
-              L
-            </div>
-            <span className="text-zinc-100 font-medium tracking-tight text-sm">
-              LHG <span className="text-zinc-500">Suprimentos</span>
-            </span>
+          <Link href="/login" aria-label="LHG Suprimentos">
+            <Logo size="sm" />
           </Link>
           <Link
             href="/login"

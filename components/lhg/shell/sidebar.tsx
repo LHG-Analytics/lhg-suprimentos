@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Logo } from "@/components/lhg/logo";
 import { useTheme } from "next-themes";
 import { Sun, Moon, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -149,13 +150,8 @@ export function Sidebar({
         {/* ── Logo / collapse trigger ─────────────────────────────────── */}
         <div className="p-2.5 border-b border-zinc-800/80 flex items-center gap-2">
           {!collapsed && (
-            <div className="flex items-center gap-2 flex-1 px-1">
-              <div className="w-6 h-6 rounded-md bg-lhg-500 text-zinc-950 flex items-center justify-center font-mono font-bold text-xs select-none">
-                L
-              </div>
-              <span className="text-sm font-medium tracking-tight text-zinc-100">
-                LHG <span className="text-zinc-500">Sup.</span>
-              </span>
+            <div className="flex items-center flex-1 px-1">
+              <Logo size="sm" />
             </div>
           )}
           <button

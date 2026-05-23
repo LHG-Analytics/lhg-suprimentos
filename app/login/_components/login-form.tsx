@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowRight, Loader2, ShieldAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/lhg/logo";
 import { sendMagicLink, signInWithGoogle } from "../actions";
 
 // ─── Ícone oficial do Google (colorido) ───────────────────────────────────────
@@ -147,13 +148,8 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-[400px]">
       {/* Logo — só visível em mobile (lg oculta o painel esquerdo) */}
-      <div className="lg:hidden mb-8 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-md bg-lhg-500 text-zinc-950 flex items-center justify-center font-mono font-bold text-sm select-none">
-          L
-        </div>
-        <span className="text-zinc-100 font-medium tracking-tight">
-          LHG <span className="text-zinc-500">Suprimentos</span>
-        </span>
+      <div className="lg:hidden mb-8">
+        <Logo size="md" />
       </div>
 
       <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">
