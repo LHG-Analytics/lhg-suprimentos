@@ -30,12 +30,12 @@ export const ThreeDMarquee = ({
     >
       <div className="flex size-full items-center justify-center">
         {/* Grade — 4 colunas de cards verticais */}
-        <div className="size-[2400px] shrink-0 scale-[55%] sm:scale-[70%] lg:scale-[88%] xl:scale-[105%]">
+        <div className="size-[3200px] shrink-0 scale-[42%] sm:scale-[52%] lg:scale-[65%] xl:scale-[78%]">
           <div
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[180px] right-[55%] grid size-full origin-top-left grid-cols-5 gap-10 transform-3d"
+            className="relative -top-[200px] right-[52%] grid size-full origin-top-left grid-cols-5 gap-10 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
