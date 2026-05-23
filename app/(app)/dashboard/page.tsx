@@ -225,11 +225,14 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Gráfico + Ações ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="lg:col-span-2">
+      {/* min-h garante altura mínima; h-full nos filhos preenche a linha inteira */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[420px]">
+        <div className="lg:col-span-2 h-full">
           <GastosChart />
         </div>
-        <AcoesFeed />
+        <div className="h-full">
+          <AcoesFeed />
+        </div>
       </div>
 
       {/* ── Tabela cotações ───────────────────────────────────────────── */}
