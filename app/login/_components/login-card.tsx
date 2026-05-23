@@ -102,8 +102,8 @@ export function LoginCard() {
         <div className="w-full max-w-[360px] rounded-2xl border border-zinc-800/60 bg-zinc-950/80 backdrop-blur-xl shadow-2xl px-8 py-9">
 
           {/* Logo */}
-          <div className="flex justify-center mb-6">
-            <Logo size="md" />
+          <div className="flex justify-center mb-7">
+            <Logo size="xl" />
           </div>
 
           {/* Texto */}

@@ -17,15 +17,17 @@ const LOGO_ALT   = "LHG Suprimentos";
 
 // ── Tamanhos pré-definidos ─────────────────────────────────────────────────────
 const SIZE_MAP = {
-  sm: { height: 24, width: Math.round(LOGO_WIDTH * (24 / 32)) },
-  md: { height: 32, width: LOGO_WIDTH },
-  lg: { height: 40, width: Math.round(LOGO_WIDTH * (40 / 32)) },
+  sm:  { height: 24,  width: Math.round(LOGO_WIDTH * (24  / 32)) },
+  md:  { height: 32,  width: LOGO_WIDTH },
+  lg:  { height: 48,  width: Math.round(LOGO_WIDTH * (48  / 32)) },
+  xl:  { height: 72,  width: Math.round(LOGO_WIDTH * (72  / 32)) },
+  "2xl": { height: 96, width: Math.round(LOGO_WIDTH * (96 / 32)) },
 } as const;
 
 interface LogoProps {
   /**
-   * sm = 24px | md = 32px (padrão) | lg = 40px de altura.
-   * A largura é calculada proporcionalmente.
+   * sm=24px | md=32px | lg=48px | xl=72px | 2xl=96px de altura.
+   * A largura é calculada proporcionalmente a partir de LOGO_WIDTH.
    */
   size?: keyof typeof SIZE_MAP;
   className?: string;
