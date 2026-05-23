@@ -14,7 +14,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Logo } from "@/components/lhg/logo";
 import { useTheme } from "next-themes";
 import {
   Sun, Moon, LogOut, PanelLeftClose, PanelLeftOpen, ChevronDown, Check,
@@ -294,45 +293,34 @@ export function Sidebar({
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        {/* ── Logo / collapse trigger ─────────────────────────────────── */}
-        <div
-          className={cn(
-            "border-b border-zinc-800/80 flex items-center",
-            collapsed ? "h-[60px] justify-center px-2" : "h-[60px] px-3 gap-2",
-          )}
-        >
-          {!collapsed && (
-            <div className="flex items-center flex-1 min-w-0">
-              <Logo size="md" />
+        {/* ── Seletor de unidade + collapse trigger (área unificada) ─── */}
+        {collapsed ? (
+          /* Colapsado: ícone da unidade acima, botão de expand abaixo */
+          <div className="border-b border-zinc-800/80 flex flex-col items-center gap-1 py-2.5 px-1.5">
+            <UnitSelector collapsed />
+            <button
+              onClick={() => { setCollapsed(false); setMobileOpen(false); }}
+              className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+              aria-label="Expandir sidebar"
+            >
+              <PanelLeftOpen size={14} />
+            </button>
+          </div>
+        ) : (
+          /* Expandido: seletor + botão colapso na mesma linha */
+          <div className="border-b border-zinc-800/80 h-[56px] flex items-center gap-2 px-2.5">
+            <div className="flex-1 min-w-0">
+              <UnitSelector collapsed={false} />
             </div>
-          )}
-          <button
-            onClick={() => {
-              setCollapsed(!collapsed);
-              setMobileOpen(false);
-            }}
-            className={cn(
-              "w-8 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors shrink-0",
-            )}
-            aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
-          >
-            {collapsed ? (
-              <PanelLeftOpen size={15} />
-            ) : (
-              <PanelLeftClose size={15} />
-            )}
-          </button>
-        </div>
-
-        {/* ── Seletor de unidade ──────────────────────────────────────── */}
-        <div
-          className={cn(
-            "border-b border-zinc-800/80",
-            collapsed ? "py-2 px-1.5 flex justify-center" : "py-2.5 px-2.5",
-          )}
-        >
-          <UnitSelector collapsed={collapsed} />
-        </div>
+            <button
+              onClick={() => { setCollapsed(true); setMobileOpen(false); }}
+              className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+              aria-label="Colapsar sidebar"
+            >
+              <PanelLeftClose size={14} />
+            </button>
+          </div>
+        )}
 
         {/* ── Navegação ───────────────────────────────────────────────── */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3">
