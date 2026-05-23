@@ -112,8 +112,6 @@ export async function POST(req: NextRequest) {
       .not("omie_app_key", "is", null)
       .not("omie_app_secret", "is", null);
 
-    console.log("[omie/sync] query unidades →", { count: unidades?.length ?? 0, dbErr: dbErr?.message ?? null });
-
     if (dbErr) {
       console.error("[omie/sync] Erro ao buscar unidades:", dbErr.message, dbErr.code);
       return NextResponse.json(
