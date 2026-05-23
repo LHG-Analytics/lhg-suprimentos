@@ -5,11 +5,14 @@
  * Troca o code por uma sessão JWT e grava nos cookies.
  *
  * Segurança: somente usuários com perfil em `user_profiles` conseguem entrar.
- * Isso garante que apenas quem recebeu convite explícito via inviteUserByEmail
- * tem acesso — novos logins Google sem convite são bloqueados aqui.
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+// Strip BOM (U+FEFF) — mesmo fix do lib/supabase/server.ts
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(/^﻿/, "");
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.replace(/^﻿/, "");
 
 export async function GET(request: NextRequest) {
   const { origin } = request.nextUrl;
@@ -20,8 +23,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
 
-  // Usa o createClient centralizado — já tem strip de BOM nas env vars
-  const supabase = await createClient();
+  const cookieStore = await cookies();
+
+  // Route Handler: setAll SEM try-catch — aqui cookies são graváveis
+  // (o try-catch do createClient() em server.ts é só para Server Components read-only)
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          cookieStore.set(name, value, options);
+        });
+      },
+    },
+  });
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
