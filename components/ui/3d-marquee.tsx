@@ -61,7 +61,7 @@ export const ThreeDMarquee = ({
                     // Card com fundo escuro para as logos respirarem
                     <div
                       key={imgIndex + image}
-                      className="relative shrink-0 w-[380px] aspect-[4/3] rounded-2xl bg-zinc-900/90 ring-1 ring-white/8 flex items-center justify-center p-10"
+                      className="relative shrink-0 w-[520px] aspect-[4/3] rounded-2xl bg-zinc-900/90 ring-1 ring-white/8 flex items-center justify-center p-5"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
