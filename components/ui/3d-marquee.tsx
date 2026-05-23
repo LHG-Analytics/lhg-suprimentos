@@ -35,7 +35,7 @@ export const ThreeDMarquee = ({
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-6 transform-3d"
+            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-10 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
@@ -45,7 +45,7 @@ export const ThreeDMarquee = ({
               return (
                 <motion.div
                   key={colIndex + "col"}
-                  className="flex flex-col items-stretch gap-6"
+                  className="flex flex-col items-stretch gap-10"
                   animate={{ y: isEven ? ["0%", "-50%"] : ["-50%", "0%"] }}
                   transition={{
                     duration,
