@@ -112,7 +112,20 @@ export async function POST(req: NextRequest) {
       .not("omie_app_key", "is", null)
       .not("omie_app_secret", "is", null);
 
-    if (dbErr || !unidades?.length) {
+    console.log("[omie/sync] query unidades →", { count: unidades?.length ?? 0, dbErr: dbErr?.message ?? null });
+
+    if (dbErr) {
+      console.error("[omie/sync] Erro ao buscar unidades:", dbErr.message, dbErr.code);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Erro ao acessar banco de dados: ${dbErr.message}`,
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!unidades?.length) {
       return NextResponse.json(
         {
           ok: false,
