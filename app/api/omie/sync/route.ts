@@ -49,7 +49,8 @@ async function autenticarRequisicao(req: NextRequest): Promise<boolean> {
       .eq("id", user.id)
       .single();
 
-    return profile?.role === "admin" || profile?.role === "comprador";
+    // Qualquer usuário autenticado pode disparar sync (leitura do Omie, não destrutivo)
+    return !!user;
   } catch {
     return false;
   }

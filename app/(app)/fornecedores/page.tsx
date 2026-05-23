@@ -5,21 +5,17 @@
  */
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
 import { FornecedoresClient } from "./_components/fornecedores-client";
 
 export const metadata = { title: "Fornecedores" };
 
 export default async function FornecedoresPage() {
-  // Valida autenticação com sessão do usuário
-  const authClient = await createClient();
+  const supabase = await createClient();
+
   const {
     data: { user },
-  } = await authClient.auth.getUser();
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-
-  // Lê dados com service role (bypass de RLS) — seguro pois é Server Component
-  const supabase = createServiceClient();
 
   const [{ data: fornecedores }, { data: lastLog }] = await Promise.all([
     supabase
