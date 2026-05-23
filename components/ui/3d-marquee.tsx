@@ -18,8 +18,8 @@ export const ThreeDMarquee = ({
     images.slice(i * chunkSize, i * chunkSize + chunkSize),
   );
 
-  // Durações base por coluna (colunas pares descem, ímpares sobem)
-  const baseDurations = [22, 28, 18, 32];
+  // Durações base por coluna — mais alto = mais devagar
+  const baseDurations = [42, 58, 36, 66];
 
   return (
     <div
@@ -29,13 +29,13 @@ export const ThreeDMarquee = ({
       )}
     >
       <div className="flex size-full items-center justify-center">
-        {/* Grade 2000×2000 — 4 colunas de cards 380px, escala cobre viewport */}
-        <div className="size-[2000px] shrink-0 scale-[50%] sm:scale-[65%] lg:scale-[82%] xl:scale-[95%]">
+        {/* Grade 2000×2000 — escala maior para cobrir todos os cantos */}
+        <div className="size-[2000px] shrink-0 scale-[65%] sm:scale-[82%] lg:scale-[105%] xl:scale-[122%]">
           <div
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[380px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-8 transform-3d"
+            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-8 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
@@ -58,16 +58,16 @@ export const ThreeDMarquee = ({
                   }}
                 >
                   {doubled.map((image, imgIndex) => (
-                    // Card com fundo escuro para as logos respirarem
+                    // Card full-bleed — foto cobre o card inteiro
                     <div
                       key={imgIndex + image}
-                      className="relative shrink-0 w-[520px] aspect-[4/3] rounded-2xl bg-zinc-900/90 ring-1 ring-white/8 flex items-center justify-center p-5"
+                      className="relative shrink-0 w-[520px] aspect-[4/3] rounded-2xl overflow-hidden ring-1 ring-white/10"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={image}
                         alt=""
-                        className="max-h-full max-w-full object-contain"
+                        className="w-full h-full object-cover"
                         loading="eager"
                       />
                     </div>
