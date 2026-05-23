@@ -42,3 +42,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code — arquivos de instruções locais (não commitar)
+CLAUDE.md
+AGENTS.md

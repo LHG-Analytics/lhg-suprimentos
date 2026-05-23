@@ -1,84 +1,140 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* next-themes: aplica o dark mode via classe .dark no <html> */
+@custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   LHG SUPRIMENTOS — Design Tokens
+   LHG SUPRIMENTOS — Design Tokens (HSL)
    Dark mode default · next-themes class strategy
    ============================================================ */
 
-@layer base {
-  :root {
-    /* Light mode */
-    --background: 0 0% 100%;
-    --foreground: 240 6% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 6% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 152 70% 40%;
-    --primary: 158 80% 39%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
-    --success: 158 80% 39%;
-    --warning: 38 92% 50%;
-    --info: 199 89% 48%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --radius: 0.5rem;
-  }
+:root {
+  /* Light mode */
+  --background: 0 0% 100%;
+  --foreground: 240 6% 10%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 46%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 6% 10%;
+  --border: 240 6% 90%;
+  --input: 240 6% 90%;
+  --ring: 152 70% 40%;
+  --primary: 158 80% 39%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 96%;
+  --secondary-foreground: 240 6% 10%;
+  --accent: 240 5% 96%;
+  --accent-foreground: 240 6% 10%;
+  --success: 158 80% 39%;
+  --warning: 38 92% 50%;
+  --info: 199 89% 48%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --radius: 0.5rem;
 
-  .dark {
-    /* Dark mode (default) */
-    --background: 240 10% 4%;
-    --foreground: 0 0% 96%;
-    --muted: 240 6% 10%;
-    --muted-foreground: 240 5% 65%;
-    --card: 240 8% 7%;
-    --card-foreground: 0 0% 96%;
-    --popover: 240 10% 4%;
-    --popover-foreground: 0 0% 96%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 152 60% 50%;
-    --primary: 152 76% 47%;
-    --primary-foreground: 240 10% 4%;
-    --secondary: 240 6% 10%;
-    --secondary-foreground: 0 0% 96%;
-    --accent: 240 6% 10%;
-    --accent-foreground: 0 0% 96%;
-  }
+  /* Chart colors (light) */
+  --chart-1: 158 80% 39%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 270 60% 55%;
+  --chart-5: 0 84% 60%;
+
+  /* Sidebar */
+  --sidebar: 0 0% 98%;
+  --sidebar-foreground: 240 6% 10%;
+  --sidebar-primary: 158 80% 39%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 5% 96%;
+  --sidebar-accent-foreground: 240 6% 10%;
+  --sidebar-border: 240 6% 90%;
+  --sidebar-ring: 152 70% 40%;
+}
+
+.dark {
+  /* Dark mode (default) */
+  --background: 240 10% 4%;
+  --foreground: 0 0% 96%;
+  --muted: 240 6% 10%;
+  --muted-foreground: 240 5% 65%;
+  --card: 240 8% 7%;
+  --card-foreground: 0 0% 96%;
+  --popover: 240 10% 4%;
+  --popover-foreground: 0 0% 96%;
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 152 60% 50%;
+  --primary: 152 76% 47%;
+  --primary-foreground: 240 10% 4%;
+  --secondary: 240 6% 10%;
+  --secondary-foreground: 0 0% 96%;
+  --accent: 240 6% 10%;
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 96%;
+
+  /* Chart colors (dark) */
+  --chart-1: 152 76% 47%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 270 60% 65%;
+  --chart-5: 0 72% 51%;
+
+  /* Sidebar */
+  --sidebar: 240 8% 6%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-primary: 152 76% 47%;
+  --sidebar-primary-foreground: 240 10% 4%;
+  --sidebar-accent: 240 6% 12%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-border: 240 4% 16%;
+  --sidebar-ring: 152 60% 50%;
 }
 
 @theme inline {
-  /* Semantic colors — reference CSS vars (resolved at runtime in browser) */
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-success: hsl(var(--success));
-  --color-warning: hsl(var(--warning));
-  --color-info: hsl(var(--info));
-  --color-destructive: hsl(var(--destructive));
+  /* Semantic colors — hsl() references (resolvidas pelo browser em runtime) */
+  --color-background:             hsl(var(--background));
+  --color-foreground:             hsl(var(--foreground));
+  --color-muted:                  hsl(var(--muted));
+  --color-muted-foreground:       hsl(var(--muted-foreground));
+  --color-card:                   hsl(var(--card));
+  --color-card-foreground:        hsl(var(--card-foreground));
+  --color-popover:                hsl(var(--popover));
+  --color-popover-foreground:     hsl(var(--popover-foreground));
+  --color-border:                 hsl(var(--border));
+  --color-input:                  hsl(var(--input));
+  --color-ring:                   hsl(var(--ring));
+  --color-primary:                hsl(var(--primary));
+  --color-primary-foreground:     hsl(var(--primary-foreground));
+  --color-secondary:              hsl(var(--secondary));
+  --color-secondary-foreground:   hsl(var(--secondary-foreground));
+  --color-accent:                 hsl(var(--accent));
+  --color-accent-foreground:      hsl(var(--accent-foreground));
+  --color-success:                hsl(var(--success));
+  --color-warning:                hsl(var(--warning));
+  --color-info:                   hsl(var(--info));
+  --color-destructive:            hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  /* Charts */
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  /* Sidebar */
+  --color-sidebar:                    hsl(var(--sidebar));
+  --color-sidebar-foreground:         hsl(var(--sidebar-foreground));
+  --color-sidebar-primary:            hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent:             hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground:  hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border:             hsl(var(--sidebar-border));
+  --color-sidebar-ring:               hsl(var(--sidebar-ring));
 
   /* LHG Brand — emerald scale */
   --color-lhg-50:  #ecfdf5;
@@ -94,16 +150,18 @@
   --color-lhg-950: #022c22;
 
   /* Border radius */
-  --radius: 0.5rem;
+  --radius:     0.5rem;
   --radius-sm:  calc(var(--radius) - 2px);
   --radius-md:  var(--radius);
   --radius-lg:  calc(var(--radius) + 4px);
   --radius-xl:  calc(var(--radius) + 8px);
   --radius-2xl: calc(var(--radius) + 12px);
+  --radius-3xl: calc(var(--radius) * 2.2);
 
-  /* Typography — literal names (NOT var() — Tailwind v4 @theme inline gotcha) */
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  /* Typography — nomes LITERAIS (nunca var() dentro de @theme inline para fontes) */
+  --font-sans:    "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ============================================================
@@ -111,21 +169,13 @@
    ============================================================ */
 @layer base {
   * {
-    border-color: hsl(var(--border));
+    @apply border-border outline-ring/50;
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-family: var(--font-sans);
+    @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-  }
-
-  /* Focus rings */
-  :focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 2px;
   }
 }
 

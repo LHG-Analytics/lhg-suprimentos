@@ -1,54 +1,70 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+import { format, formatDistanceToNow } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
+// ─── Tailwind class merge ──────────────────────────────────────────────────
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-/** Formata valor em BRL — ex: 1234.56 → "R$ 1.234,56" */
+// ─── Currency ─────────────────────────────────────────────────────────────
+/**
+ * Formata um número como moeda BRL.
+ * @example formatBRL(1234.5) // "R$ 1.234,50"
+ */
 export function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(value);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
-/** Formata percentual — ex: 12.8 → "12,8%" */
-export function formatPercent(value: number, decimals = 1): string {
+// ─── Percentage ───────────────────────────────────────────────────────────
+/**
+ * Formata um número como percentual.
+ * @example formatPercent(0.1234) // "12,34%"
+ */
+export function formatPercent(value: number, decimals = 2): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "percent",
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(value / 100);
+  }).format(value)
 }
 
-/** Formata data no padrão pt-BR — ex: "22 mai. 2026" */
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(date));
+// ─── Date ─────────────────────────────────────────────────────────────────
+/**
+ * Formata uma data no padrão brasileiro.
+ * @example formatDate(new Date()) // "22/05/2026"
+ * @example formatDate(new Date(), "dd MMM yyyy") // "22 mai. 2026"
+ */
+export function formatDate(
+  date: Date | string | number,
+  pattern = "dd/MM/yyyy"
+): string {
+  return format(new Date(date), pattern, { locale: ptBR })
 }
 
-/** Tempo relativo — ex: "há 6h", "há 2 dias" */
-export function formatRelativeTime(date: string | Date): string {
-  const now = new Date();
-  const target = new Date(date);
-  const diff = now.getTime() - target.getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (minutes < 1) return "agora";
-  if (minutes < 60) return `há ${minutes}min`;
-  if (hours < 24) return `há ${hours}h`;
-  if (days < 7) return `há ${days} dia${days > 1 ? "s" : ""}`;
-  return formatDate(date);
+/**
+ * Retorna tempo relativo em português.
+ * @example formatRelativeTime(new Date()) // "há menos de um minuto"
+ */
+export function formatRelativeTime(date: Date | string | number): string {
+  return formatDistanceToNow(new Date(date), {
+    locale: ptBR,
+    addSuffix: true,
+  })
 }
 
-/** Trunca string — ex: "Kit amenities pr..." */
+// ─── String ───────────────────────────────────────────────────────────────
+/**
+ * Trunca uma string e adiciona reticências se necessário.
+ * @example truncate("Produto com nome muito longo", 20) // "Produto com nome mui…"
+ */
 export function truncate(str: string, maxLength: number): string {
-  if (str.length <= maxLength) return str;
-  return `${str.slice(0, maxLength - 3)}...`;
+  if (str.length <= maxLength) return str
+  return str.slice(0, maxLength - 1) + "…"
 }

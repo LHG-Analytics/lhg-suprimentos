@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "next-themes";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -31,7 +32,9 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
+          <TooltipProvider>
+            {children}
+          </TooltipProvider>
           <Toaster position="bottom-right" richColors />
         </ThemeProvider>
       </body>
