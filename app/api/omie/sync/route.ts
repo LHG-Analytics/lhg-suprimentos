@@ -49,7 +49,7 @@ async function autenticarRequisicao(req: NextRequest): Promise<boolean> {
       .eq("id", user.id)
       .single();
 
-    return profile?.role === "admin";
+    return profile?.role === "admin" || profile?.role === "comprador";
   } catch {
     return false;
   }

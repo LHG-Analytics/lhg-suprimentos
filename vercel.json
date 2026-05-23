@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/omie/sync",
-      "schedule": "0 3 * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
