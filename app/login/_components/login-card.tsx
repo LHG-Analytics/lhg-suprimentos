@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { isRedirectError } from "next/dist/client/components/redirect";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { Logo } from "@/components/lhg/logo";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
@@ -75,6 +76,8 @@ export function LoginCard() {
       try {
         await signInWithGoogle();
       } catch (err) {
+        // redirect() lança NEXT_REDIRECT internamente — precisa repassar para o framework
+        if (isRedirectError(err)) throw err;
         toast.error(err instanceof Error ? err.message : "Erro ao autenticar com Google.");
       }
     });
