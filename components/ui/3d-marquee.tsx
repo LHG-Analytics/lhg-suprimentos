@@ -29,26 +29,23 @@ export const ThreeDMarquee = ({
       )}
     >
       <div className="flex size-full items-center justify-center">
-        {/* Grade 2000×2000 — escala maior para cobrir todos os cantos */}
+        {/* Grade — 4 colunas de cards verticais */}
         <div className="size-[2000px] shrink-0 scale-[65%] sm:scale-[82%] lg:scale-[105%] xl:scale-[122%]">
           <div
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-8 transform-3d"
+            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-6 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
-              // Duplica os itens para loop contínuo sem salto
               const doubled = [...col, ...col];
               const duration = baseDurations[colIndex] / speed;
 
               return (
                 <motion.div
                   key={colIndex + "col"}
-                  className="flex flex-col items-start gap-10"
-                  // y: ["0%", "-50%"] percorre exatamente 1× o conjunto original
-                  // e a cópia começa onde o original terminou — loop perfeito
+                  className="flex flex-col items-stretch gap-6"
                   animate={{ y: isEven ? ["0%", "-50%"] : ["-50%", "0%"] }}
                   transition={{
                     duration,
@@ -58,16 +55,16 @@ export const ThreeDMarquee = ({
                   }}
                 >
                   {doubled.map((image, imgIndex) => (
-                    // Card full-bleed — foto cobre o card inteiro
+                    // Card vertical com fundo escuro — logo centralizada e legível
                     <div
                       key={imgIndex + image}
-                      className="relative shrink-0 w-[520px] aspect-[4/3] rounded-2xl overflow-hidden ring-1 ring-white/10"
+                      className="relative shrink-0 w-full aspect-[3/4] rounded-2xl bg-zinc-900 ring-1 ring-white/10 flex items-center justify-center p-8"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={image}
                         alt=""
-                        className="w-full h-full object-cover"
+                        className="w-full h-auto max-h-full object-contain drop-shadow-lg"
                         loading="eager"
                       />
                     </div>

@@ -103,7 +103,7 @@ export function LoginCard() {
 
           {/* Logo */}
           <div className="flex justify-center mb-7">
-            <Logo size="xl" />
+            <Logo size="2xl" />
           </div>
 
           {/* Texto */}
