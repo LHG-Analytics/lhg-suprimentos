@@ -114,12 +114,21 @@ export async function syncFornecedores(
     });
 
     total = items.length;
+
+    // Deduplica por CNPJ — Omie pode retornar o mesmo cadastro como cliente e fornecedor.
+    // Mantém o último registro (merge natural: itens posteriores sobrescrevem anteriores).
+    const uniqueMap = new Map<string, ReturnType<typeof mapFornecedor>>();
+    for (const item of items) {
+      const mapped = mapFornecedor(item, unidadeId);
+      uniqueMap.set(mapped.cnpj, mapped);
+    }
+    const uniqueItems = Array.from(uniqueMap.values());
+    total = uniqueItems.length;
+
     const BATCH = 50;
 
-    for (let i = 0; i < items.length; i += BATCH) {
-      const batch = items.slice(i, i + BATCH).map((item) =>
-        mapFornecedor(item, unidadeId),
-      );
+    for (let i = 0; i < uniqueItems.length; i += BATCH) {
+      const batch = uniqueItems.slice(i, i + BATCH);
 
       const { error } = await supabase
         .from("fornecedores")

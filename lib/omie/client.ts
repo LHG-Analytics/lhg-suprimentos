@@ -40,6 +40,12 @@ interface OmieFaultResponse {
   faultcode: string;
 }
 
+// Formato alternativo de erro que algumas rotas Omie retornam
+interface OmieErrorResponse {
+  status: string;   // "error"
+  message: string;
+}
+
 interface OmiePaginacaoParam {
   pagina: number;
   registros_por_pagina: number;
@@ -57,11 +63,11 @@ interface OmiePaginacaoResponse {
 // ── Tipos: Clientes/Fornecedores ───────────────────────────────────────────────
 
 export interface OmieClienteParam extends OmiePaginacaoParam {
-  filtrar_apenas_fornecedor?: "S" | "N";
-  filtrar_apenas_cliente?: "S" | "N";
   clientesFiltro?: {
     tags?: Array<{ tag: string }>;
     inativo?: "S" | "N";
+    nome_fantasia?: string;
+    cnpj_cpf?: string;
   };
 }
 
@@ -92,6 +98,8 @@ export interface OmieProdutoParam extends OmiePaginacaoParam {
   filtrar_apenas_omiepdv?: "S" | "N";
   produtosFiltro?: {
     inativo?: "S" | "N";
+    codigo?: string;
+    descricao?: string;
   };
 }
 
@@ -111,6 +119,8 @@ export interface OmieProdutoItem {
 
 export interface OmieListaProdutosResponse extends OmiePaginacaoResponse {
   produto_servico_cadastro: OmieProdutoItem[];
+  // ListarCadProdutos retorna em "cadastros" em algumas versões
+  cadastros?: OmieProdutoItem[];
 }
 
 // ── Rate-limit helper ──────────────────────────────────────────────────────────
@@ -172,9 +182,35 @@ export async function omiePost<TParam, TResponse>(
 
       const json = await res.json();
 
+      // Formato alternativo: { status: "error", message: "..." }
+      if ("status" in json && (json as OmieErrorResponse).status === "error") {
+        const msg = (json as OmieErrorResponse).message ?? "Erro desconhecido";
+        throw new OmieError(msg, "CLIENT_ERROR", res.status);
+      }
+
       // Omie retorna HTTP 200 mas com faultstring para erros de negócio
       if ("faultstring" in json) {
         const fault = json as OmieFaultResponse;
+
+        // REDUNDANT: Omie bloqueia chamadas idênticas em curto período.
+        // O código REDUNDANT aparece no faultstring, não no faultcode.
+        // Extrai o tempo de espera do próprio faultstring ("Aguarde X segundos")
+        // e espera X+5 segundos antes de retentar.
+        const isRedundant =
+          fault.faultcode === "REDUNDANT" ||
+          fault.faultstring?.toUpperCase().includes("REDUNDANT");
+        if (isRedundant) {
+          if (attempt === maxRetries) {
+            throw new OmieError(fault.faultstring, fault.faultcode, res.status);
+          }
+          const waitMatch = fault.faultstring?.match(/Aguarde\s+(\d+)\s+segundo/i);
+          const waitSec = waitMatch ? parseInt(waitMatch[1], 10) + 5 : 65;
+          console.warn(`[omie] REDUNDANT — aguardando ${waitSec}s...`);
+          await new Promise((r) => setTimeout(r, waitSec * 1000));
+          lastError = new OmieError(fault.faultstring, fault.faultcode, res.status);
+          continue;
+        }
+
         // Erros 5xx do Omie (servidor) são retentáveis; 4xx não
         const retryable =
           fault.faultcode?.startsWith("SOAP-ENV") ||
@@ -223,8 +259,9 @@ export async function listFornecedoresPage(
     {
       pagina,
       registros_por_pagina: registrosPorPagina,
-      filtrar_apenas_fornecedor: "S",
-      filtrar_apenas_ativo: "S",
+      // Sem filtro de tipo: retorna clientes e fornecedores.
+      // Filtramos apenas ativos via clientesFiltro.
+      clientesFiltro: { inativo: "N" },
     },
   );
 }
@@ -264,12 +301,11 @@ export async function listProdutosPage(
 ): Promise<OmieListaProdutosResponse> {
   return omiePost<OmieProdutoParam, OmieListaProdutosResponse>(
     "/geral/produtos/",
-    "ListarProdutos",
+    "ListarCadProdutos",
     creds,
     {
       pagina,
       registros_por_pagina: registrosPorPagina,
-      filtrar_apenas_ativo: "S",
     },
   );
 }
@@ -288,7 +324,9 @@ export async function listAllProdutos(
   do {
     const res = await listProdutosPage(creds, pagina);
     totalPaginas = res.total_de_paginas;
-    all.push(...res.produto_servico_cadastro);
+    // Omie usa "produto_servico_cadastro" ou "cadastros" dependendo da versão
+    const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
+    all.push(...items);
     onPage?.(pagina, totalPaginas, res.produto_servico_cadastro);
     pagina++;
   } while (pagina <= totalPaginas);
