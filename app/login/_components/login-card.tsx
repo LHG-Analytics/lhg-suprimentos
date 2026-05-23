@@ -83,20 +83,17 @@ export function LoginCard() {
   return (
     <div className="relative h-screen w-full overflow-hidden bg-zinc-950">
 
-      {/* ── Background: 3D Marquee ─────────────────────────────────────────── */}
+      {/* ── Background: 3D Marquee — cobre 100% da viewport ─────────────── */}
       <div className="absolute inset-0">
-        <ThreeDMarquee
-          images={MARQUEE_IMAGES}
-          className="h-full w-full rounded-none opacity-60"
-        />
+        <ThreeDMarquee images={MARQUEE_IMAGES} speed={0.9} />
       </div>
 
-      {/* ── Overlay com gradiente radial: mais escuro no centro ───────────── */}
+      {/* ── Overlay: escurece as bordas, deixa o centro mais translúcido ──── */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(9,9,11,0.85) 0%, rgba(9,9,11,0.50) 60%, rgba(9,9,11,0.20) 100%)",
+            "radial-gradient(ellipse 55% 60% at 50% 50%, rgba(9,9,11,0.70) 0%, rgba(9,9,11,0.55) 50%, rgba(9,9,11,0.80) 100%)",
         }}
       />
 
