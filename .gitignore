@@ -52,3 +52,5 @@ docs/
 prototype/
 lhg-suprimentos-kickoff.md
 supabase/.temp/
+
+.vercel

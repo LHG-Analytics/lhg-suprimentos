@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowRight, Loader2, ShieldAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -243,12 +244,21 @@ export function LoginForm() {
         >
           Suporte
         </a>
-        <a
-          href="#"
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-        >
-          Política de uso
-        </a>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/politica-privacidade"
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Privacidade
+          </Link>
+          <span className="text-zinc-800">·</span>
+          <Link
+            href="/termos-uso"
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Termos
+          </Link>
+        </div>
         <span className="flex items-center gap-1.5 text-xs text-zinc-500">
           Status
           <span className="w-1.5 h-1.5 rounded-full bg-lhg-500 status-dot" />
