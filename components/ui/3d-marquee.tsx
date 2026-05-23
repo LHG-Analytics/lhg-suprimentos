@@ -29,13 +29,13 @@ export const ThreeDMarquee = ({
       )}
     >
       <div className="flex size-full items-center justify-center">
-        {/* Grade 2200×2200 — escala calculada para cobrir a viewport inteira */}
-        <div className="size-[2200px] shrink-0 scale-[55%] sm:scale-[70%] lg:scale-[90%] xl:scale-[100%]">
+        {/* Grade 2000×2000 — 4 colunas de cards 380px, escala cobre viewport */}
+        <div className="size-[2000px] shrink-0 scale-[50%] sm:scale-[65%] lg:scale-[82%] xl:scale-[95%]">
           <div
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[420px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-10 transform-3d"
+            className="relative top-[380px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-8 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
@@ -58,14 +58,16 @@ export const ThreeDMarquee = ({
                   }}
                 >
                   {doubled.map((image, imgIndex) => (
-                    <div key={imgIndex + image} className="relative shrink-0">
+                    // Card com fundo escuro para as logos respirarem
+                    <div
+                      key={imgIndex + image}
+                      className="relative shrink-0 w-[380px] aspect-[4/3] rounded-2xl bg-zinc-900/90 ring-1 ring-white/8 flex items-center justify-center p-10"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={image}
                         alt=""
-                        className="aspect-[970/700] w-full rounded-xl object-contain ring-1 ring-white/10"
-                        width={970}
-                        height={700}
+                        className="max-h-full max-w-full object-contain"
                         loading="eager"
                       />
                     </div>
