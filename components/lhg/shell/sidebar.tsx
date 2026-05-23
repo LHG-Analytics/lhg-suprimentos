@@ -123,15 +123,15 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           title={unidade.nome}
-          className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center hover:bg-zinc-800/60 transition-colors outline-none"
+          className="w-10 h-8 mx-auto rounded-md flex items-center justify-center hover:bg-zinc-800/60 transition-colors outline-none"
         >
-          <div className="w-7 h-7 rounded flex items-center justify-center overflow-hidden">
+          <div className="w-10 h-6 flex items-center justify-center overflow-hidden">
             <Image
               src={unidade.logo}
               alt={unidade.shortName}
-              width={28}
-              height={28}
-              className="object-contain w-full h-full"
+              width={40}
+              height={24}
+              className="object-contain max-h-full max-w-full"
             />
           </div>
         </DropdownMenuTrigger>
@@ -148,14 +148,14 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="w-full flex items-center gap-2.5 px-2.5 h-10 rounded-lg hover:bg-zinc-800/40 transition-colors group border border-zinc-800/60 hover:border-zinc-700/80 text-left outline-none">
-        {/* Logo da unidade */}
-        <div className="w-6 h-6 shrink-0 rounded flex items-center justify-center overflow-hidden">
+        {/* Logo da unidade — container landscape para logos horizontais */}
+        <div className="w-10 h-6 shrink-0 flex items-center justify-center overflow-hidden">
           <Image
             src={unidade.logo}
             alt={unidade.shortName}
-            width={24}
+            width={40}
             height={24}
-            className="object-contain w-full h-full"
+            className="object-contain max-h-full max-w-full"
           />
         </div>
         {/* Nome */}
@@ -194,49 +194,51 @@ function UnitDropdownContent({
       side={side}
       align="start"
       sideOffset={4}
-      className="w-[220px] bg-zinc-950 border-zinc-800"
+      className="w-[256px] bg-zinc-950 border-zinc-800 p-1.5"
     >
       {/* Todas as unidades */}
       <DropdownMenuItem
         onClick={() => setUnidade(todas)}
-        className="flex items-center gap-2.5 cursor-pointer py-2 focus:bg-zinc-800/60"
+        className="flex items-center gap-3 cursor-pointer px-2 py-2 rounded-md focus:bg-zinc-800/60"
       >
-        <div className="w-6 h-6 shrink-0 rounded flex items-center justify-center overflow-hidden">
+        {/* Logo num container landscape para logos horizontais */}
+        <div className="w-14 h-8 shrink-0 flex items-center justify-center overflow-hidden">
           <Image
             src={todas.logo}
             alt={todas.nome}
-            width={24}
-            height={24}
-            className="object-contain"
+            width={56}
+            height={32}
+            className="object-contain max-h-full max-w-full"
           />
         </div>
         <span className="text-[13px] flex-1 text-zinc-300">{todas.nome}</span>
         {unidade.id === "todas" && (
-          <Check size={13} className="text-lhg-400" />
+          <Check size={13} className="text-lhg-400 shrink-0" />
         )}
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator className="bg-zinc-800/60 my-1" />
+      <DropdownMenuSeparator className="bg-zinc-800/60 my-1.5" />
 
       {/* Unidades individuais */}
       {unidades.map((u) => (
         <DropdownMenuItem
           key={u.id}
           onClick={() => setUnidade(u)}
-          className="flex items-center gap-2.5 cursor-pointer py-2 focus:bg-zinc-800/60"
+          className="flex items-center gap-3 cursor-pointer px-2 py-2 rounded-md focus:bg-zinc-800/60"
         >
-          <div className="w-6 h-6 shrink-0 rounded flex items-center justify-center overflow-hidden">
+          {/* Container landscape — logos horizontais precisam de largura, não altura */}
+          <div className="w-14 h-8 shrink-0 flex items-center justify-center overflow-hidden">
             <Image
               src={u.logo}
               alt={u.nome}
-              width={24}
-              height={24}
-              className="object-contain"
+              width={56}
+              height={32}
+              className="object-contain max-h-full max-w-full"
             />
           </div>
           <span className="text-[13px] flex-1 text-zinc-300">{u.nome}</span>
           {unidade.id === u.id && (
-            <Check size={13} className="text-lhg-400" />
+            <Check size={13} className="text-lhg-400 shrink-0" />
           )}
         </DropdownMenuItem>
       ))}
