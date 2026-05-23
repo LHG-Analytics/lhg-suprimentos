@@ -13,13 +13,13 @@ export const ThreeDMarquee = ({
   /** Multiplicador de velocidade — padrão 1 (mais alto = mais rápido). */
   speed?: number;
 }) => {
-  const chunkSize = Math.ceil(images.length / 4);
-  const chunks = Array.from({ length: 4 }, (_, i) =>
+  const chunkSize = Math.ceil(images.length / 5);
+  const chunks = Array.from({ length: 5 }, (_, i) =>
     images.slice(i * chunkSize, i * chunkSize + chunkSize),
   );
 
   // Durações base por coluna — mais alto = mais devagar
-  const baseDurations = [42, 58, 36, 66];
+  const baseDurations = [42, 58, 36, 66, 50];
 
   return (
     <div
@@ -30,12 +30,12 @@ export const ThreeDMarquee = ({
     >
       <div className="flex size-full items-center justify-center">
         {/* Grade — 4 colunas de cards verticais */}
-        <div className="size-[2000px] shrink-0 scale-[65%] sm:scale-[82%] lg:scale-[105%] xl:scale-[122%]">
+        <div className="size-[2400px] shrink-0 scale-[55%] sm:scale-[70%] lg:scale-[88%] xl:scale-[105%]">
           <div
             style={{
               transform: "rotateX(55deg) rotateY(0deg) rotateZ(-45deg)",
             }}
-            className="relative top-[220px] right-[50%] grid size-full origin-top-left grid-cols-4 gap-10 transform-3d"
+            className="relative top-[180px] right-[55%] grid size-full origin-top-left grid-cols-5 gap-10 transform-3d"
           >
             {chunks.map((col, colIndex) => {
               const isEven = colIndex % 2 === 0;
