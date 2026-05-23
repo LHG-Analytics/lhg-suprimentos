@@ -180,6 +180,25 @@
 }
 
 /* ============================================================
+   Grid background — tela de login
+   ============================================================ */
+.grid-bg {
+  background-image:
+    linear-gradient(to right,  rgb(39 39 42 / 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(39 39 42 / 0.4) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Status dot pulsante */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.status-dot {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
    Skeleton / shimmer loading animation
    ============================================================ */
 @keyframes shimmer {
