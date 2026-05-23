@@ -11,8 +11,8 @@
 import Image from "next/image";
 
 // ── Configuração — altere apenas aqui ─────────────────────────────────────────
-const LOGO_SRC   = "/logo.svg";   // caminho relativo a /public
-const LOGO_WIDTH = 120;           // largura natural do arquivo (px) — ajuste se necessário
+const LOGO_SRC   = "/logo-supplies.png";  // caminho relativo a /public
+const LOGO_WIDTH = 48;                    // largura em px para height=32 (proporção 1.5 do arquivo 1536×1024)
 const LOGO_ALT   = "LHG Suprimentos";
 
 // ── Tamanhos pré-definidos ─────────────────────────────────────────────────────
