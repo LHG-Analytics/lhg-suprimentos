@@ -17,47 +17,30 @@ import { Logo } from "@/components/lhg/logo";
 import { ThreeDMarquee } from "@/components/ui/3d-marquee";
 import { signInWithGoogle } from "../actions";
 
-// ── Imagens do marquee por unidade ─────────────────────────────────────────────
-// Coloque as fotos em public/unidades/ e adicione os caminhos aqui.
-// Sugestão: 6–8 fotos por unidade (acomodações, áreas comuns, fachada).
-// Formatos aceitos: .webp (melhor performance), .jpg, .png
+// ── Logos das unidades para o marquee ──────────────────────────────────────────
+// 5 logos repetidas em ordem embaralhada para preencher as 4 colunas do efeito 3D.
+// Para trocar/adicionar: coloque novos arquivos em public/unidades/ e inclua aqui.
+const BASE_LOGOS = [
+  "/logo-supplies.png",      // LHG Suprimentos
+  "/unidades/lush.png",      // Lush Ipiranga / Lapa
+  "/unidades/adc.png",       // Andar de Cima
+  "/unidades/altana.png",    // Altana
+  "/unidades/tout.png",      // Tout
+];
+
+// Repete e embaralha para ~40 itens (4 colunas × ~10 cards cada)
 const MARQUEE_IMAGES = [
-  // ── Lush Ipiranga ───────────────────────────────────────────────────────────
-  "/unidades/lush-ipiranga-1.webp",
-  "/unidades/lush-ipiranga-2.webp",
-  "/unidades/lush-ipiranga-3.webp",
-  "/unidades/lush-ipiranga-4.webp",
-  "/unidades/lush-ipiranga-5.webp",
-  "/unidades/lush-ipiranga-6.webp",
-  "/unidades/lush-ipiranga-7.webp",
-  "/unidades/lush-ipiranga-8.webp",
-  // ── Lush Lapa ──────────────────────────────────────────────────────────────
-  "/unidades/lush-lapa-1.webp",
-  "/unidades/lush-lapa-2.webp",
-  "/unidades/lush-lapa-3.webp",
-  "/unidades/lush-lapa-4.webp",
-  "/unidades/lush-lapa-5.webp",
-  "/unidades/lush-lapa-6.webp",
-  "/unidades/lush-lapa-7.webp",
-  "/unidades/lush-lapa-8.webp",
-  // ── Andar de Cima ──────────────────────────────────────────────────────────
-  "/unidades/andar-de-cima-1.webp",
-  "/unidades/andar-de-cima-2.webp",
-  "/unidades/andar-de-cima-3.webp",
-  "/unidades/andar-de-cima-4.webp",
-  "/unidades/andar-de-cima-5.webp",
-  "/unidades/andar-de-cima-6.webp",
-  "/unidades/andar-de-cima-7.webp",
-  "/unidades/andar-de-cima-8.webp",
-  // ── Altana ─────────────────────────────────────────────────────────────────
-  "/unidades/altana-1.webp",
-  "/unidades/altana-2.webp",
-  "/unidades/altana-3.webp",
-  "/unidades/altana-4.webp",
-  "/unidades/altana-5.webp",
-  "/unidades/altana-6.webp",
-  "/unidades/altana-7.webp",
-  "/unidades/altana-8.webp",
+  ...BASE_LOGOS,                                    //  0–4
+  ...BASE_LOGOS.slice(2),                           //  5–7
+  ...BASE_LOGOS.slice(1),                           //  8–12
+  ...BASE_LOGOS,                                    // 13–17
+  ...BASE_LOGOS.slice(0, 3),                        // 18–20
+  ...BASE_LOGOS.slice(3),                           // 21–22
+  ...BASE_LOGOS,                                    // 23–27
+  ...BASE_LOGOS.slice(1, 4),                        // 28–30
+  ...BASE_LOGOS.slice(2),                           // 31–33
+  ...BASE_LOGOS,                                    // 34–38
+  ...BASE_LOGOS.slice(0, 2),                        // 39–40
 ];
 
 // ── Mensagens de erro ──────────────────────────────────────────────────────────
