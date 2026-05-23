@@ -58,16 +58,8 @@ async function autenticarRequisicao(req: NextRequest): Promise<boolean> {
 // ── POST /api/omie/sync ────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Guard: CRON_SECRET obrigatório em produção
-  if (
-    process.env.NODE_ENV === "production" &&
-    !process.env.CRON_SECRET
-  ) {
-    console.error("[omie/sync] CRON_SECRET não configurado em produção!");
-    return NextResponse.json(
-      { ok: false, error: "Configuração inválida do servidor." },
-      { status: 500 },
-    );
+  if (process.env.NODE_ENV === "production" && !process.env.CRON_SECRET) {
+    console.warn("[omie/sync] CRON_SECRET não configurado — cron job desabilitado, mas sync manual continua funcionando.");
   }
 
   const autorizado = await autenticarRequisicao(req);
