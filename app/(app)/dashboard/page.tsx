@@ -456,7 +456,7 @@ export default async function DashboardPage() {
       <DashboardHeader periodoLabel={periodoLabel} />
 
       {/* ── KPIs ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
         <KpiCard
           label="COTAÇÕES ABERTAS"
           value={kpis.abertas.toString()}
@@ -501,59 +501,15 @@ export default async function DashboardPage() {
           metaLabel="META"
           mono
         />
-      </div>
-
-      {/* ── CMV — Custo das Mercadorias Vendidas ─────────────────────── */}
-      <div className="space-y-2">
-        {/* Cabeçalho da seção */}
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
-            CMV — Custo das Mercadorias Vendidas
-          </span>
-          <div className="flex-1 h-px bg-zinc-800/60" />
-          {!cmv.temOrcamento && (
-            <span className="text-[10px] text-amber-500/70">
-              planilha não configurada · sem classificação de categorias
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* CMV Real do mês — custo efetivo em produtos vendidos */}
-          <KpiCard
-            label="CMV REAL (MÊS)"
-            value={formatBRL(cmv.cmvReal)}
-            delta={cmv.deltaCmv ?? undefined}
-            prev={formatBRL(cmv.cmvPrevReal)}
-            meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
-            metaLabel="ORÇADO"
-            accent={cmv.temOrcamento && cmv.cmvPct > 100 ? "negative" : "neutral"}
-            mono
-          />
-          {/* CMV % do orçado — principal sinal de saúde do custo */}
-          <KpiCard
-            label="CMV % DO ORÇADO"
-            value={cmv.temOrcamento ? `${cmv.cmvPct.toFixed(1)}%` : "—"}
-            meta="≤ 100%"
-            metaLabel="LIMITE"
-            accent={
-              !cmv.temOrcamento  ? "neutral"
-              : cmv.cmvPct > 100 ? "negative"
-              : cmv.cmvPct > 80  ? "neutral"
-              :                    "positive"
-            }
-            mono
-          />
-          {/* Total Insumos — CMV total do mês */}
-          <KpiCard
-            label="TOTAL INSUMOS"
-            value={formatBRL(cmv.totalReal)}
-            meta={cmv.temOrcamento ? formatBRL(cmv.totalOrcado) : undefined}
-            metaLabel="ORÇADO TOTAL"
-            accent={cmv.temOrcamento && cmv.totalReal > cmv.totalOrcado ? "negative" : "neutral"}
-            mono
-          />
-        </div>
+        {/* Total Insumos — gasto real vs orçamento da planilha */}
+        <KpiCard
+          label="TOTAL INSUMOS MÊS"
+          value={formatBRL(cmv.totalReal)}
+          meta={cmv.temOrcamento ? formatBRL(cmv.totalOrcado) : undefined}
+          metaLabel="ORÇADO"
+          accent={cmv.temOrcamento && cmv.totalReal > cmv.totalOrcado ? "negative" : "neutral"}
+          mono
+        />
       </div>
 
       {/* ── Gráfico + Ações + Orçamento ──────────────────────────────── */}
