@@ -13,6 +13,7 @@ import { CotacoesTable, type CotacaoRow } from "./_components/cotacoes-table";
 import { DashboardHeader } from "./_components/dashboard-header";
 import { OrcamentoWidget } from "./_components/orcamento-widget";
 import { fetchOrcamento } from "@/lib/sheets/client";
+import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 // ── Metadados ─────────────────────────────────────────────────────────────────
 export const metadata = { title: "Dashboard" };
@@ -341,13 +342,18 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Busca config do Google Sheets da unidade ativa (via cookie)
+  const sheetConfig = await getUnidadeSheetConfig();
+
   // Busca tudo em paralelo (incluindo orçamento da planilha)
   const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, orcamento, gastosCat] = await Promise.all([
     fetchKpis(supabase),
     fetchChartData(supabase),
     fetchAcoes(supabase),
     fetchCotacoes(supabase),
-    fetchOrcamento(process.env.GOOGLE_SHEET_ID ?? "", process.env.GOOGLE_SHEET_NAME),
+    sheetConfig
+      ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
+      : Promise.resolve(null),
     fetchGastosPorCategoriaMes(supabase),
   ]);
 

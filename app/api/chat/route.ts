@@ -7,6 +7,7 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { fetchOrcamento, formatBudgetContextoIA } from "@/lib/sheets/client";
+import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,13 +33,14 @@ export async function POST(req: NextRequest) {
     return new Response("OPENROUTER_API_KEY não configurada", { status: 503 });
   }
 
-  // Busca contexto de orçamento da planilha (com cache de 1h via Next.js Data Cache)
-  const sheetId   = process.env.GOOGLE_SHEET_ID ?? "";
-  const sheetName = process.env.GOOGLE_SHEET_NAME ?? "Custos";
-  const orcamento = sheetId ? await fetchOrcamento(sheetId, sheetName).catch((e) => {
-    console.warn("[chat] Falha ao carregar orçamento:", e);
-    return null;
-  }) : null;
+  // Busca config do Google Sheets da unidade ativa (cookie → banco)
+  const sheetConfig = await getUnidadeSheetConfig().catch(() => null);
+  const orcamento   = sheetConfig
+    ? await fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName).catch((e) => {
+        console.warn("[chat] Falha ao carregar orçamento:", e);
+        return null;
+      })
+    : null;
   const budgetCtx = formatBudgetContextoIA(orcamento);
 
   // System prompt com contexto do LHG + orçamento dinâmico

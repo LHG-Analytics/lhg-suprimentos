@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
+import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -39,12 +40,12 @@ export async function aprovarPedido(pedidoId: string): Promise<{ avisoOrcamento?
   revalidatePath("/pedidos");
 
   // ── 2. Verificação de orçamento (soft-check, não bloqueia) ───────────────────
-  const sheetId = process.env.GOOGLE_SHEET_ID ?? "";
-  if (!sheetId) return {};
+  const sheetConfig = await getUnidadeSheetConfig().catch(() => null);
+  if (!sheetConfig) return {};
 
   try {
     const [orcamento, { data: gastosRows }] = await Promise.all([
-      fetchOrcamento(sheetId, process.env.GOOGLE_SHEET_NAME),
+      fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName),
       supabase
         .from("pedidos")
         .select("valor_total")

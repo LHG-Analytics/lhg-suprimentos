@@ -84,13 +84,18 @@ const UnidadeContext = createContext<UnidadeContextType>({
 export function UnidadeProvider({ children }: { children: ReactNode }) {
   const [unidade, setUnidadeState] = useState<Unidade>(UNIDADES[0]);
 
-  // Restaura do localStorage na montagem (client-only)
+  // Restaura do localStorage na montagem (client-only) e sincroniza o cookie.
   useEffect(() => {
     try {
       const saved = localStorage.getItem("lhg-unidade-ativa");
       if (saved) {
         const found = UNIDADES.find((u) => u.id === saved);
-        if (found) setUnidadeState(found);
+        if (found) {
+          setUnidadeState(found);
+          // Garante que o cookie server-side está sincronizado após reload.
+          const maxAge = 60 * 60 * 24 * 30;
+          document.cookie = `lhg-unidade-slug=${found.id};path=/;max-age=${maxAge};SameSite=Lax`;
+        }
       }
     } catch {
       // SSR/incógnito: ignora
@@ -101,6 +106,14 @@ export function UnidadeProvider({ children }: { children: ReactNode }) {
     setUnidadeState(u);
     try {
       localStorage.setItem("lhg-unidade-ativa", u.id);
+    } catch {
+      // ok
+    }
+    // Cookie lido server-side (dashboard, chat, pedidos).
+    // SameSite=Lax; sem HttpOnly para o JS poder ler também.
+    try {
+      const maxAge = 60 * 60 * 24 * 30; // 30 dias
+      document.cookie = `lhg-unidade-slug=${u.id};path=/;max-age=${maxAge};SameSite=Lax`;
     } catch {
       // ok
     }
