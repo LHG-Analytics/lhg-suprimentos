@@ -57,58 +57,22 @@ ALTER TABLE nf_itens      ENABLE ROW LEVEL SECURITY;
 
 -- Compradores e admins podem ver/criar NFs
 CREATE POLICY "nf_select" ON notas_fiscais
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR SELECT USING (current_user_role() IN ('admin', 'comprador'));
 
 CREATE POLICY "nf_insert" ON notas_fiscais
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR INSERT WITH CHECK (current_user_role() IN ('admin', 'comprador'));
 
 CREATE POLICY "nf_update" ON notas_fiscais
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR UPDATE USING (current_user_role() IN ('admin', 'comprador'));
 
 CREATE POLICY "nf_itens_select" ON nf_itens
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR SELECT USING (current_user_role() IN ('admin', 'comprador'));
 
 CREATE POLICY "nf_itens_insert" ON nf_itens
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR INSERT WITH CHECK (current_user_role() IN ('admin', 'comprador'));
 
 CREATE POLICY "nf_itens_update" ON nf_itens
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE id = auth.uid()
-      AND papel IN ('admin', 'comprador')
-    )
-  );
+  FOR UPDATE USING (current_user_role() IN ('admin', 'comprador'));
 
 -- ─── Comentários ─────────────────────────────────────────────────────────────
 COMMENT ON TABLE  notas_fiscais           IS 'Notas Fiscais de entrada registradas via upload de XML NFe.';
