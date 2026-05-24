@@ -12,7 +12,7 @@ import { AcoesFeed, type AcaoItem } from "./_components/acoes-feed";
 import { CotacoesTable, type CotacaoRow } from "./_components/cotacoes-table";
 import { DashboardHeader } from "./_components/dashboard-header";
 import { OrcamentoWidget } from "./_components/orcamento-widget";
-import { fetchOrcamento } from "@/lib/sheets/client";
+import { fetchOrcamento, type OrcamentoSheet } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 // ── Metadados ─────────────────────────────────────────────────────────────────
@@ -302,13 +302,16 @@ async function fetchCotacoes(supabase: SupabaseClient): Promise<{ rows: CotacaoR
   return { rows, total: count ?? rows.length };
 }
 
-// ── Gastos reais do mês por categoria de orçamento ───────────────────────────
+// ── Gastos reais por período (genérico) ──────────────────────────────────────
 // Usa "categoria" do produto como chave primária.
 // Fallback: se categoria não está no mapa de orçamento, tenta mapear familia_omie.
-async function fetchGastosPorCategoriaMes(supabase: SupabaseClient): Promise<Record<string, number>> {
-  const { startIso } = currentMonthRange();
-
-  const { data } = await supabase
+// endIso opcional — se omitido, busca até agora.
+async function fetchGastosPorPeriodo(
+  supabase:  SupabaseClient,
+  startIso:  string,
+  endIso?:   string,
+): Promise<Record<string, number>> {
+  const baseQuery = supabase
     .from("pedido_itens")
     .select(`
       valor_total,
@@ -318,22 +321,99 @@ async function fetchGastosPorCategoriaMes(supabase: SupabaseClient): Promise<Rec
     .in("pedidos.status", ["enviado", "em_transito", "recebido", "finalizado"] as const)
     .gte("pedidos.created_at", startIso);
 
+  const { data } = endIso
+    ? await baseQuery.lte("pedidos.created_at", endIso)
+    : await baseQuery;
+
   const map: Record<string, number> = {};
   for (const item of data ?? []) {
-    const prod = item.produtos as { categoria: string | null; familia_omie: string | null } | null;
-    const cat = prod?.categoria ?? null;
+    const prod    = item.produtos as { categoria: string | null; familia_omie: string | null } | null;
+    const cat     = prod?.categoria    ?? null;
     const familia = prod?.familia_omie ?? null;
-
-    // Resolve a categoria de orçamento:
-    // 1. Usa `categoria` diretamente se estiver preenchida
-    // 2. Fallback: mapeia `familia_omie` → categoria de orçamento
-    const catOrcamento =
-      cat ??
-      (familia ? (FAMILIA_TO_CATEGORIA[familia.toUpperCase()] ?? "Outros") : "Outros");
-
-    map[catOrcamento] = (map[catOrcamento] ?? 0) + (item.valor_total ?? 0);
+    // 1. usa `categoria` diretamente; 2. fallback familia_omie → categoria
+    const catOrc  = cat ?? (familia ? (FAMILIA_TO_CATEGORIA[familia.toUpperCase()] ?? "Outros") : "Outros");
+    map[catOrc] = (map[catOrc] ?? 0) + (item.valor_total ?? 0);
   }
   return map;
+}
+
+// ── CMV: métricas calculadas ──────────────────────────────────────────────────
+// Separa gastos em "CMV" (secao = "produtos") vs "Serviços" (secao = "servicos")
+// usando a classificação que já vem do Google Sheets (OrcamentoSheet.categorias[].secao).
+const MES_KEYS = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"] as const;
+
+interface CmvMetrics {
+  /** Custo de Produtos Vendidos real (Alimentos, Bebidas, Amenities…) */
+  cmvReal:        number;
+  /** Orçamento de Produtos do mês (Google Sheets, secao = "produtos") */
+  cmvOrcado:      number;
+  /** cmvReal / cmvOrcado × 100; 0 se não houver orçamento */
+  cmvPct:         number;
+  /** Custo de Serviços (Manutenção, Limpeza…) */
+  servicosReal:   number;
+  servicosOrcado: number;
+  /** CMV + Serviços */
+  totalReal:      number;
+  totalOrcado:    number;
+  /** CMV mês anterior (para cálculo do delta) */
+  cmvPrevReal:    number;
+  /** % variação CMV vs mês anterior; null se não houver dado anterior */
+  deltaCmv:       number | null;
+  /** Indica se a planilha de orçamento está configurada */
+  temOrcamento:   boolean;
+}
+
+function computeCmvMetrics(
+  gastosMes:  Record<string, number>,
+  gastosPrev: Record<string, number>,
+  orcamento:  OrcamentoSheet | null,
+): CmvMetrics {
+  const mes = MES_KEYS[new Date().getMonth()];
+
+  // Identifica categorias de cada seção a partir do orçamento
+  const catsProdutos = new Set<string>();
+  const catsServicos = new Set<string>();
+  let cmvOrcado      = 0;
+  let servicosOrcado = 0;
+
+  if (orcamento) {
+    for (const cat of orcamento.categorias) {
+      if (cat.secao === "produtos") {
+        catsProdutos.add(cat.categoria);
+        cmvOrcado += cat.mensal[mes] ?? 0;
+      } else {
+        catsServicos.add(cat.categoria);
+        servicosOrcado += cat.mensal[mes] ?? 0;
+      }
+    }
+  }
+
+  // Classifica gastos por seção
+  let cmvReal      = 0;
+  let servicosReal = 0;
+  for (const [cat, val] of Object.entries(gastosMes)) {
+    if      (catsProdutos.has(cat)) cmvReal      += val;
+    else if (catsServicos.has(cat)) servicosReal += val;
+    else                            servicosReal += val; // não classificado → serviço/overhead
+  }
+
+  // CMV mês anterior para delta
+  let cmvPrevReal = 0;
+  for (const [cat, val] of Object.entries(gastosPrev)) {
+    if (catsProdutos.has(cat)) cmvPrevReal += val;
+  }
+
+  const cmvPct   = cmvOrcado > 0 ? (cmvReal / cmvOrcado) * 100 : 0;
+  const deltaCmv = cmvPrevReal > 0 ? ((cmvReal - cmvPrevReal) / cmvPrevReal) * 100 : null;
+
+  return {
+    cmvReal, cmvOrcado, cmvPct,
+    servicosReal, servicosOrcado,
+    totalReal:    cmvReal + servicosReal,
+    totalOrcado:  cmvOrcado + servicosOrcado,
+    cmvPrevReal,  deltaCmv,
+    temOrcamento: !!orcamento,
+  };
 }
 
 // ── Página ─────────────────────────────────────────────────────────────────────
@@ -345,20 +425,29 @@ export default async function DashboardPage() {
   // Busca config do Google Sheets da unidade ativa (via cookie)
   const sheetConfig = await getUnidadeSheetConfig();
 
-  // Busca tudo em paralelo (incluindo orçamento da planilha)
-  const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, orcamento, gastosCat] = await Promise.all([
-    fetchKpis(supabase),
-    fetchChartData(supabase),
-    fetchAcoes(supabase),
-    fetchCotacoes(supabase),
-    sheetConfig
-      ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
-      : Promise.resolve(null),
-    fetchGastosPorCategoriaMes(supabase),
-  ]);
-
+  // Período: mês corrente e mês anterior (para delta CMV)
   const now        = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0);    // último dia do mês ant.
+
+  // Busca tudo em paralelo (incluindo orçamento da planilha e gastos do mês anterior)
+  const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, orcamento, gastosCat, gastosCatPrev] =
+    await Promise.all([
+      fetchKpis(supabase),
+      fetchChartData(supabase),
+      fetchAcoes(supabase),
+      fetchCotacoes(supabase),
+      sheetConfig
+        ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
+        : Promise.resolve(null),
+      fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
+      fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString()),
+    ]);
+
+  // CMV — Custo das Mercadorias Vendidas (calculado a partir do orçamento Google Sheets)
+  const cmv = computeCmvMetrics(gastosCat, gastosCatPrev, orcamento);
+
   const periodoLabel = `${datePtBr(monthStart)} – ${datePtBr(now)}`;
 
   return (
@@ -412,6 +501,68 @@ export default async function DashboardPage() {
           metaLabel="META"
           mono
         />
+      </div>
+
+      {/* ── CMV — Custo das Mercadorias Vendidas ─────────────────────── */}
+      <div className="space-y-2">
+        {/* Cabeçalho da seção */}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
+            CMV — Custo das Mercadorias Vendidas
+          </span>
+          <div className="flex-1 h-px bg-zinc-800/60" />
+          {!cmv.temOrcamento && (
+            <span className="text-[10px] text-amber-500/70">
+              planilha não configurada · sem classificação de categorias
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          {/* CMV Real do mês — custo efetivo em produtos vendidos */}
+          <KpiCard
+            label="CMV REAL (MÊS)"
+            value={formatBRL(cmv.cmvReal)}
+            delta={cmv.deltaCmv ?? undefined}
+            prev={formatBRL(cmv.cmvPrevReal)}
+            meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
+            metaLabel="ORÇADO"
+            accent={cmv.temOrcamento && cmv.cmvPct > 100 ? "negative" : "neutral"}
+            mono
+          />
+          {/* CMV % do orçado — principal sinal de saúde do custo */}
+          <KpiCard
+            label="CMV % DO ORÇADO"
+            value={cmv.temOrcamento ? `${cmv.cmvPct.toFixed(1)}%` : "—"}
+            meta="≤ 100%"
+            metaLabel="LIMITE"
+            accent={
+              !cmv.temOrcamento  ? "neutral"
+              : cmv.cmvPct > 100 ? "negative"
+              : cmv.cmvPct > 80  ? "neutral"
+              :                    "positive"
+            }
+            mono
+          />
+          {/* Custo de Serviços — manutenção, limpeza, overhead */}
+          <KpiCard
+            label="CUSTO SERVIÇOS"
+            value={formatBRL(cmv.servicosReal)}
+            meta={cmv.temOrcamento ? formatBRL(cmv.servicosOrcado) : undefined}
+            metaLabel="ORÇADO"
+            accent={cmv.temOrcamento && cmv.servicosReal > cmv.servicosOrcado ? "negative" : "neutral"}
+            mono
+          />
+          {/* Total Insumos — CMV + Serviços */}
+          <KpiCard
+            label="TOTAL INSUMOS"
+            value={formatBRL(cmv.totalReal)}
+            meta={cmv.temOrcamento ? formatBRL(cmv.totalOrcado) : undefined}
+            metaLabel="ORÇADO TOTAL"
+            accent={cmv.temOrcamento && cmv.totalReal > cmv.totalOrcado ? "negative" : "neutral"}
+            mono
+          />
+        </div>
       </div>
 
       {/* ── Gráfico + Ações + Orçamento ──────────────────────────────── */}
