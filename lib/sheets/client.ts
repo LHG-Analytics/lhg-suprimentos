@@ -183,13 +183,118 @@ function parseOrcamentoCSV(csvText: string): Omit<OrcamentoSheet, "fetchedAt"> |
   return { unidade, ano, categorias };
 }
 
-// ── Fetch público ──────────────────────────────────────────────────────────────
+// ── Service Account (planilha privada) ────────────────────────────────────────
+
+interface ServiceAccountCredentials {
+  client_email: string;
+  private_key:  string;
+  token_uri?:   string;
+}
 
 /**
- * Busca os dados de orçamento da planilha pública do Google Sheets.
- * Cache de 1 hora (revalidate: 3600) — não bate a planilha a cada request.
+ * Gera um token de acesso OAuth2 a partir de credenciais de Service Account.
+ * Usa apenas `crypto` nativo do Node.js — sem googleapis/dependências externas.
+ * O token expira em 1 hora.
+ */
+async function getGoogleAccessToken(creds: ServiceAccountCredentials): Promise<string> {
+  const { createSign } = await import("crypto");
+
+  const tokenUri = creds.token_uri ?? "https://oauth2.googleapis.com/token";
+  const now = Math.floor(Date.now() / 1000);
+
+  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss:   creds.client_email,
+    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
+    aud:   tokenUri,
+    exp:   now + 3600,
+    iat:   now,
+  })).toString("base64url");
+
+  const toSign    = `${header}.${payload}`;
+  const sign      = createSign("RSA-SHA256");
+  sign.update(toSign);
+  const signature = sign.sign(creds.private_key, "base64url");
+  const jwt       = `${toSign}.${signature}`;
+
+  const res = await fetch(tokenUri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion:  jwt,
+    }),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`[sheets] Erro ao obter token Google: ${res.status} — ${text}`);
+  }
+
+  const data = await res.json() as { access_token: string };
+  return data.access_token;
+}
+
+/**
+ * Busca valores da planilha via Google Sheets API v4 (autenticado).
+ * Retorna a grade de células como string[][].
+ * Cache via unstable_cache — revalida de hora em hora.
+ */
+async function fetchSheetValues(
+  sheetId:   string,
+  sheetName: string,
+  creds:     ServiceAccountCredentials,
+): Promise<string[][] | null> {
+  const token = await getGoogleAccessToken(creds);
+  const range = encodeURIComponent(sheetName);
+  const url   = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    // O token muda a cada request, então não usamos fetch cache aqui.
+    // O cache é feito por unstable_cache no nível do wrapper.
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    console.error(`[sheets] Google Sheets API ${res.status}:`, await res.text());
+    return null;
+  }
+
+  const data = await res.json() as { values?: string[][] };
+  return data.values ?? null;
+}
+
+/**
+ * Converte string[][] (resposta da API) para CSV e usa o parser existente.
+ */
+function gridToCsv(rows: string[][]): string {
+  return rows
+    .map((row) =>
+      row.map((cell) => {
+        const s = String(cell ?? "");
+        return s.includes(",") || s.includes('"') || s.includes("\n")
+          ? `"${s.replace(/"/g, '""')}"`
+          : s;
+      }).join(","),
+    )
+    .join("\n");
+}
+
+// ── Fetch principal ────────────────────────────────────────────────────────────
+
+/**
+ * Busca dados de orçamento do Google Sheets.
  *
- * @param sheetId  ID da planilha (parte da URL: /spreadsheets/d/SHEET_ID/edit)
+ * Estratégia automática:
+ *   1. Se GOOGLE_SERVICE_ACCOUNT_JSON estiver configurado → usa Sheets API v4
+ *      (planilha pode ser privada; basta compartilhar com o email da service account)
+ *   2. Caso contrário → exportação CSV pública (planilha precisa ser pública)
+ *
+ * Cache de 1 hora em ambos os casos.
+ *
+ * @param sheetId    ID da planilha (parte da URL: /spreadsheets/d/SHEET_ID/edit)
  * @param sheetName  Nome exato da aba (padrão: "Custos")
  */
 export async function fetchOrcamento(
@@ -198,12 +303,35 @@ export async function fetchOrcamento(
 ): Promise<OrcamentoSheet | null> {
   if (!sheetId) return null;
 
-  // URL de exportação CSV para planilhas públicas (sem API key)
+  // ── Modo autenticado (Service Account) ─────────────────────────────────────
+  const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (saJson) {
+    try {
+      const { unstable_cache } = await import("next/cache");
+      const fetchCached = unstable_cache(
+        async () => fetchSheetValues(sheetId, sheetName, JSON.parse(saJson) as ServiceAccountCredentials),
+        [`orcamento-${sheetId}-${sheetName}`],
+        { revalidate: 3600, tags: ["orcamento"] },
+      );
+
+      const rows = await fetchCached();
+      if (!rows) return null;
+
+      const parsed = parseOrcamentoCSV(gridToCsv(rows));
+      if (!parsed) return null;
+
+      return { ...parsed, fetchedAt: new Date().toISOString() };
+    } catch (err) {
+      console.error("[sheets] Erro com Service Account:", err);
+      return null;
+    }
+  }
+
+  // ── Modo público (fallback) ─────────────────────────────────────────────────
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
 
   try {
     const res = await fetch(url, {
-      // Next.js Data Cache — revalida de hora em hora
       next: { revalidate: 3600 },
     });
 
@@ -212,8 +340,8 @@ export async function fetchOrcamento(
       return null;
     }
 
-    const csv     = await res.text();
-    const parsed  = parseOrcamentoCSV(csv);
+    const csv    = await res.text();
+    const parsed = parseOrcamentoCSV(csv);
     if (!parsed) return null;
 
     return { ...parsed, fetchedAt: new Date().toISOString() };
