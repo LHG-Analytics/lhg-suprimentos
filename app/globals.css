@@ -177,6 +177,26 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* cursor: pointer em todos os elementos interativos por padrão.
+     O Tailwind v4 Preflight não faz isso automaticamente. */
+  button:not([disabled]),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  label[for],
+  select:not([disabled]),
+  summary {
+    cursor: pointer;
+  }
+
+  /* Elementos desabilitados ficam com not-allowed */
+  button[disabled],
+  [role="button"][aria-disabled="true"],
+  select[disabled],
+  input[disabled],
+  textarea[disabled] {
+    cursor: not-allowed;
+  }
 }
 
 /* ============================================================
