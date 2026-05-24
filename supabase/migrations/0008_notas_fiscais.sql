@@ -40,10 +40,10 @@ CREATE TABLE IF NOT EXISTS nf_itens (
   created_at    timestamptz   NOT NULL DEFAULT now()
 );
 
--- ─── Trigger de updated_at ───────────────────────────────────────────────────
+-- ─── Trigger de updated_at (usa set_updated_at() de 0003_triggers.sql) ────────
 CREATE TRIGGER set_notas_fiscais_updated_at
   BEFORE UPDATE ON notas_fiscais
-  FOR EACH ROW EXECUTE FUNCTION moddatetime(updated_at);
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ─── Índices ─────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_nf_pedido     ON notas_fiscais(pedido_id);
