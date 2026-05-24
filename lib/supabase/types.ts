@@ -971,6 +971,8 @@ export type Database = {
           cidade: string | null
           cor_hex: string | null
           created_at: string
+          google_sheet_id: string | null
+          google_sheet_name: string
           id: string
           nome: string
           omie_app_key: string | null
@@ -985,6 +987,8 @@ export type Database = {
           cidade?: string | null
           cor_hex?: string | null
           created_at?: string
+          google_sheet_id?: string | null
+          google_sheet_name?: string
           id?: string
           nome: string
           omie_app_key?: string | null
@@ -999,6 +1003,8 @@ export type Database = {
           cidade?: string | null
           cor_hex?: string | null
           created_at?: string
+          google_sheet_id?: string | null
+          google_sheet_name?: string
           id?: string
           nome?: string
           omie_app_key?: string | null
