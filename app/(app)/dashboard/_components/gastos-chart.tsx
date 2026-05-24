@@ -1,14 +1,12 @@
 "use client";
 
 /**
- * gastos-chart.tsx — LHG-204
+ * gastos-chart.tsx — LHG-220
  * Gráfico de linha "Gastos por unidade" — últimos 6 meses.
  * Client Component (recharts exige window).
  *
- * Unidades reais de compras: Lush Ipiranga, Lush Lapa, Andar de Cima, Altana.
- * Integrado com UnidadeContext — filtra série quando uma unidade está ativa.
- *
- * Sprint 0: dados mock. Sprint 6: conectar a queries reais.
+ * Recebe `series` e `labels` do Server Component (page.tsx).
+ * Filtro por unidade via UnidadeContext.
  */
 import { useState } from "react";
 import {
@@ -24,22 +22,26 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/utils";
 import { useUnidade } from "@/lib/unidade-context";
 
-// ── Dados mock ─────────────────────────────────────────────────────────────────
-const LABELS = ["Dez", "Jan", "Fev", "Mar", "Abr", "Mai"];
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
-const SERIES = [
-  { id: "lush-ipiranga", name: "Lush Ipiranga",  data: [82400, 78200, 91200, 88600, 102400, 96800], cor: "#10b981" },
-  { id: "lush-lapa",     name: "Lush Lapa",       data: [68200, 71400, 65800, 73600,  77200, 84400], cor: "#38bdf8" },
-  { id: "andar-de-cima", name: "Andar de Cima",   data: [54200, 58800, 61400, 64200,  68800, 71200], cor: "#f59e0b" },
-  { id: "altana",        name: "Altana",           data: [48600, 52400, 49800, 56200,  61200, 64800], cor: "#a78bfa" },
-];
+export interface ChartSerie {
+  id:   string;   // slug da unidade, ex: "lush-ipiranga"
+  name: string;
+  data: number[]; // valor por mês — mesmo comprimento que labels
+  cor:  string;
+}
 
-// Transforma para o formato do recharts: [{ mes, "Lush Ipiranga": 82400, ... }]
-function buildChartData(activeSeries: typeof SERIES) {
-  return LABELS.map((label, i) => {
+interface Props {
+  series: ChartSerie[];
+  labels: string[];   // ex: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"]
+}
+
+// ── Transforma para o formato do recharts ──────────────────────────────────────
+function buildChartData(activeSeries: ChartSerie[], labels: string[]) {
+  return labels.map((label, i) => {
     const point: Record<string, number | string> = { mes: label };
     activeSeries.forEach((s) => {
-      point[s.name] = s.data[i];
+      point[s.name] = s.data[i] ?? 0;
     });
     return point;
   });
@@ -78,30 +80,31 @@ function CustomTooltip({
 }
 
 // ── Componente ─────────────────────────────────────────────────────────────────
-export function GastosChart() {
+export function GastosChart({ series, labels }: Props) {
   const { unidade } = useUnidade();
 
   // Filtra séries de acordo com a unidade selecionada no contexto
-  // Se "todas", mostra todas. Se uma específica, mostra só ela.
   const filteredSeries =
     unidade.id === "todas"
-      ? SERIES
-      : SERIES.filter((s) => s.id === unidade.id);
+      ? series
+      : series.filter((s) => s.id === unidade.id);
 
-  // Toggle local (para quando estiver em "todas")
+  // Toggle local de séries (apenas quando "todas" está ativo)
   const [toggledOff, setToggledOff] = useState<string[]>([]);
   const activeSeries =
     unidade.id === "todas"
       ? filteredSeries.filter((s) => !toggledOff.includes(s.id))
       : filteredSeries;
 
-  const chartData = buildChartData(activeSeries);
+  const chartData = buildChartData(activeSeries, labels);
 
   function toggle(id: string) {
     setToggledOff((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
+
+  const semDados = series.every((s) => s.data.every((v) => v === 0));
 
   return (
     <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 h-full flex flex-col">
@@ -112,7 +115,7 @@ export function GastosChart() {
             Gastos por unidade
           </div>
           <div className="text-xs text-zinc-500 mt-0.5">
-            Últimos 6 meses · soma de pedidos aprovados
+            Últimos 6 meses · pedidos enviados e recebidos
             {unidade.id !== "todas" && (
               <span className="ml-1 text-zinc-400 font-medium">
                 · {unidade.nome}
@@ -121,10 +124,10 @@ export function GastosChart() {
           </div>
         </div>
 
-        {/* Legenda toggleável — só aparece quando todas as unidades estão visíveis */}
-        {unidade.id === "todas" && (
+        {/* Legenda toggleável — só quando "todas" */}
+        {unidade.id === "todas" && !semDados && (
           <div className="flex flex-wrap gap-1.5 sm:justify-end">
-            {SERIES.map((s) => {
+            {series.map((s) => {
               const on = !toggledOff.includes(s.id);
               return (
                 <button
@@ -149,44 +152,52 @@ export function GastosChart() {
         )}
       </div>
 
-      {/* Chart — flex-1 + min-h-0 para Recharts preencher o espaço disponível */}
-      <div className="flex-1 min-h-0 -mx-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgb(39 39 42 / 0.6)"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="mes"
-              tick={{ fill: "#71717a", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              dy={8}
-            />
-            <YAxis
-              tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-              tick={{ fill: "#71717a", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              width={42}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            {activeSeries.map((s) => (
-              <Line
-                key={s.id}
-                type="monotone"
-                dataKey={s.name}
-                stroke={s.cor}
-                strokeWidth={unidade.id === s.id ? 2.5 : 2}
-                dot={false}
-                activeDot={{ r: 4, fill: s.cor, stroke: "#09090b", strokeWidth: 2 }}
+      {/* Chart */}
+      {semDados ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-zinc-600">
+            Nenhum pedido aprovado nos últimos 6 meses
+          </p>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 -mx-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="rgb(39 39 42 / 0.6)"
+                vertical={false}
               />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+              <XAxis
+                dataKey="mes"
+                tick={{ fill: "#71717a", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                dy={8}
+              />
+              <YAxis
+                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                tick={{ fill: "#71717a", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                width={42}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              {activeSeries.map((s) => (
+                <Line
+                  key={s.id}
+                  type="monotone"
+                  dataKey={s.name}
+                  stroke={s.cor}
+                  strokeWidth={unidade.id === s.id ? 2.5 : 2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: s.cor, stroke: "#09090b", strokeWidth: 2 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }

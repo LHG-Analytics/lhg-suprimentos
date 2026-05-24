@@ -1,34 +1,34 @@
 /**
- * acoes-feed.tsx — LHG-204
+ * acoes-feed.tsx — LHG-220
  * Feed de ações pendentes — lado direito do dashboard.
- * Sprint 0: dados mock. Sprint 6: conectar a queries reais.
+ * Recebe dados reais do Server Component (page.tsx).
  */
-import { formatRelativeTime, formatBRL } from "@/lib/utils";
+import Link from "next/link";
+import { formatBRL } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-type AcaoTipo = "aprovar" | "cotacao" | "email" | "nf" | "omie";
 
-interface Acao {
-  id: string;
-  tipo: AcaoTipo;
-  usuario: string;
-  acao: string;
-  alvo: string;
-  valor: number | null;
-  tempo: Date;
-  cta: string;
+export type AcaoTipo = "aprovar" | "cotacao" | "email" | "nf" | "omie";
+
+export interface AcaoItem {
+  id:       string;
+  tipo:     AcaoTipo;
+  /** Ex: "Patrícia L. · aguarda cotação em" */
+  descricao: string;
+  /** Número do documento: COT-2026-0140 */
+  alvo:     string;
+  /** Rota para navegação */
+  alvoHref: string;
+  valor:    number | null;
+  /** ISO string */
+  tempo:    string;
+  cta:      string;
 }
 
-// ── Dados mock ─────────────────────────────────────────────────────────────────
-const ACOES: Acao[] = [
-  { id: "a1", tipo: "aprovar", usuario: "Rogério T.",  acao: "aguarda sua aprovação em",       alvo: "COT-2026-0140", valor: 14380, tempo: new Date(Date.now() - 1000 * 60 * 8),       cta: "Aprovar"  },
-  { id: "a2", tipo: "cotacao", usuario: "Patrícia L.", acao: "criou requisição",                alvo: "REQ-2026-0238", valor: 24800, tempo: new Date(Date.now() - 1000 * 60 * 22),      cta: "Cotar"    },
-  { id: "a3", tipo: "email",   usuario: "Camila F.",   acao: "aguarda envio de cotação para",   alvo: "Texlar Têxtil", valor: null,  tempo: new Date(Date.now() - 1000 * 60 * 45),      cta: "Enviar"   },
-  { id: "a4", tipo: "nf",      usuario: "Camila F.",   acao: "NF recebida com divergência em",  alvo: "PED-2026-0086", valor: 18860, tempo: new Date(Date.now() - 1000 * 60 * 60 * 2),  cta: "Conferir" },
-  { id: "a5", tipo: "aprovar", usuario: "Rogério T.",  acao: "aguarda aprovação em",             alvo: "COT-2026-0137", valor: 64800, tempo: new Date(Date.now() - 1000 * 60 * 60 * 4),  cta: "Aprovar"  },
-  { id: "a6", tipo: "omie",    usuario: "Camila F.",   acao: "erro de sincronização com Omie em",alvo: "PED-2026-0085", valor: 7920,  tempo: new Date(Date.now() - 1000 * 60 * 60 * 7),  cta: "Resolver" },
-];
+interface Props {
+  acoes: AcaoItem[];
+}
 
 // ── Cores por tipo ─────────────────────────────────────────────────────────────
 const tipoColor: Record<AcaoTipo, string> = {
@@ -39,71 +39,88 @@ const tipoColor: Record<AcaoTipo, string> = {
   omie:    "text-red-400",
 };
 
-// ── Avatar mínimo com iniciais ─────────────────────────────────────────────────
-function MiniAvatar({ name }: { name: string }) {
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-  return (
-    <div className="w-6 h-6 shrink-0 rounded-full bg-lhg-800 text-zinc-50 flex items-center justify-center font-mono text-[10px] font-semibold mt-0.5 select-none">
-      {initials}
-    </div>
-  );
+// ── Tempo relativo ─────────────────────────────────────────────────────────────
+function relativeTime(isoString: string): string {
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins   = Math.floor(diffMs / 60_000);
+  if (mins < 1)   return "agora";
+  if (mins < 60)  return `${mins}min atrás`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h atrás`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d atrás`;
 }
 
 // ── Componente ─────────────────────────────────────────────────────────────────
-export function AcoesFeed() {
+export function AcoesFeed({ acoes }: Props) {
   return (
     <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <div className="text-sm font-medium text-zinc-100">Ações pendentes</div>
           <div className="text-xs text-zinc-500 mt-0.5">
-            {ACOES.length} itens requerem atenção
+            {acoes.length === 0
+              ? "Nenhuma ação pendente"
+              : `${acoes.length} ${acoes.length === 1 ? "item requer" : "itens requerem"} atenção`}
           </div>
         </div>
-        <button className="text-xs text-zinc-500 hover:text-zinc-200 transition-colors">
+        <Link
+          href="/cotacoes"
+          className="text-xs text-zinc-500 hover:text-zinc-200 transition-colors"
+        >
           Tudo →
-        </button>
+        </Link>
       </div>
 
       {/* Lista */}
-      <div className="flex-1 -mx-2 space-y-0.5 overflow-y-auto">
-        {ACOES.map((a) => (
-          <button
-            key={a.id}
-            className="w-full flex items-start gap-2.5 px-2 py-2 rounded-md hover:bg-zinc-800/40 transition-colors text-left group"
-          >
-            <MiniAvatar name={a.usuario} />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-zinc-300 leading-snug">
-                <span className="font-medium text-zinc-100">
-                  {a.usuario.split(" ")[0]}
-                </span>{" "}
-                <span className="text-zinc-500">{a.acao}</span>{" "}
-                <span className={cn("font-mono", tipoColor[a.tipo])}>
-                  {a.alvo}
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-center gap-2 text-[11px] text-zinc-500">
-                <span>{formatRelativeTime(a.tempo)}</span>
-                {a.valor && (
-                  <>
-                    <span>·</span>
-                    <span className="font-mono">{formatBRL(a.valor)}</span>
-                  </>
+      {acoes.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-zinc-600">Tudo em dia 🎉</p>
+        </div>
+      ) : (
+        <div className="flex-1 -mx-2 space-y-0.5 overflow-y-auto">
+          {acoes.map((a) => (
+            <Link
+              key={a.id}
+              href={a.alvoHref}
+              className="w-full flex items-start gap-2.5 px-2 py-2 rounded-md hover:bg-zinc-800/40 transition-colors text-left group"
+            >
+              {/* Dot indicador */}
+              <span
+                className={cn(
+                  "mt-1.5 w-1.5 h-1.5 rounded-full shrink-0",
+                  a.tipo === "aprovar" && "bg-amber-400",
+                  a.tipo === "cotacao" && "bg-sky-400",
+                  a.tipo === "nf"      && "bg-red-400",
+                  a.tipo === "omie"    && "bg-red-400",
+                  a.tipo === "email"   && "bg-zinc-500",
                 )}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-zinc-300 leading-snug">
+                  <span className="text-zinc-500">{a.descricao} </span>
+                  <span className={cn("font-mono font-medium", tipoColor[a.tipo])}>
+                    {a.alvo}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-zinc-600">
+                  <span>{relativeTime(a.tempo)}</span>
+                  {a.valor != null && (
+                    <>
+                      <span>·</span>
+                      <span className="font-mono">{formatBRL(a.valor)}</span>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-lhg-400 self-center whitespace-nowrap">
-              {a.cta} →
-            </span>
-          </button>
-        ))}
-      </div>
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-emerald-500 self-center whitespace-nowrap shrink-0">
+                {a.cta} →
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

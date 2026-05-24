@@ -1,0 +1,57 @@
+/**
+ * app/(app)/cotacoes/[id]/page.tsx — LHG-211
+ * Detalhe da cotação: header + banner IA + matriz comparativa.
+ * Server Component: busca todos os dados necessários e passa ao client.
+ */
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { CotacaoDetalheClient } from "./_components/cotacao-detalhe-client";
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+export default async function CotacaoDetalhePage({ params }: Props) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const [
+    { data: cotacao },
+    { data: fornecedores },
+  ] = await Promise.all([
+    supabase
+      .from("cotacoes")
+      .select(
+        `id, numero, titulo, status, urgente, valor_estimado, economia, economia_pct,
+         prazo, created_at, ai_resumo, ai_analisada_em,
+         comprador:user_profiles!comprador_id(nome, avatar_url),
+         cotacao_unidades(unidade_id, unidades(nome, slug)),
+         cotacao_fornecedores(fornecedor_id, fornecedores(id, razao_social, nome_fantasia, rating, pontualidade_pct)),
+         cotacao_itens(
+           id, quantidade, melhor_forn, selecionado_forn,
+           produtos(id, codigo, nome, unidade_med, categoria),
+           cotacao_matriz(cotacao_item_id, fornecedor_id, preco_unitario, prazo_entrega_dias, condicao_pagamento)
+         )`,
+      )
+      .eq("id", id)
+      .single(),
+
+    supabase
+      .from("fornecedores")
+      .select("id, razao_social, nome_fantasia, rating, pontualidade_pct, categoria")
+      .eq("ativo", true)
+      .order("razao_social"),
+  ]);
+
+  if (!cotacao) notFound();
+
+  return (
+    <CotacaoDetalheClient
+      cotacao={cotacao as any}
+      todosFornecedores={fornecedores ?? []}
+    />
+  );
+}

@@ -5,7 +5,7 @@
  * Tabela interativa do catálogo de produtos com busca, filtro por categoria e sync Omie.
  */
 import { useState, useMemo } from "react";
-import { Search, Package, RefreshCw, Tag } from "lucide-react";
+import { Search, Package, RefreshCw, Tag, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieProdutosButton } from "./sync-omie-produtos-button";
 
@@ -17,6 +17,7 @@ interface Produto {
   nome: string;
   unidade_med: string;
   categoria: string;
+  familia_omie: string | null;
   ativo: boolean;
   preco_custo: number | null;
   omie_codigo: string | null;
@@ -75,27 +76,38 @@ function categoriaCor(cat: string) {
 export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
   const [query,       setQuery]       = useState("");
   const [categoria,   setCategoria]   = useState<string>("todas");
+  const [familia,     setFamilia]     = useState<string>("todas");
 
-  // Categorias únicas para o filtro
+  // Listas únicas para os filtros
   const categorias = useMemo(() => {
     const set = new Set(produtos.map((p) => p.categoria));
+    return Array.from(set).sort();
+  }, [produtos]);
+
+  const familias = useMemo(() => {
+    const set = new Set(
+      produtos
+        .map((p) => p.familia_omie)
+        .filter((f): f is string => !!f),
+    );
     return Array.from(set).sort();
   }, [produtos]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     return produtos.filter((p) => {
-      const matchCat = categoria === "todas" || p.categoria === categoria;
-      if (!matchCat) return false;
+      if (categoria !== "todas" && p.categoria !== categoria) return false;
+      if (familia   !== "todas" && p.familia_omie !== familia) return false;
       if (!q) return true;
       return (
         p.nome.toLowerCase().includes(q) ||
         p.codigo.toLowerCase().includes(q) ||
         p.categoria.toLowerCase().includes(q) ||
+        (p.familia_omie ?? "").toLowerCase().includes(q) ||
         p.unidade_med.toLowerCase().includes(q)
       );
     });
-  }, [produtos, query, categoria]);
+  }, [produtos, query, categoria, familia]);
 
   const totalAtivos   = produtos.filter((p) => p.ativo).length;
   const totalOmie     = produtos.filter((p) => p.omie_codigo).length;
@@ -134,11 +146,12 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
       </div>
 
       {/* ── Stats ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "TOTAL",      value: produtos.length, color: "text-zinc-50" },
-          { label: "CATEGORIAS", value: categorias.length, color: "text-violet-400" },
-          { label: "OMIE",       value: totalOmie,       color: "text-sky-400" },
+          { label: "TOTAL",        value: produtos.length,  color: "text-zinc-50" },
+          { label: "CATEGORIAS",   value: categorias.length, color: "text-violet-400" },
+          { label: "FAMÍLIAS OMIE",value: familias.length,  color: "text-amber-400" },
+          { label: "OMIE",         value: totalOmie,        color: "text-sky-400" },
         ].map(({ label, value, color }) => (
           <div
             key={label}
@@ -164,17 +177,17 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         ))}
       </div>
 
-      {/* ── Busca + Filtro ──────────────────────────────────────────────── */}
-      <div className="flex gap-2">
+      {/* ── Busca + Filtros ─────────────────────────────────────────────── */}
+      <div className="flex gap-2 flex-wrap">
         {/* Campo de busca */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-[200px]">
           <Search
             size={14}
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
           />
           <input
             type="text"
-            placeholder="Buscar por nome, código ou unidade…"
+            placeholder="Buscar por nome, código, família ou unidade…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className={cn(
@@ -193,7 +206,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           )}
         </div>
 
-        {/* Filtro de categoria */}
+        {/* Filtro de categoria (orçamento) */}
         <div className="relative">
           <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <select
@@ -211,13 +224,34 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             ))}
           </select>
         </div>
+
+        {/* Filtro de família Omie */}
+        {familias.length > 0 && (
+          <div className="relative">
+            <Layers size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <select
+              value={familia}
+              onChange={(e) => setFamilia(e.target.value)}
+              className={cn(
+                "rounded-lg border border-zinc-800 bg-zinc-900/60 pl-8 pr-8 py-2.5",
+                "text-sm text-zinc-300 appearance-none cursor-pointer",
+                "focus:outline-none focus:border-zinc-600 transition-colors",
+              )}
+            >
+              <option value="todas">Todas as famílias Omie</option>
+              {familias.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2.5fr_1fr_1fr_1fr_80px_80px] gap-4 px-5 py-3 border-b border-zinc-800/80">
-          {["PRODUTO", "CATEGORIA", "UNIDADE", "PREÇO CUSTO", "STATUS", "OMIE"].map((h) => (
+        <div className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-zinc-800/80">
+          {["PRODUTO", "CATEGORIA ORÇAMENTO", "FAMÍLIA OMIE", "UNIDADE", "PREÇO CUSTO", "STATUS"].map((h) => (
             <div
               key={h}
               className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500"
@@ -232,11 +266,11 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Package size={28} className="text-zinc-700" />
             <p className="text-sm text-zinc-500">
-              {query || categoria !== "todas"
+              {query || categoria !== "todas" || familia !== "todas"
                 ? "Nenhum produto encontrado"
                 : "Nenhum produto cadastrado"}
             </p>
-            {!query && categoria === "todas" && (
+            {!query && categoria === "todas" && familia === "todas" && (
               <p className="text-xs text-zinc-600">
                 Clique em &quot;Sincronizar Omie&quot; para importar
               </p>
@@ -247,7 +281,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             {filtered.map((p) => (
               <li
                 key={p.id}
-                className="grid grid-cols-[2.5fr_1fr_1fr_1fr_80px_80px] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
+                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
               >
                 {/* Produto */}
                 <div className="min-w-0">
@@ -256,10 +290,16 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                   </div>
                   <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
                     {p.codigo}
+                    {p.omie_codigo && (
+                      <>
+                        <span className="mx-1 text-zinc-700">·</span>
+                        <span className="text-sky-600">Omie</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Categoria */}
+                {/* Categoria (orçamento) */}
                 <div className="self-center">
                   <span className={cn(
                     "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
@@ -267,6 +307,20 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                   )}>
                     {p.categoria}
                   </span>
+                </div>
+
+                {/* Família Omie */}
+                <div className="self-center">
+                  {p.familia_omie ? (
+                    <span className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                      "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+                    )}>
+                      {p.familia_omie}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-zinc-600">—</span>
+                  )}
                 </div>
 
                 {/* Unidade de medida */}
@@ -297,23 +351,10 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                   )}>
                     {p.ativo ? "Ativo" : "Inativo"}
                   </span>
-                </div>
-
-                {/* Omie */}
-                <div className="self-center">
-                  {p.omie_codigo ? (
-                    <div className="text-center">
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20">
-                        ✓ Omie
-                      </span>
-                      {p.omie_sincronizado_em && (
-                        <div className="text-[10px] text-zinc-600 mt-0.5 font-mono text-center">
-                          {relativeTime(p.omie_sincronizado_em)}
-                        </div>
-                      )}
+                  {p.omie_sincronizado_em && (
+                    <div className="text-[10px] text-zinc-700 mt-0.5 font-mono">
+                      {relativeTime(p.omie_sincronizado_em)}
                     </div>
-                  ) : (
-                    <span className="text-[11px] text-zinc-600">—</span>
                   )}
                 </div>
               </li>

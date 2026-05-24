@@ -21,7 +21,7 @@ export default async function ProdutosPage() {
     supabase
       .from("produtos")
       .select(
-        "id, codigo, nome, unidade_med, categoria, ativo, preco_custo, omie_codigo, omie_sincronizado_em",
+        "id, codigo, nome, unidade_med, categoria, familia_omie, ativo, preco_custo, omie_codigo, omie_sincronizado_em",
       )
       .order("categoria")
       .order("nome"),

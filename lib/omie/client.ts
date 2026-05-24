@@ -358,3 +358,87 @@ export async function listAllProdutos(
 
   return all;
 }
+
+// ── Tipos: Nota de Entrada ─────────────────────────────────────────────────────
+
+/** Um item (linha) de uma nota de entrada no Omie. */
+export interface OmieNotaEntradaDet {
+  /** Número sequencial do item (1, 2, 3...) */
+  nItem: number;
+  /** Código do produto no Omie (ou código interno como fallback) */
+  cCodProd: string;
+  /** Descrição do produto */
+  cDescrProd: string;
+  /** Unidade de medida (UN, KG, LT, etc.) */
+  cUnid: string;
+  /** Quantidade */
+  nQtde: number;
+  /** Valor unitário */
+  nValUnit: number;
+  /** Valor total = nQtde × nValUnit */
+  nValTotal: number;
+  /** Código NCM (opcional) */
+  cCodNCM?: string;
+  /** Código EAN/GTIN (opcional) */
+  cEAN?: string;
+  /** Desconto (opcional, padrão 0) */
+  nValDesc?: number;
+}
+
+/** Parâmetros para IncluirNota em /produtos/notaentrada/ */
+export interface OmieIncluirNotaParam {
+  /** 0 = gerar código automático */
+  nCodNota?: number;
+  /** Número da NF (ex: "000001") */
+  cNumNF: string;
+  /** Série da NF (ex: "1") */
+  cSerie: string;
+  /** Data de emissão no formato DD/MM/YYYY */
+  dDtEmissao: string;
+  /** Data de entrada/recebimento no formato DD/MM/YYYY */
+  dDtEntrada: string;
+  /** Chave de acesso NF-e (44 dígitos) */
+  cChaveNFe: string;
+  /** Código do fornecedor no Omie (preferencial se omie_codigo disponível) */
+  nCodFornecedor?: number;
+  /** CNPJ do fornecedor — alternativa quando omie_codigo não está disponível */
+  cCNPJFornecedor?: string;
+  /** Valor total da nota */
+  nValorTotalNota: number;
+  /** Finalidade NF-e: "1"=normal, "2"=complementar, "3"=ajuste, "4"=devolução */
+  cFinNFe?: string;
+  /** Natureza da operação */
+  cNaturezaOperacao?: string;
+  /** Itens (linhas) da nota */
+  det: OmieNotaEntradaDet[];
+}
+
+/** Resposta do Omie para IncluirNota */
+export interface OmieIncluirNotaResponse {
+  /** Código interno gerado pelo Omie para a nota */
+  nCodNota: number;
+  /** Número da NF conforme enviado */
+  cNumNF: string;
+  /** Código de status: "0" = sucesso */
+  cStatus: string;
+  /** Descrição legível do status */
+  cDescStatus: string;
+}
+
+/**
+ * Inclui uma nota de entrada no Omie ERP.
+ * Endpoint: /produtos/notaentrada/ — call: IncluirNota
+ *
+ * Referência: https://app.omie.com.br/api/v1/produtos/notaentrada/
+ */
+export async function incluirNotaEntrada(
+  creds: OmieCredentials,
+  param: OmieIncluirNotaParam,
+): Promise<OmieIncluirNotaResponse> {
+  return omiePost<OmieIncluirNotaParam, OmieIncluirNotaResponse>(
+    "/produtos/notaentrada/",
+    "IncluirNota",
+    creds,
+    param,
+  );
+}

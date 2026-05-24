@@ -754,6 +754,7 @@ export type Database = {
           codigo: string
           created_at: string
           ean: string | null
+          familia_omie: string | null
           id: string
           ncm: string | null
           nome: string
@@ -769,6 +770,7 @@ export type Database = {
           codigo: string
           created_at?: string
           ean?: string | null
+          familia_omie?: string | null
           id?: string
           ncm?: string | null
           nome: string
@@ -784,6 +786,7 @@ export type Database = {
           codigo?: string
           created_at?: string
           ean?: string | null
+          familia_omie?: string | null
           id?: string
           ncm?: string | null
           nome?: string

@@ -17,6 +17,7 @@ import {
   type OmieClienteItem,
   type OmieProdutoItem,
 } from "./client";
+import { categoriaParaFamilia } from "./familia-map";
 
 // ── Tipos internos ─────────────────────────────────────────────────────────────
 
@@ -79,18 +80,24 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
 }
 
 function mapProduto(item: OmieProdutoItem) {
+  const familiaOmie = item.familia_produto ?? null;
   return {
-    nome: item.descricao,
-    codigo: item.codigo ?? `OMIE-${item.codigo_produto}`,
-    unidade_med: item.unidade ?? "un",
-    categoria: item.familia_produto ?? "Importado Omie",
-    omie_codigo: String(item.codigo_produto),
+    nome:         item.descricao,
+    codigo:       item.codigo ?? `OMIE-${item.codigo_produto}`,
+    unidade_med:  item.unidade ?? "un",
+    // categoria = categoria de orçamento mapeada automaticamente.
+    // Produtos novos recebem a categoria do mapa familia → orçamento.
+    // O upsert preserva edições manuais (estratégia INSERT-first + UPDATE seletivo).
+    categoria:     categoriaParaFamilia(familiaOmie),
+    // familia_omie = família bruta do Omie, sempre sobrescrita pelo sync.
+    familia_omie:  familiaOmie,
+    omie_codigo:   String(item.codigo_produto),
     omie_descricao: item.descricao_detalhada ?? null,
-    ncm: item.ncm ?? null,
-    ean: item.ean ?? null,
-    preco_custo: item.valor_unitario ?? null,
+    ncm:           item.ncm ?? null,
+    ean:           item.ean ?? null,
+    preco_custo:   item.valor_unitario ?? null,
     omie_sincronizado_em: new Date().toISOString(),
-    ativo: item.inativo !== "S",
+    ativo:         item.inativo !== "S",
   };
 }
 
@@ -187,16 +194,48 @@ export async function syncProdutos(
     for (let i = 0; i < items.length; i += BATCH) {
       const batch = items.slice(i, i + BATCH).map(mapProduto);
 
-      const { error } = await supabase
+      // ── Estratégia de upsert em 2 passos para preservar categoria manual ────
+      //
+      // Passo 1 — INSERT novos produtos (ignorando conflito de omie_codigo).
+      //           Produtos novos recebem categoria = familia_omie como ponto de partida.
+      const { error: insertErr } = await supabase
         .from("produtos")
-        .upsert(batch, { onConflict: "omie_codigo", ignoreDuplicates: false });
+        .upsert(batch, { onConflict: "omie_codigo", ignoreDuplicates: true });
 
-      if (error) {
-        console.error("[omie/sync] Erro upsert produtos:", error.message);
+      if (insertErr) {
+        console.error("[omie/sync] Erro insert produtos:", insertErr.message);
         erros += batch.length;
-      } else {
-        novos += batch.length;
+        continue;
       }
+
+      // Passo 2 — UPDATE dos campos de metadados do Omie em produtos EXISTENTES,
+      //           preservando "categoria" (que pode ter sido editada pelo usuário).
+      //           Nota: Supabase não expõe "ON CONFLICT DO UPDATE SET ..." parcial,
+      //           então usamos um único UPDATE baseado em omie_codigo.
+      for (const p of batch) {
+        const { error: updateErr } = await supabase
+          .from("produtos")
+          .update({
+            nome:                 p.nome,
+            unidade_med:          p.unidade_med,
+            familia_omie:         p.familia_omie,
+            ncm:                  p.ncm,
+            ean:                  p.ean,
+            preco_custo:          p.preco_custo,
+            omie_descricao:       p.omie_descricao,
+            omie_sincronizado_em: p.omie_sincronizado_em,
+            ativo:                p.ativo,
+            // NÃO atualiza "categoria" para preservar edições manuais.
+          })
+          .eq("omie_codigo", p.omie_codigo);
+
+        if (updateErr) {
+          console.error("[omie/sync] Erro update produto:", updateErr.message);
+          erros++;
+        }
+      }
+
+      novos += batch.length;
     }
 
     const result: SyncResult = {
