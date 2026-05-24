@@ -516,7 +516,7 @@ export type Database = {
           lancada_no_omie: boolean | null
           numero: string | null
           omie_num_nf: string | null
-          pedido_id: string
+          pedido_id: string | null
           serie: string | null
           status: string
           unidade_id: string | null
@@ -533,7 +533,7 @@ export type Database = {
           lancada_no_omie?: boolean | null
           numero?: string | null
           omie_num_nf?: string | null
-          pedido_id: string
+          pedido_id?: string | null
           serie?: string | null
           status?: string
           unidade_id?: string | null
@@ -550,7 +550,7 @@ export type Database = {
           lancada_no_omie?: boolean | null
           numero?: string | null
           omie_num_nf?: string | null
-          pedido_id?: string
+          pedido_id?: string | null
           serie?: string | null
           status?: string
           unidade_id?: string | null
