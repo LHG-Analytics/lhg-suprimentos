@@ -7,7 +7,7 @@
  */
 
 import { cookies } from "next/headers";
-import { createServerClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 export interface UnidadeSheetConfig {
   unidadeSlug: string;
@@ -25,7 +25,7 @@ export async function getUnidadeSheetConfig(): Promise<UnidadeSheetConfig | null
   const cookieStore = await cookies();
   const slugCookie  = cookieStore.get("lhg-unidade-slug")?.value ?? "";
 
-  const supabase = await createServerClient();
+  const supabase = await createClient();
 
   // Tenta pela unidade do cookie primeiro
   if (slugCookie && slugCookie !== "todas") {
