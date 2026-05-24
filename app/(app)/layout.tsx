@@ -3,7 +3,8 @@
  * Layout autenticado (Server Component).
  * 1. Valida sessão via getUser() — redireciona para /login se não autenticado.
  * 2. Busca perfil do usuário em user_profiles.
- * 3. Passa dados serializáveis para ShellClient (Client Component).
+ * 3. Busca contagem de cotações abertas para badge dinâmico na sidebar.
+ * 4. Passa dados serializáveis para ShellClient (Client Component).
  */
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -23,12 +24,21 @@ export default async function AppLayout({
 
   if (!user) redirect("/login");
 
-  // ── Busca perfil ───────────────────────────────────────────────────────────
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("nome, email, role, avatar_url")
-    .eq("id", user.id)
-    .single();
+  // ── Busca perfil e badge em paralelo ───────────────────────────────────────
+  const [
+    { data: profile },
+    { count: cotacoesBadge },
+  ] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("nome, email, role, avatar_url")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("cotacoes")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["rascunho", "cotacao", "pendente"]),
+  ]);
 
   // Fallback caso perfil ainda não exista (primeiro acesso)
   const userInfo = {
@@ -38,5 +48,9 @@ export default async function AppLayout({
     avatarUrl: profile?.avatar_url ?? null,
   };
 
-  return <ShellClient user={userInfo}>{children}</ShellClient>;
+  return (
+    <ShellClient user={userInfo} cotacoesBadge={cotacoesBadge ?? 0}>
+      {children}
+    </ShellClient>
+  );
 }

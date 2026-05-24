@@ -2,36 +2,55 @@
 
 /**
  * use-realtime-notifications.ts — LHG-221
- * Hook que escuta mudanças nas tabelas críticas via Supabase Realtime
- * e exibe sonner toasts globais no shell.
- *
- * Eventos monitorados:
- *   • pedidos  UPDATE → mudança de status (aprovado, recebido, cancelado)
- *   • pedidos  INSERT → novo pedido aguardando aprovação
- *   • cotacoes UPDATE → cotação aprovada (pedidos gerados)
- *   • cotacoes INSERT → nova cotação criada
+ * Hook que escuta mudanças nas tabelas críticas via Supabase Realtime,
+ * exibe sonner toasts E armazena a lista de notificações para o painel do sino.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, ShoppingCart, Truck, Loader2 } from "lucide-react";
+import { CheckCircle2, ShoppingCart, Truck } from "lucide-react";
 import { createElement } from "react";
 
-// ── Labels de status ─────────────────────────────────────────────────────────
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
-const PEDIDO_STATUS_LABEL: Record<string, string> = {
-  enviado:             "aprovado e enviado",
-  em_transito:         "em trânsito",
-  recebido:            "recebido",
-  finalizado:          "finalizado",
-  cancelado:           "rejeitado",
-  aguardando_aprovacao: "aguardando aprovação",
-};
+export interface NotificationItem {
+  id:          string;
+  type:        "success" | "error" | "warning" | "info";
+  title:       string;
+  description?: string;
+  href?:       string;
+  createdAt:   Date;
+  read:        boolean;
+}
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useRealtimeNotifications() {
+export function useRealtimeNotifications(): {
+  notifications: NotificationItem[];
+  unreadCount:   number;
+  markAllRead:   () => void;
+} {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Adiciona uma notificação ao painel e dispara o toast
+  const push = useCallback(
+    (item: Omit<NotificationItem, "id" | "createdAt" | "read">) => {
+      const n: NotificationItem = {
+        ...item,
+        id:        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        createdAt: new Date(),
+        read:      false,
+      };
+      setNotifications((prev) => [n, ...prev].slice(0, 20));
+    },
+    [],
+  );
+
+  const markAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
+
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -52,28 +71,29 @@ export function useRealtimeNotifications() {
         (payload) => {
           const novo     = payload.new as { numero: string; status: string };
           const anterior = payload.old as { status: string };
-
           if (!novo.numero || novo.status === anterior.status) return;
 
           switch (novo.status) {
             case "enviado":
+              push({ type: "success", title: `Pedido ${novo.numero} aprovado`, description: "Aguardando envio ao fornecedor", href: "/pedidos" });
               toast.success(`Pedido ${novo.numero} aprovado`, {
                 description: "Aguardando envio ao fornecedor",
                 icon: createElement(CheckCircle2, { size: 14, className: "text-emerald-400" }),
               });
               break;
             case "recebido":
+              push({ type: "success", title: `Pedido ${novo.numero} recebido`, description: "Mercadoria entregue", href: "/pedidos" });
               toast.success(`Pedido ${novo.numero} recebido`, {
                 description: "Mercadoria entregue com sucesso",
                 icon: createElement(Truck, { size: 14, className: "text-emerald-400" }),
               });
               break;
             case "cancelado":
-              toast.error(`Pedido ${novo.numero} rejeitado`, {
-                description: "O pedido foi cancelado",
-              });
+              push({ type: "error", title: `Pedido ${novo.numero} rejeitado`, description: "O pedido foi cancelado", href: "/pedidos" });
+              toast.error(`Pedido ${novo.numero} rejeitado`, { description: "O pedido foi cancelado" });
               break;
             case "em_transito":
+              push({ type: "info", title: `Pedido ${novo.numero} em trânsito`, href: "/pedidos" });
               toast.info(`Pedido ${novo.numero} em trânsito`, {
                 icon: createElement(Truck, { size: 14 }),
               });
@@ -94,6 +114,7 @@ export function useRealtimeNotifications() {
             style: "currency", currency: "BRL",
           });
 
+          push({ type: "warning", title: `Pedido ${novo.numero} aguarda aprovação`, description: valorFmt ?? undefined, href: "/pedidos" });
           toast.warning(`Novo pedido para aprovação: ${novo.numero}`, {
             description: valorFmt ? `Valor: ${valorFmt}` : undefined,
             icon: createElement(ShoppingCart, { size: 14, className: "text-amber-400" }),
@@ -106,17 +127,17 @@ export function useRealtimeNotifications() {
         },
       )
 
-      // ── Cotações: pedidos gerados (status → aprovado) ──────────────────
+      // ── Cotações: pedidos gerados ──────────────────────────────────────
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "cotacoes" },
         (payload) => {
           const novo     = payload.new as { numero: string; titulo: string; status: string };
           const anterior = payload.old as { status: string };
-
           if (novo.status === anterior.status) return;
 
           if (novo.status === "aprovado") {
+            push({ type: "success", title: `Cotação ${novo.numero} — pedidos gerados`, description: novo.titulo, href: "/pedidos" });
             toast.success(`Cotação ${novo.numero} — pedidos gerados`, {
               description: novo.titulo,
               icon: createElement(CheckCircle2, { size: 14, className: "text-emerald-400" }),
@@ -129,15 +150,14 @@ export function useRealtimeNotifications() {
         },
       )
 
-      // ── Cotações: nova cotação criada ──────────────────────────────────
+      // ── Cotações: nova cotação ─────────────────────────────────────────
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "cotacoes" },
         (payload) => {
           const novo = payload.new as { numero: string; titulo: string };
-          toast.info(`Nova cotação: ${novo.titulo}`, {
-            description: novo.numero,
-          });
+          push({ type: "info", title: `Nova cotação: ${novo.titulo}`, description: novo.numero, href: "/cotacoes" });
+          toast.info(`Nova cotação: ${novo.titulo}`, { description: novo.numero });
         },
       )
 
@@ -146,5 +166,9 @@ export function useRealtimeNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [push]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  return { notifications, unreadCount, markAllRead };
 }

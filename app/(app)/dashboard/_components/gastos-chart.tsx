@@ -112,15 +112,10 @@ export function GastosChart({ series, labels }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5 shrink-0">
         <div>
           <div className="text-sm font-medium text-zinc-100">
-            Gastos por unidade
+            {unidade.id === "todas" ? "Gastos por unidade" : `Evolução de gastos · ${unidade.nome}`}
           </div>
           <div className="text-xs text-zinc-500 mt-0.5">
             Últimos 6 meses · pedidos enviados e recebidos
-            {unidade.id !== "todas" && (
-              <span className="ml-1 text-zinc-400 font-medium">
-                · {unidade.nome}
-              </span>
-            )}
           </div>
         </div>
 

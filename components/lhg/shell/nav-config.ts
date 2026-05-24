@@ -38,7 +38,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard",    label: "Dashboard",           href: "/dashboard",    icon: LayoutDashboard, section: "Operação" },
   { id: "requisicoes",  label: "Requisições",          href: "/requisicoes",  icon: ClipboardList,   section: "Operação" },
-  { id: "cotacoes",     label: "Cotações",             href: "/cotacoes",     icon: Scale,           section: "Operação",    badge: 12 },
+  { id: "cotacoes",     label: "Cotações",             href: "/cotacoes",     icon: Scale,           section: "Operação" },
   { id: "pedidos",      label: "Pedidos de compra",    href: "/pedidos",      icon: ShoppingCart,    section: "Operação" },
   { id: "nf",           label: "Entrada de NF",        href: "/notas-fiscais", icon: FileText,        section: "Operação" },
   { id: "fornecedores", label: "Fornecedores",         href: "/fornecedores", icon: Truck,           section: "Cadastros" },

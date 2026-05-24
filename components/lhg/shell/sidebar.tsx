@@ -44,6 +44,8 @@ interface SidebarProps {
   mobileOpen: boolean;
   setMobileOpen: (v: boolean) => void;
   user: UserInfo;
+  /** Contagem real de cotações abertas vinda do servidor */
+  cotacoesBadge?: number;
 }
 
 // ── Avatar por iniciais ────────────────────────────────────────────────────────
@@ -252,6 +254,7 @@ export function Sidebar({
   mobileOpen,
   setMobileOpen,
   user,
+  cotacoesBadge,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -339,14 +342,21 @@ export function Sidebar({
                     {section}
                   </div>
                 )}
-                {items.map((item) => (
-                  <NavLink
-                    key={item.id}
-                    item={item}
-                    active={isActive(item.href)}
-                    collapsed={collapsed}
-                  />
-                ))}
+                {items.map((item) => {
+                  // Badge dinâmico: cotações abertas vem do servidor
+                  const resolvedItem =
+                    item.id === "cotacoes" && cotacoesBadge !== undefined
+                      ? { ...item, badge: cotacoesBadge > 0 ? cotacoesBadge : undefined }
+                      : item;
+                  return (
+                    <NavLink
+                      key={item.id}
+                      item={resolvedItem}
+                      active={isActive(item.href)}
+                      collapsed={collapsed}
+                    />
+                  );
+                })}
               </div>
             );
           })}

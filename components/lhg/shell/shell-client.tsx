@@ -3,7 +3,7 @@
 /**
  * shell-client.tsx — LHG-203
  * Wrapper client que gerencia estado collapsed / mobileOpen e compõe o shell.
- * Recebe dados do usuário como props (serializáveis) do Server Component pai.
+ * Recebe dados do usuário e badge de cotações do Server Component pai.
  * Envolve toda a app com UnidadeProvider para seletor de unidade global.
  */
 
@@ -16,22 +16,23 @@ import { useRealtimeNotifications } from "@/hooks/use-realtime-notifications";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface ShellClientProps {
-  children: React.ReactNode;
+  children:       React.ReactNode;
+  cotacoesBadge?: number;
   user: {
-    nome: string;
-    email: string;
-    role: string;
+    nome:       string;
+    email:      string;
+    role:       string;
     avatarUrl?: string | null;
   };
 }
 
 // ── Shell ──────────────────────────────────────────────────────────────────────
-export function ShellClient({ children, user }: ShellClientProps) {
-  const [collapsed, setCollapsed]   = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+export function ShellClient({ children, user, cotacoesBadge }: ShellClientProps) {
+  const [collapsed,   setCollapsed]   = useState(false);
+  const [mobileOpen,  setMobileOpen]  = useState(false);
 
   // Notificações real-time via Supabase Realtime (LHG-221)
-  useRealtimeNotifications();
+  const { notifications, unreadCount, markAllRead } = useRealtimeNotifications();
 
   return (
     <UnidadeProvider>
@@ -43,11 +44,17 @@ export function ShellClient({ children, user }: ShellClientProps) {
           mobileOpen={mobileOpen}
           setMobileOpen={setMobileOpen}
           user={user}
+          cotacoesBadge={cotacoesBadge}
         />
 
         {/* Área principal */}
         <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-          <Topbar onToggleMobile={() => setMobileOpen(true)} />
+          <Topbar
+            onToggleMobile={() => setMobileOpen(true)}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkAllRead={markAllRead}
+          />
           <main className="flex-1 p-4 sm:p-6 overflow-auto">
             {children}
           </main>
