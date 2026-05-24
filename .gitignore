@@ -36,6 +36,11 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 
+# Service Account keys do Google — NUNCA commitar
+*-service-account*.json
+*serviceaccount*.json
+*service_account*.json
+
 # vercel
 .vercel
 
