@@ -21,7 +21,8 @@ import { criarRequisicao } from "../actions";
 interface Unidade  { id: string; nome: string; slug: string; cor_hex: string | null }
 interface Produto  {
   id: string; codigo: string; nome: string;
-  unidade_med: string; categoria: string; preco_custo: number | null;
+  unidade_med: string; categoria: string;
+  familia_omie: string | null; preco_custo: number | null;
 }
 interface ItemRow {
   _key:        string; // local uuid para key React
@@ -72,11 +73,12 @@ const STEP_LABELS = ["Unidades & urgência", "Itens", "Revisão"];
 // ── Produto Combobox ──────────────────────────────────────────────────────────
 
 function ProdutoCombobox({
-  value, onChange, produtos,
+  value, onChange, produtos, familiaFiltro,
 }: {
   value: Produto | null;
   onChange: (p: Produto) => void;
   produtos: Produto[];
+  familiaFiltro: string;
 }) {
   const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState("");
@@ -91,13 +93,17 @@ function ProdutoCombobox({
   }, []);
 
   const filtered = produtos.filter((p) => {
+    // Filtro por família (se ativo)
+    if (familiaFiltro && p.familia_omie !== familiaFiltro) return false;
     const q = query.toLowerCase();
+    if (!q) return true;
     return (
       p.nome.toLowerCase().includes(q) ||
       p.codigo.toLowerCase().includes(q) ||
+      (p.familia_omie?.toLowerCase().includes(q) ?? false) ||
       p.categoria.toLowerCase().includes(q)
     );
-  }).slice(0, 20);
+  }).slice(0, 25);
 
   return (
     <div className="relative" ref={ref}>
@@ -125,7 +131,7 @@ function ProdutoCombobox({
 
       {open && (
         <div className={cn(
-          "absolute z-50 top-full left-0 mt-1 w-80 rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl",
+          "absolute z-50 top-full left-0 mt-1 w-96 rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl",
           "overflow-hidden",
         )}>
           <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800">
@@ -133,13 +139,18 @@ function ProdutoCombobox({
             <input
               autoFocus
               type="text"
-              placeholder="Buscar por nome ou código…"
+              placeholder="Buscar por nome, código ou família…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-[12px] text-zinc-200 placeholder:text-zinc-600 outline-none"
             />
+            {familiaFiltro && (
+              <span className="text-[10px] bg-sky-500/15 text-sky-400 border border-sky-600/40 rounded px-1.5 py-0.5 shrink-0 truncate max-w-[100px]">
+                {familiaFiltro}
+              </span>
+            )}
           </div>
-          <ul className="max-h-52 overflow-y-auto py-1">
+          <ul className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <li className="px-3 py-3 text-[12px] text-zinc-600 text-center">
                 Nenhum produto encontrado
@@ -155,14 +166,22 @@ function ProdutoCombobox({
                       "flex items-center justify-between gap-2",
                     )}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="text-[12px] text-zinc-200 truncate">{p.nome}</div>
-                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                        {p.codigo} · {p.categoria}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-zinc-600 font-mono">{p.codigo}</span>
+                        {p.familia_omie && (
+                          <span className="text-[10px] text-zinc-500 truncate">{p.familia_omie}</span>
+                        )}
                       </div>
                     </div>
-                    <div className="text-[10px] text-zinc-500 font-mono shrink-0">
-                      {p.unidade_med}
+                    <div className="shrink-0 text-right">
+                      <div className="text-[10px] text-zinc-500 font-mono">{p.unidade_med}</div>
+                      {p.preco_custo && (
+                        <div className="text-[10px] text-emerald-500 font-mono">
+                          {formatBRL(p.preco_custo)}
+                        </div>
+                      )}
                     </div>
                   </button>
                 </li>
@@ -181,6 +200,12 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
   const [step, setStep] = useState(1);
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [familiaFiltro, setFamiliaFiltro] = useState("");
+
+  // Lista de famílias disponíveis (apenas as que têm produtos ativos)
+  const familiasDisponiveis = Array.from(
+    new Set(produtos.map(p => p.familia_omie).filter(Boolean))
+  ).sort() as string[];
 
   const [form, setForm] = useState<FormState>({
     titulo:        "",
@@ -515,14 +540,47 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
             {step === 2 && (
               <div className="space-y-3">
                 <p className="text-[12px] text-zinc-500">
-                  Adicione os produtos que deseja cotar. Você pode digitar o nome ou código.
+                  Filtre por família para encontrar produtos mais rápido. O último custo é exibido para referência.
                 </p>
+
+                {/* ── Chips de família ─────────────────────────────────────── */}
+                {familiasDisponiveis.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setFamiliaFiltro("")}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        familiaFiltro === ""
+                          ? "border-zinc-500 bg-zinc-700 text-zinc-100"
+                          : "border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300",
+                      )}
+                    >
+                      Todos
+                    </button>
+                    {familiasDisponiveis.map(f => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setFamiliaFiltro(familiaFiltro === f ? "" : f)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                          familiaFiltro === f
+                            ? "border-sky-600/60 bg-sky-500/15 text-sky-300"
+                            : "border-zinc-800 text-zinc-600 hover:border-zinc-600 hover:text-zinc-400",
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Tabela de itens */}
                 <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-zinc-800/80 bg-zinc-900/60">
-                    {["PRODUTO", "QTD", "UNID.", "OBSERVAÇÃO", ""].map(h => (
+                  <div className="grid grid-cols-[1fr_72px_60px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-zinc-800/80 bg-zinc-900/60">
+                    {["PRODUTO", "QTD", "UNID.", "ÚLT. CUSTO", "OBSERVAÇÃO", ""].map(h => (
                       <div key={h} className="text-[10px] uppercase tracking-[0.1em] text-zinc-500 font-medium">
                         {h}
                       </div>
@@ -530,19 +588,17 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                   </div>
 
                   {/* Linhas */}
-                  {form.itens.map((item, idx) => (
+                  {form.itens.map((item) => (
                     <div
                       key={item._key}
-                      className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 px-3 py-1.5 border-b border-zinc-800/40 hover:bg-zinc-800/10 transition-colors"
+                      className="grid grid-cols-[1fr_72px_60px_80px_1fr_32px] gap-2 px-3 py-1.5 border-b border-zinc-800/40 hover:bg-zinc-800/10 transition-colors"
                     >
                       {/* Produto */}
                       <ProdutoCombobox
                         value={item.produto}
-                        onChange={(p) => updateItem(item._key, {
-                          produto_id: p.id,
-                          produto:    p,
-                        })}
+                        onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
                         produtos={produtos}
+                        familiaFiltro={familiaFiltro}
                       />
 
                       {/* Quantidade */}
@@ -551,9 +607,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         min={1}
                         step={1}
                         value={item.quantidade}
-                        onChange={(e) => updateItem(item._key, {
-                          quantidade: Math.max(1, Number(e.target.value)),
-                        })}
+                        onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
                         className={cn(
                           "w-full rounded border border-transparent bg-transparent",
                           "px-2 py-1.5 text-[12px] text-zinc-200 font-mono text-center",
@@ -562,11 +616,22 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         )}
                       />
 
-                      {/* Unidade de medida (readonly) */}
+                      {/* Unidade de medida */}
                       <div className="flex items-center justify-center">
                         <span className="text-[11px] font-mono text-zinc-500 uppercase">
                           {item.produto?.unidade_med ?? "—"}
                         </span>
+                      </div>
+
+                      {/* Último custo */}
+                      <div className="flex items-center justify-end">
+                        {item.produto?.preco_custo ? (
+                          <span className="text-[11px] font-mono text-emerald-500">
+                            {formatBRL(item.produto.preco_custo)}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-zinc-700">—</span>
+                        )}
                       </div>
 
                       {/* Observação */}

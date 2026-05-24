@@ -40,7 +40,7 @@ export default async function RequisicoesPage() {
 
     supabase
       .from("produtos")
-      .select("id, codigo, nome, unidade_med, categoria, preco_custo")
+      .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
       .eq("ativo", true)
       .order("nome"),
   ]);

@@ -31,7 +31,8 @@ interface Requisicao {
 interface Unidade { id: string; nome: string; slug: string; cor_hex: string | null }
 interface Produto  {
   id: string; codigo: string; nome: string;
-  unidade_med: string; categoria: string; preco_custo: number | null;
+  unidade_med: string; categoria: string;
+  familia_omie: string | null; preco_custo: number | null;
 }
 
 interface RequisicoesClientProps {
