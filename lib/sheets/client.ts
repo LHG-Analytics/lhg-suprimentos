@@ -305,19 +305,34 @@ export async function fetchOrcamento(
 
   // ── Modo autenticado (Service Account) ─────────────────────────────────────
   const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+
+  // Diagnóstico: exibe no log do servidor se a env var está configurada
+  console.log(
+    "[sheets] GOOGLE_SERVICE_ACCOUNT_JSON:",
+    saJson ? `configurado (${saJson.length} chars)` : "NÃO configurado — usando fallback CSV",
+  );
+
   if (saJson) {
     try {
+      const creds = JSON.parse(saJson) as ServiceAccountCredentials;
+      console.log("[sheets] Service Account email:", creds.client_email);
+
       const { unstable_cache } = await import("next/cache");
       const fetchCached = unstable_cache(
-        async () => fetchSheetValues(sheetId, sheetName, JSON.parse(saJson) as ServiceAccountCredentials),
+        async () => fetchSheetValues(sheetId, sheetName, creds),
         [`orcamento-${sheetId}-${sheetName}`],
         { revalidate: 3600, tags: ["orcamento"] },
       );
 
       const rows = await fetchCached();
+      console.log("[sheets] Rows recebidos da API:", rows?.length ?? 0);
+
       if (!rows) return null;
 
-      const parsed = parseOrcamentoCSV(gridToCsv(rows));
+      const csv    = gridToCsv(rows);
+      const parsed = parseOrcamentoCSV(csv);
+      console.log("[sheets] Categorias parseadas:", parsed?.categorias?.length ?? 0);
+
       if (!parsed) return null;
 
       return { ...parsed, fetchedAt: new Date().toISOString() };
