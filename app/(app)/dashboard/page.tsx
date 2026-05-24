@@ -518,7 +518,7 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* CMV Real do mês — custo efetivo em produtos vendidos */}
           <KpiCard
             label="CMV REAL (MÊS)"
@@ -544,16 +544,7 @@ export default async function DashboardPage() {
             }
             mono
           />
-          {/* Custo de Serviços — manutenção, limpeza, overhead */}
-          <KpiCard
-            label="CUSTO SERVIÇOS"
-            value={formatBRL(cmv.servicosReal)}
-            meta={cmv.temOrcamento ? formatBRL(cmv.servicosOrcado) : undefined}
-            metaLabel="ORÇADO"
-            accent={cmv.temOrcamento && cmv.servicosReal > cmv.servicosOrcado ? "negative" : "neutral"}
-            mono
-          />
-          {/* Total Insumos — CMV + Serviços */}
+          {/* Total Insumos — CMV total do mês */}
           <KpiCard
             label="TOTAL INSUMOS"
             value={formatBRL(cmv.totalReal)}

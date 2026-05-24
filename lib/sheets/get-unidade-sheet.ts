@@ -27,13 +27,14 @@ export async function getUnidadeSheetConfig(): Promise<UnidadeSheetConfig | null
 
   const supabase = await createClient();
 
-  // Tenta pela unidade do cookie primeiro
+  // Tenta pela unidade do cookie primeiro.
+  // Não filtra por `ativa` aqui: o usuário escolheu explicitamente essa unidade,
+  // então devemos honrar a seleção independente do flag.
   if (slugCookie && slugCookie !== "todas") {
     const { data } = await supabase
       .from("unidades")
       .select("slug, google_sheet_id, google_sheet_name")
       .eq("slug", slugCookie)
-      .eq("ativa", true)
       .not("google_sheet_id", "is", null)
       .single();
 
