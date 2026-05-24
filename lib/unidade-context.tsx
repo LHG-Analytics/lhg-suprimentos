@@ -23,11 +23,13 @@ export type UnidadeId =
   | "altana";
 
 export interface Unidade {
-  id: UnidadeId;
-  nome: string;
-  logo: string;
+  id:        UnidadeId;
+  nome:      string;
+  logo:      string;
   shortName: string;
-  cor: string;
+  cor:       string;
+  /** true = unidade em implantação; aparece opaca e não é clicável */
+  disabled?: boolean;
 }
 
 // ── Lista canônica de unidades ─────────────────────────────────────────────────
@@ -66,6 +68,7 @@ export const UNIDADES: Unidade[] = [
     logo:      "/unidades/altana.png",
     shortName: "Altana",
     cor:       "#a78bfa",
+    disabled:  true,
   },
 ];
 

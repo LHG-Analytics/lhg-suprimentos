@@ -225,8 +225,14 @@ function UnitDropdownContent({
       {unidades.map((u) => (
         <DropdownMenuItem
           key={u.id}
-          onClick={() => setUnidade(u)}
-          className="flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md focus:bg-zinc-800/60"
+          onClick={u.disabled ? undefined : () => setUnidade(u)}
+          disabled={u.disabled}
+          className={cn(
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md focus:bg-zinc-800/60",
+            u.disabled
+              ? "opacity-35 cursor-not-allowed pointer-events-none"
+              : "cursor-pointer",
+          )}
         >
           <div className="w-10 h-6 shrink-0 flex items-center justify-center overflow-hidden">
             <Image
@@ -238,9 +244,11 @@ function UnitDropdownContent({
             />
           </div>
           <span className="text-[13px] flex-1 text-zinc-300">{u.nome}</span>
-          {unidade.id === u.id && (
+          {u.disabled ? (
+            <span className="text-[10px] text-zinc-600 shrink-0">em breve</span>
+          ) : unidade.id === u.id ? (
             <Check size={13} className="text-lhg-400 shrink-0" />
-          )}
+          ) : null}
         </DropdownMenuItem>
       ))}
     </DropdownMenuContent>

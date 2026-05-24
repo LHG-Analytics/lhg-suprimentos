@@ -21,12 +21,12 @@ export const metadata = { title: "Dashboard" };
 // ── Mapa de unidades canônicas (slug → {nome, cor}) ───────────────────────────
 // Reflete UNIDADES em lib/unidade-context.tsx sem importar o módulo "use client"
 const SLUG_META: Record<string, { nome: string; cor: string }> = {
-  "lush-ipiranga": { nome: "Lush Ipiranga",  cor: "#10b981" },
-  "lush-lapa":     { nome: "Lush Lapa",       cor: "#38bdf8" },
-  "andar-de-cima": { nome: "Andar de Cima",   cor: "#f59e0b" },
-  "altana":        { nome: "Altana",           cor: "#a78bfa" },
+  "lush-ipiranga": { nome: "Lush Ipiranga", cor: "#10b981" },
+  "lush-lapa":     { nome: "Lush Lapa",     cor: "#38bdf8" },
+  "andar-de-cima": { nome: "Andar de Cima", cor: "#f59e0b" },
 };
-const SLUG_ORDER = ["lush-ipiranga", "lush-lapa", "andar-de-cima", "altana"];
+// Altana excluída enquanto estiver disabled (ativa=false no banco)
+const SLUG_ORDER = ["lush-ipiranga", "lush-lapa", "andar-de-cima"];
 
 // ── Labels dos últimos 6 meses ────────────────────────────────────────────────
 const MONTH_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
