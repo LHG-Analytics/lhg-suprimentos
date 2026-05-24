@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -388,7 +388,15 @@ export type Database = {
           telefone?: string | null
           uf?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fornecedores_omie_unidade_id_fkey"
+            columns: ["omie_unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       integracao_logs: {
         Row: {
@@ -442,7 +450,6 @@ export type Database = {
       }
       nf_itens: {
         Row: {
-          created_at: string
           decisao: string | null
           descricao_omie: string | null
           divergencia: Database["public"]["Enums"]["nf_item_kind"]
@@ -456,7 +463,6 @@ export type Database = {
           qtd_pedido: number | null
         }
         Insert: {
-          created_at?: string
           decisao?: string | null
           descricao_omie?: string | null
           divergencia?: Database["public"]["Enums"]["nf_item_kind"]
@@ -470,7 +476,6 @@ export type Database = {
           qtd_pedido?: number | null
         }
         Update: {
-          created_at?: string
           decisao?: string | null
           descricao_omie?: string | null
           divergencia?: Database["public"]["Enums"]["nf_item_kind"]
@@ -510,13 +515,11 @@ export type Database = {
           lancada_em: string | null
           lancada_no_omie: boolean | null
           numero: string | null
-          omie_cod_nota: number | null
           omie_num_nf: string | null
-          pedido_id: string | null
+          pedido_id: string
           serie: string | null
           status: string
           unidade_id: string | null
-          updated_at: string
           valor_total: number | null
           xml_url: string | null
         }
@@ -529,13 +532,11 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          omie_cod_nota?: number | null
           omie_num_nf?: string | null
-          pedido_id?: string | null
+          pedido_id: string
           serie?: string | null
           status?: string
           unidade_id?: string | null
-          updated_at?: string
           valor_total?: number | null
           xml_url?: string | null
         }
@@ -548,29 +549,27 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          omie_cod_nota?: number | null
           omie_num_nf?: string | null
-          pedido_id?: string | null
+          pedido_id?: string
           serie?: string | null
           status?: string
           unidade_id?: string | null
-          updated_at?: string
           valor_total?: number | null
           xml_url?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "notas_fiscais_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "notas_fiscais_fornecedor_id_fkey"
             columns: ["fornecedor_id"]
             isOneToOne: false
             referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
             referencedColumns: ["id"]
           },
           {
@@ -1314,3 +1313,4 @@ export const Constants = {
     },
   },
 } as const
+
