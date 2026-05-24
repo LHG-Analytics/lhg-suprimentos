@@ -494,3 +494,79 @@ export async function incluirNotaEntrada(
     param,
   );
 }
+
+// ── Tipos: Pedido de Compra ────────────────────────────────────────────────────
+
+export interface OmiePedidoCompraCabecalho {
+  /** Número do pedido no sistema LHG (ex: "PED-2026-0001") */
+  numero_pedido:    string;
+  /** Código do fornecedor no Omie (omie_codigo da tabela fornecedores) */
+  codigo_parceiro:  number;
+  /** Data de previsão de entrega (DD/MM/YYYY) */
+  data_previsao?:   string;
+  /** Observações livres */
+  obs_venda?:       string;
+  /**
+   * Etapa do pedido:
+   *   "10" = Digitação (padrão)
+   *   "20" = Aguardando confirmação do fornecedor
+   */
+  etapa?:           string;
+}
+
+export interface OmiePedidoCompraDet {
+  ide:     { codigo_item_integracao: string };
+  produto: {
+    /** Código do produto no Omie (omie_codigo da tabela produtos) */
+    codigo_produto:  number;
+    /**
+     * CFOP de compra para uso/consumo:
+     *   "1556" = compra dentro do estado
+     *   "2556" = compra fora do estado
+     */
+    cfop?:           string;
+    quantidade:      number;
+    valor_unitario:  number;
+  };
+}
+
+export interface OmiePedidoCompraParam {
+  cabecalho:               OmiePedidoCompraCabecalho;
+  det:                     OmiePedidoCompraDet[];
+  informacoes_adicionais?: {
+    enviar_email?:     "S" | "N";
+    consumidor_final?: "S" | "N";
+    obs_venda?:        string;
+  };
+}
+
+export interface OmiePedidoCompraResponse {
+  numero_pedido:    string;
+  codigo_status:    string;   // "0" = OK
+  descricao_status: string;
+  /** Código interno gerado pelo Omie para o pedido */
+  codigo_pedido?:   number;
+}
+
+/**
+ * Cria um Pedido de Compra no Omie ERP.
+ * Endpoint: /compras/pedidocompras/ — call: IncluirPedidoCompra
+ *
+ * ⚠️  Requer o módulo de Compras habilitado na conta Omie.
+ *     Se o plano contratado não incluir esse módulo, o Omie retornará um
+ *     faultstring — nesse caso, omie_status ficará como "erro" e a mensagem
+ *     será gravada em omie_erro para diagnóstico.
+ *
+ * Referência: https://app.omie.com.br/api/v1/compras/pedidocompras/
+ */
+export async function criarPedidoCompra(
+  creds: OmieCredentials,
+  param: OmiePedidoCompraParam,
+): Promise<OmiePedidoCompraResponse> {
+  return omiePost<OmiePedidoCompraParam, OmiePedidoCompraResponse>(
+    "/compras/pedidocompras/",
+    "IncluirPedidoCompra",
+    creds,
+    param,
+  );
+}

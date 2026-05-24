@@ -31,10 +31,19 @@ export function Topbar({ onToggleMobile }: TopbarProps) {
   const crumbs = useBreadcrumbs();
   const [cmdOpen, setCmdOpen] = useState(false);
 
-  // ⌘K / Ctrl+K global
+  // ⌘K / Ctrl+K → paleta · ⌘N / Ctrl+N → nova ação contextual (abre paleta filtrada)
   const handleKeydown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
+      setCmdOpen(true);
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+      // ⌘N: abre paleta de comandos com foco em "nova ação"
+      // Cada página pode escutar o evento personalizado lhg:novo para abrir
+      // seu próprio wizard (ex: nova requisição, nova cotação, etc.)
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent("lhg:novo"));
+      // Fallback: abre o CmdK para que o usuário escolha a ação
       setCmdOpen(true);
     }
   }, []);

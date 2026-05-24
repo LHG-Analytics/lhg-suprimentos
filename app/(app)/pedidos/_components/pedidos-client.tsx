@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { aprovarPedido, rejeitarPedido, enviarEmailFornecedor, marcarRecebido } from "../actions";
+import { aprovarPedido, rejeitarPedido, enviarEmailFornecedor, marcarRecebido, pushPedidoOmie } from "../actions";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -333,6 +333,22 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
     });
   }
 
+  function handlePushOmie() {
+    start(async () => {
+      try {
+        const res = await pushPedidoOmie(pedido.id);
+        if (res.erro) {
+          toast.error(`Erro Omie: ${res.erro}`);
+        } else {
+          toast.success(`Pedido enviado ao Omie (#${res.omie_codigo})`);
+        }
+        onAtualizado();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao enviar ao Omie");
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header do detalhe */}
@@ -421,12 +437,32 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
             {pedido.email_enviado_em ? "Reenviar e-mail" : "Enviar ao fornecedor"}
           </button>
 
-          {pedido.omie_status === "sincronizado" && pedido.omie_codigo && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-600 ml-auto">
-              <Sparkles size={11} className="text-amber-500/60" />
+          {/* ── Chip / botão Omie ─────────────────────────── */}
+          {pedido.omie_status === "sincronizado" && pedido.omie_codigo ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 ml-auto">
+              <Sparkles size={9} className="text-amber-400" />
               Omie #{pedido.omie_codigo}
             </span>
-          )}
+          ) : pedido.omie_status === "erro" ? (
+            <button
+              onClick={handlePushOmie}
+              disabled={pending}
+              title={`Tentar novamente`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-700/60 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 ml-auto"
+            >
+              {pending ? <Loader2 size={12} className="animate-spin" /> : <AlertCircle size={12} />}
+              Retentar Omie
+            </button>
+          ) : pedido.omie_status === "pendente" ? (
+            <button
+              onClick={handlePushOmie}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/60 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 ml-auto"
+            >
+              {pending ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {pending ? "Enviando…" : "Enviar ao Omie"}
+            </button>
+          ) : null}
         </div>
       </div>
 

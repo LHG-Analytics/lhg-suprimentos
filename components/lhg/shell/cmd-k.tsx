@@ -12,7 +12,7 @@ import { Command } from "cmdk";
 import {
   LayoutDashboard, ClipboardList, Scale, ShoppingCart,
   FileText, Truck, Package, Sparkles, BarChart2, Settings,
-  Search,
+  Search, Plus, FilePlus2, MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,14 @@ interface CmdKProps {
   open: boolean;
   onClose: () => void;
 }
+
+// ── Ações rápidas (⌘N) ────────────────────────────────────────────────────────
+const QUICK_ACTIONS = [
+  { label: "Nova Requisição",  href: "/requisicoes?novo=1",  icon: ClipboardList,    kbd: "⌘N" },
+  { label: "Nova Cotação",     href: "/cotacoes?novo=1",     icon: FilePlus2,        kbd: null  },
+  { label: "Registrar NF",     href: "/notas-fiscais?novo=1",icon: FileText,         kbd: null  },
+  { label: "Abrir Chat IA",    href: "/chat",               icon: MessageSquarePlus, kbd: null  },
+] as const;
 
 // ── Items de navegação rápida ──────────────────────────────────────────────────
 const QUICK_LINKS = [
@@ -100,6 +108,39 @@ export function CmdK({ open, onClose }: CmdKProps) {
               Nenhum resultado encontrado.
             </Command.Empty>
 
+            {/* ── Ações rápidas ──────────────────────────────────────── */}
+            <Command.Group>
+              <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-zinc-600 flex items-center gap-1.5">
+                <Plus size={9} />
+                Ações Rápidas
+              </div>
+              {QUICK_ACTIONS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Command.Item
+                    key={item.href}
+                    value={item.label}
+                    onSelect={() => navigate(item.href)}
+                    className={cn(
+                      "flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer",
+                      "text-zinc-200 text-sm",
+                      "data-[selected=true]:bg-lhg-500/10 data-[selected=true]:text-zinc-50",
+                      "transition-colors outline-none",
+                    )}
+                  >
+                    <Icon size={14} className="text-lhg-500/70 shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    {item.kbd && (
+                      <kbd className="hidden sm:inline-flex h-4 items-center rounded border border-zinc-700 bg-zinc-800 px-1 font-mono text-[9px] text-zinc-500">
+                        {item.kbd}
+                      </kbd>
+                    )}
+                  </Command.Item>
+                );
+              })}
+            </Command.Group>
+
+            {/* ── Navegação ──────────────────────────────────────────── */}
             <Command.Group>
               <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-zinc-600">
                 Navegação

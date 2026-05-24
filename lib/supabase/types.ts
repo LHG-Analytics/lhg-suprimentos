@@ -1055,6 +1055,7 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          alcada_valor: number | null
           avatar_url: string | null
           created_at: string
           email: string
@@ -1064,6 +1065,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alcada_valor?: number | null
           avatar_url?: string | null
           created_at?: string
           email: string
@@ -1073,6 +1075,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alcada_valor?: number | null
           avatar_url?: string | null
           created_at?: string
           email?: string
