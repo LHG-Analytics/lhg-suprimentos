@@ -47,11 +47,10 @@ export async function getUnidadeSheetConfig(): Promise<UnidadeSheetConfig | null
     }
   }
 
-  // Fallback: primeira unidade ativa com sheet configurado
+  // Fallback: primeira unidade com sheet configurado (independente do flag ativa)
   const { data: fallback } = await supabase
     .from("unidades")
     .select("slug, google_sheet_id, google_sheet_name")
-    .eq("ativa", true)
     .not("google_sheet_id", "is", null)
     .order("nome")
     .limit(1)
