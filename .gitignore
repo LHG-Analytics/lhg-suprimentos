@@ -47,6 +47,12 @@ next-env.d.ts
 CLAUDE.md
 AGENTS.md
 
+# Claude Code — configurações locais (tokens, MCP, permissões)
+.claude/settings.local.json
+
+# Playwright MCP — dados locais de sessão do browser
+.playwright-mcp/
+
 # Design handoff e referências locais
 docs/
 prototype/
