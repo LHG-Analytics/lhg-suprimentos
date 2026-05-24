@@ -1,8 +1,9 @@
 "use server";
 
 /**
- * actions.ts — LHG-210/211
+ * actions.ts — LHG-210/211/212
  * Server Actions para o módulo de Cotações.
+ *   LHG-212: enviarEmailCotacao — solicita cotação por email via Resend
  */
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -265,4 +266,181 @@ export async function gerarPedidosDeCotacao(
 
   revalidatePath("/cotacoes");
   revalidatePath("/pedidos");
+}
+
+// ── enviarEmailCotacao (LHG-212) ──────────────────────────────────────────────
+
+/**
+ * Envia email de solicitação de cotação aos fornecedores via Resend.
+ * Pode enviar a todos os fornecedores da cotação ou apenas a um específico.
+ * Rastreia envio em cotacao_fornecedores.email_enviado_em.
+ */
+export async function enviarEmailCotacao(
+  cotacaoId: string,
+  opcoes?: { fornecedorId?: string; mensagem?: string },
+): Promise<{ enviados: number; erros: string[] }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Buscar cotação com itens e fornecedores
+  const { data: cotacao, error: cotErr } = await supabase
+    .from("cotacoes")
+    .select(`
+      numero, titulo, prazo, urgente,
+      cotacao_itens (
+        quantidade,
+        produtos ( nome, unidade_med, codigo )
+      ),
+      cotacao_fornecedores (
+        fornecedor_id,
+        fornecedores ( razao_social, nome_fantasia, email )
+      )
+    `)
+    .eq("id", cotacaoId)
+    .single();
+
+  if (cotErr || !cotacao) throw new Error(cotErr?.message ?? "Cotação não encontrada");
+
+  // Filtrar fornecedores-alvo
+  type FornRow = {
+    fornecedor_id: string;
+    fornecedores: { razao_social: string; nome_fantasia: string | null; email: string | null } | null;
+  };
+  const fornRows = cotacao.cotacao_fornecedores as FornRow[];
+  const alvos = opcoes?.fornecedorId
+    ? fornRows.filter((f) => f.fornecedor_id === opcoes.fornecedorId)
+    : fornRows;
+
+  if (alvos.length === 0) throw new Error("Nenhum fornecedor para envio");
+
+  type ItemRow = { quantidade: number; produtos: { nome: string; unidade_med: string; codigo: string } | null };
+  const itens = cotacao.cotacao_itens as ItemRow[];
+
+  const prazoLabel = cotacao.prazo
+    ? new Date(cotacao.prazo).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
+
+  const resendKey = process.env.RESEND_API_KEY;
+  const enviados: string[] = [];
+  const erros: string[] = [];
+
+  for (const row of alvos) {
+    const forn = row.fornecedores;
+    if (!forn?.email) {
+      erros.push(`${forn?.razao_social ?? "Fornecedor"}: sem e-mail cadastrado`);
+      continue;
+    }
+
+    const fornNome = forn.nome_fantasia ?? forn.razao_social;
+
+    const itensLinhas = itens
+      .map(
+        (i) =>
+          `<tr>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;font-size:13px;color:#e4e4e7">${i.produtos?.nome ?? "Produto"}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.produtos?.codigo ?? ""}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.quantidade}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.produtos?.unidade_med ?? "UN"}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">__________</td>
+          </tr>`,
+      )
+      .join("");
+
+    const htmlBody = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:Arial,sans-serif">
+  <div style="max-width:640px;margin:40px auto;background:#18181b;border:1px solid #27272a;border-radius:12px;overflow:hidden">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:24px 32px">
+      <p style="margin:0;font-size:11px;color:#d1fae5;letter-spacing:0.12em;text-transform:uppercase">LHG Motéis · Departamento de Compras</p>
+      <h1 style="margin:6px 0 0;font-size:20px;color:#fff;font-weight:700">Solicitação de Cotação</h1>
+      <p style="margin:4px 0 0;font-size:13px;color:#a7f3d0">${cotacao.numero}${cotacao.urgente ? " · <strong>URGENTE</strong>" : ""}</p>
+    </div>
+    <!-- Body -->
+    <div style="padding:28px 32px">
+      <p style="margin:0 0 16px;font-size:14px;color:#a1a1aa">
+        Prezado(a) <strong style="color:#e4e4e7">${fornNome}</strong>,
+      </p>
+      <p style="margin:0 0 20px;font-size:14px;color:#a1a1aa;line-height:1.6">
+        Solicitamos sua melhor cotação para os itens listados abaixo referente a:
+        <strong style="color:#e4e4e7"> ${cotacao.titulo}</strong>.
+      </p>
+      ${
+        opcoes?.mensagem
+          ? `<div style="background:#27272a;border-left:3px solid #10b981;border-radius:4px;padding:12px 16px;margin-bottom:20px">
+               <p style="margin:0;font-size:13px;color:#d4d4d8">${opcoes.mensagem}</p>
+             </div>`
+          : ""
+      }
+      <!-- Tabela de itens -->
+      <table style="width:100%;border-collapse:collapse;background:#09090b;border-radius:8px;overflow:hidden;border:1px solid #27272a;margin-bottom:20px">
+        <thead>
+          <tr style="background:#27272a">
+            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Produto</th>
+            <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Código</th>
+            <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Qtd</th>
+            <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Un.</th>
+            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Preço Unit.</th>
+          </tr>
+        </thead>
+        <tbody>${itensLinhas}</tbody>
+      </table>
+      <!-- Prazo e instruções -->
+      ${
+        prazoLabel
+          ? `<div style="background:#27272a;border-radius:8px;padding:14px 16px;margin-bottom:16px">
+               <p style="margin:0;font-size:12px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Prazo para resposta</p>
+               <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#f59e0b">${prazoLabel}</p>
+             </div>`
+          : ""
+      }
+      <p style="margin:0;font-size:13px;color:#71717a;line-height:1.6">
+        Por favor, responda com o preço unitário de cada item, prazo de entrega e condições de pagamento.
+        Para dúvidas, entre em contato com o setor de compras.
+      </p>
+    </div>
+    <!-- Footer -->
+    <div style="padding:16px 32px;border-top:1px solid #27272a;text-align:center">
+      <p style="margin:0;font-size:11px;color:#52525b">
+        Departamento de Compras — LHG Motéis · compras@lhgmoteis.com.br
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    if (resendKey) {
+      try {
+        const { Resend } = await import("resend");
+        const resend = new Resend(resendKey);
+
+        await resend.emails.send({
+          from:    "Compras LHG Motéis <compras@lhgmoteis.com.br>",
+          to:      [forn.email],
+          subject: `Solicitação de Cotação ${cotacao.numero} — LHG Motéis`,
+          html:    htmlBody,
+        });
+
+        enviados.push(forn.email);
+      } catch (err) {
+        erros.push(`${fornNome}: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
+        continue;
+      }
+    } else {
+      // Modo simulado — registra sem enviar
+      enviados.push(`${forn.email} (simulado)`);
+    }
+
+    // Atualizar timestamp de envio no banco
+    await supabase
+      .from("cotacao_fornecedores")
+      .update({ email_enviado_em: new Date().toISOString() })
+      .eq("cotacao_id", cotacaoId)
+      .eq("fornecedor_id", row.fornecedor_id);
+  }
+
+  revalidatePath(`/cotacoes/${cotacaoId}`);
+  return { enviados: enviados.length, erros };
 }

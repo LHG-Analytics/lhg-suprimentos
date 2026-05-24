@@ -12,6 +12,7 @@ import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { AiChip } from "./ai-chip";
 import { UnidadeProvider } from "@/lib/unidade-context";
+import { useRealtimeNotifications } from "@/hooks/use-realtime-notifications";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface ShellClientProps {
@@ -28,6 +29,9 @@ interface ShellClientProps {
 export function ShellClient({ children, user }: ShellClientProps) {
   const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Notificações real-time via Supabase Realtime (LHG-221)
+  useRealtimeNotifications();
 
   return (
     <UnidadeProvider>

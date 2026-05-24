@@ -70,14 +70,17 @@ export type Database = {
       cotacao_fornecedores: {
         Row: {
           cotacao_id: string
+          email_enviado_em: string | null
           fornecedor_id: string
         }
         Insert: {
           cotacao_id: string
+          email_enviado_em?: string | null
           fornecedor_id: string
         }
         Update: {
           cotacao_id?: string
+          email_enviado_em?: string | null
           fornecedor_id?: string
         }
         Relationships: [

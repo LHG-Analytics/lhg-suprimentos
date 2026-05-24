@@ -1,19 +1,20 @@
 "use client";
 
 /**
- * cotacao-detalhe-client.tsx — LHG-211
+ * cotacao-detalhe-client.tsx — LHG-211/212
  * Tela hero da cotação: header + banner IA + matriz comparativa + bottom summary bar.
  * Toda a lógica de seleção de fornecedor por item é gerenciada aqui client-side.
+ * LHG-212: modal de email para solicitar cotação aos fornecedores via Resend.
  */
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, X, ChevronDown, Plus,
-  Loader2, AlertTriangle, Calendar, Users, Check,
+  Loader2, AlertTriangle, Calendar, Users, Check, Mail, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 
@@ -87,6 +88,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   const [iaBannerOpen,      setIaBannerOpen]     = useState(true);
   const [wizardOpen,        setWizardOpen]        = useState(false);
   const [addFornModalOpen,  setAddFornModalOpen]  = useState(false);
+  const [emailModalOpen,    setEmailModalOpen]    = useState(false);
+  const [emailMensagem,     setEmailMensagem]     = useState("");
 
   // Fornecedores desta cotação
   const fornecedores = cotacao.cotacao_fornecedores
@@ -200,8 +203,29 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     });
   }
 
+  function handleEnviarEmail() {
+    startTransition(async () => {
+      try {
+        const res = await enviarEmailCotacao(cotacao.id, { mensagem: emailMensagem || undefined });
+        setEmailModalOpen(false);
+        setEmailMensagem("");
+        if (res.erros.length > 0) {
+          toast.warning(`${res.enviados} email(s) enviado(s). ${res.erros.length} erro(s): ${res.erros[0]}`);
+        } else {
+          toast.success(`Cotação enviada para ${res.enviados} fornecedor(es)`);
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao enviar email");
+      }
+    });
+  }
+
   const temSugestaoIA = cotacao.cotacao_itens.some(i => i.melhor_forn);
   const nomeUnidades  = cotacao.cotacao_unidades.map(cu => cu.unidades?.nome).filter(Boolean).join(", ");
+  const fornComEmail  = fornecedores.filter(f => {
+    const row = cotacao.cotacao_fornecedores.find(cf => cf.fornecedor_id === f.id) as { fornecedores: { email?: string | null } | null } | undefined;
+    return row?.fornecedores?.email;
+  });
 
   return (
     <div className="max-w-[1600px] mx-auto pb-24 space-y-4">
@@ -275,6 +299,19 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
           {/* Ações */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Solicitar cotação por email — só exibe se há fornecedores com email */}
+            {fornComEmail.length > 0 && (
+              <button
+                onClick={() => setEmailModalOpen(true)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "border-sky-700/60 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20",
+                )}
+              >
+                <Mail size={13} />
+                Solicitar cotação
+              </button>
+            )}
             <button
               onClick={() => setAddFornModalOpen(true)}
               className={cn(
@@ -708,6 +745,97 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         todosFornecedores={todosFornecedores}
         jaAdicionados={fornecedores.map(f => f.id)}
       />
+
+      {/* ── Modal Email Solicitar Cotação (LHG-212) ──────────────────────────── */}
+      {emailModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          aria-modal="true"
+          role="dialog"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
+          />
+          {/* Card */}
+          <div className="relative w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/60">
+              <div className="flex items-center gap-2">
+                <Mail size={14} className="text-sky-400" />
+                <span className="text-sm font-semibold text-zinc-100">Solicitar Cotação por E-mail</span>
+              </div>
+              <button
+                onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Resumo */}
+              <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-4 py-3 space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Será enviado para</div>
+                <div className="space-y-1">
+                  {fornComEmail.map(f => (
+                    <div key={f.id} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <div className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                      {f.nome_fantasia ?? f.razao_social}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[11px] text-zinc-600 pt-0.5">
+                  {cotacao.cotacao_itens.length} {cotacao.cotacao_itens.length === 1 ? "item" : "itens"} solicitados
+                </div>
+              </div>
+              {/* Mensagem opcional */}
+              <div>
+                <label className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5 block">
+                  Observação (opcional)
+                </label>
+                <textarea
+                  value={emailMensagem}
+                  onChange={e => setEmailMensagem(e.target.value)}
+                  placeholder="Ex: Prezamos pelo prazo de entrega máximo de 5 dias úteis…"
+                  rows={3}
+                  className={cn(
+                    "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2",
+                    "text-sm text-zinc-200 placeholder:text-zinc-600",
+                    "focus:outline-none focus:ring-1 focus:ring-sky-500/50 focus:border-sky-700",
+                    "resize-none transition-colors",
+                  )}
+                />
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800/60">
+              <button
+                onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
+                className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEnviarEmail}
+                disabled={pending}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border",
+                  "border-sky-700/60 bg-sky-500/10 px-4 py-2",
+                  "text-sm font-semibold text-sky-400 hover:bg-sky-500/20",
+                  "transition-colors disabled:opacity-40",
+                )}
+              >
+                {pending
+                  ? <><Loader2 size={13} className="animate-spin" /> Enviando…</>
+                  : <><Send size={13} /> Enviar para {fornComEmail.length} fornecedor(es)</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
