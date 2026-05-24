@@ -471,8 +471,8 @@ export default async function DashboardPage() {
           value={formatBRL(kpis.valor)}
           delta={kpis.deltaValor ?? undefined}
           prev={formatBRL(kpis.valorPrev)}
-          meta={formatBRL(180_000)}
-          metaLabel="ORÇAMENTO"
+          meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
+          metaLabel="ORÇADO MÊS"
           mono
         />
         <KpiCard
@@ -501,13 +501,13 @@ export default async function DashboardPage() {
           metaLabel="META"
           mono
         />
-        {/* Total Insumos — gasto real vs orçamento da planilha */}
+        {/* Total Insumos — gasto real vs orçamento de produtos da planilha */}
         <KpiCard
           label="TOTAL INSUMOS MÊS"
           value={formatBRL(cmv.totalReal)}
-          meta={cmv.temOrcamento ? formatBRL(cmv.totalOrcado) : undefined}
+          meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
           metaLabel="ORÇADO"
-          accent={cmv.temOrcamento && cmv.totalReal > cmv.totalOrcado ? "negative" : "neutral"}
+          accent={cmv.temOrcamento && cmv.totalReal > cmv.cmvOrcado ? "negative" : "neutral"}
           mono
         />
       </div>
