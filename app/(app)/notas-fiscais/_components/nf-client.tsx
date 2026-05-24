@@ -1,71 +1,102 @@
 "use client";
 
 /**
- * nf-client.tsx — LHG-216/217
- * Entrada de NF: lista de notas + conferência de itens + lançamento Omie.
- * Upload de XML NFe feito client-side com parser DOM nativo.
+ * nf-client.tsx — LHG-216/217 v2
+ * Entrada de NF via número → consulta Omie → classificação por Família de Produto.
+ * Remove o fluxo de upload de XML.
  */
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useCallback } from "react";
 import {
-  ReceiptText, Upload, Check, X, AlertTriangle, Sparkles,
-  Loader2, ChevronRight, Package, FileText, Search,
-  CheckCircle2, Clock, ExternalLink,
+  ReceiptText, Search, Loader2, X, ChevronDown,
+  CheckCircle2, AlertTriangle, Sparkles, Package,
+  ArrowRight, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { registrarNF, lancarNFOmie } from "../actions";
 
+// ── Famílias Omie ─────────────────────────────────────────────────────────────
+// Valores brutos como cadastrados no Omie ERP (migration 0006).
+
+const FAMILIAS_OMIE = [
+  // Alimentos
+  "ACOMPANHAMENTOS","ADICIONAIS","AVES","CARNES BOVINAS","CONGELADOS",
+  "DOCES E CHOCOLATES","EMBUTIDOS E FRIOS","ENTRADAS","ESTOQUE SECO",
+  "HORTIFRUTI","LANCHES","LATICINIOS","MENU DE VERAO","PAES",
+  "PESCADOS E FRUTOS DO MAR","PETISCOS","PRATOS PRINCIPAIS",
+  "SOBREMESAS","SORVETES",
+  // Bebidas Alcoólicas
+  "BEBIDAS INSUMO","CERVEJAS","COQUETEIS","DESTILADOS","DOSES",
+  "VINHOS E ESPUMANTES",
+  // Bebidas Não-Alcoólicas
+  "CAFE DA MANHA E CHA","SOFT DRINK",
+  // Amenities
+  "BOMBONIERE","CORTESIAS","SACHES",
+  // Outros
+  "BRINDES E PRESENTES","CAUCAO","COLABORADORES","CONVENIENCIA",
+  "ITENS EXTRAS","PRODUTOS EROTICOS","RESERVAS","SERVICOS",
+  "TABACARIA","TAXAS DE REEMBOLSOS",
+] as const;
+
+type FamiliaOmie = (typeof FAMILIAS_OMIE)[number] | string;
+
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-type NfItemKind = "ok" | "preco" | "qtd" | "extra" | "faltante";
+interface OmieNFCabecalho {
+  omie_cod_nf:   number;
+  numero:        string;
+  serie:         string;
+  data_emissao:  string;
+  fornecedor_id: number;
+  razao_social:  string | null;
+  cnpj:          string | null;
+  valor_total:   number;
+  chave_acesso:  string | null;
+}
 
-interface NfItem {
-  id: string;
-  divergencia: NfItemKind;
-  decisao: string | null;
-  qtd_nf: number | null;
-  qtd_pedido: number | null;
-  preco_nf: number | null;
-  preco_pedido: number | null;
-  produtos: { id: string; nome: string; codigo: string; unidade_med: string } | null;
+interface OmieNFItem {
+  n_item:       number;
+  codigo:       string;
+  descricao:    string;
+  unidade:      string;
+  qtd:          number;
+  preco_unit:   number;
+  valor_total:  number;
+  familia_omie: FamiliaOmie | null; // pré-fill do Omie
+}
+
+interface OmieNFData {
+  unidade_id:   string;
+  unidade_nome: string;
+  cabecalho:    OmieNFCabecalho;
+  itens:        OmieNFItem[];
 }
 
 interface NotaFiscal {
   id: string;
-  chave_acesso: string;
   numero: string | null;
+  omie_num_nf: string | null;
   serie: string | null;
   emissao: string | null;
   valor_total: number | null;
   status: string;
   lancada_no_omie: boolean | null;
   lancada_em: string | null;
-  xml_url: string | null;
-  created_at: string;
-  pedidos: { id: string; numero: string; fornecedores: { razao_social: string; nome_fantasia: string | null } | null } | null;
-  nf_itens: NfItem[];
-}
-
-interface PedidoItem {
-  id: string;
-  quantidade: number;
-  preco_unitario: number;
-  produtos: { id: string; nome: string; codigo: string; unidade_med: string } | null;
-}
-
-interface PedidoPendente {
-  id: string;
-  numero: string;
-  valor_total: number;
-  status: string;
   created_at: string;
   fornecedores: { razao_social: string; nome_fantasia: string | null } | null;
-  pedido_itens: PedidoItem[];
+  pedidos: { numero: string } | null;
+  nf_itens: Array<{
+    id: string;
+    descricao_omie: string | null;
+    familia_omie: string | null;
+    qtd_nf: number | null;
+    preco_nf: number | null;
+  }>;
 }
 
 interface Props {
-  notas:             NotaFiscal[];
-  pedidosPendentes:  PedidoPendente[];
+  notas: NotaFiscal[];
+  unidades: Array<{ id: string; nome: string; slug: string }>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,209 +110,119 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
-function getFornNome(f: { razao_social: string; nome_fantasia: string | null } | null) {
-  if (!f) return "—";
-  return f.nome_fantasia || f.razao_social;
+// ── Select de Família ─────────────────────────────────────────────────────────
+
+function FamiliaSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className={cn(
+          "w-full appearance-none rounded-lg border px-3 py-1.5 pr-7",
+          "text-[12px] font-medium bg-zinc-900 transition-colors",
+          "focus:outline-none focus:ring-1 focus:ring-zinc-600",
+          value
+            ? "border-emerald-700/60 text-emerald-300"
+            : "border-zinc-700 text-zinc-500",
+        )}
+      >
+        <option value="">Selecione a família…</option>
+        {FAMILIAS_OMIE.map(f => (
+          <option key={f} value={f}>{f}</option>
+        ))}
+      </select>
+      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+    </div>
+  );
 }
 
-const DIVERGENCIA_CONFIG: Record<NfItemKind, { label: string; color: string }> = {
-  ok:       { label: "OK",          color: "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20" },
-  preco:    { label: "Preço",       color: "text-amber-400 bg-amber-500/10 ring-amber-500/20" },
-  qtd:      { label: "Quantidade",  color: "text-amber-400 bg-amber-500/10 ring-amber-500/20" },
-  extra:    { label: "Extra",       color: "text-violet-400 bg-violet-500/10 ring-violet-500/20" },
-  faltante: { label: "Faltante",    color: "text-red-400 bg-red-500/10 ring-red-500/20" },
-};
+// ── Painel de busca + confirmação ─────────────────────────────────────────────
 
-// ── Parser XML NFe ────────────────────────────────────────────────────────────
-
-interface NFeData {
-  chave_acesso:  string;
-  numero:        string;
-  serie:         string;
-  emissao:       string;
-  valor_total:   number;
-  itens: Array<{
-    produto_codigo: string;
-    produto_desc:   string;
-    qtd:            number;
-    preco_unit:     number;
-    valor_total:    number;
-  }>;
-}
-
-function parseNFeXML(xmlText: string): NFeData | null {
-  try {
-    const parser  = new DOMParser();
-    const xmlDoc  = parser.parseFromString(xmlText, "text/xml");
-
-    const getVal = (sel: string) => xmlDoc.querySelector(sel)?.textContent ?? "";
-
-    // Chave de acesso fica no atributo Id da tag infNFe
-    const infNFe = xmlDoc.querySelector("infNFe");
-    let chave = infNFe?.getAttribute("Id") ?? "";
-    if (chave.startsWith("NFe")) chave = chave.slice(3);
-
-    const numero      = getVal("nNF");
-    const serie       = getVal("serie");
-    const emissao     = getVal("dhEmi") || getVal("dEmi");
-    const valor_total = parseFloat(getVal("vNF") || getVal("vTotTrib") || "0");
-
-    // Itens
-    const detNodes = xmlDoc.querySelectorAll("det");
-    const itens: NFeData["itens"] = [];
-    detNodes.forEach(det => {
-      const prod   = det.querySelector("prod");
-      itens.push({
-        produto_codigo: prod?.querySelector("cProd")?.textContent ?? "",
-        produto_desc:   prod?.querySelector("xProd")?.textContent ?? "",
-        qtd:            parseFloat(prod?.querySelector("qCom")?.textContent ?? "0"),
-        preco_unit:     parseFloat(prod?.querySelector("vUnCom")?.textContent ?? "0"),
-        valor_total:    parseFloat(prod?.querySelector("vProd")?.textContent ?? "0"),
-      });
-    });
-
-    if (!chave || !numero) return null;
-    return { chave_acesso: chave, numero, serie, emissao, valor_total, itens };
-  } catch {
-    return null;
-  }
-}
-
-// Calcula divergências comparando itens do XML com itens do pedido
-function calcularDivergencias(
-  nfeItens: NFeData["itens"],
-  pedidoItens: PedidoItem[],
-  produtosPorCodigo: Map<string, PedidoItem["produtos"]>,
-) {
-  const resultado: Array<{
-    produto_id:   string | null;
-    qtd_nf:       number;
-    preco_nf:     number;
-    qtd_pedido:   number | null;
-    preco_pedido: number | null;
-    divergencia:  NfItemKind;
-  }> = [];
-
-  const pedidoMap = new Map(pedidoItens.map(i => [i.produtos?.codigo ?? "", i]));
-
-  for (const nfeItem of nfeItens) {
-    const pedItem = pedidoMap.get(nfeItem.produto_codigo);
-    const prod    = pedItem?.produtos ?? null;
-
-    if (!pedItem) {
-      // Item extra na NF
-      resultado.push({
-        produto_id:   null,
-        qtd_nf:       nfeItem.qtd,
-        preco_nf:     nfeItem.preco_unit,
-        qtd_pedido:   null,
-        preco_pedido: null,
-        divergencia:  "extra",
-      });
-      continue;
-    }
-
-    const qtdOk   = Math.abs(nfeItem.qtd   - pedItem.quantidade)   < 0.001;
-    const precoOk = Math.abs(nfeItem.preco_unit - pedItem.preco_unitario) < 0.01;
-
-    let divergencia: NfItemKind = "ok";
-    if (!qtdOk && !precoOk)  divergencia = "qtd";   // trata como qtd (pior)
-    else if (!qtdOk)          divergencia = "qtd";
-    else if (!precoOk)        divergencia = "preco";
-
-    resultado.push({
-      produto_id:   prod?.id ?? null,
-      qtd_nf:       nfeItem.qtd,
-      preco_nf:     nfeItem.preco_unit,
-      qtd_pedido:   pedItem.quantidade,
-      preco_pedido: pedItem.preco_unitario,
-      divergencia,
-    });
-  }
-
-  // Itens faltantes (no pedido mas não na NF)
-  for (const pedItem of pedidoItens) {
-    const inNF = nfeItens.some(n => n.produto_codigo === pedItem.produtos?.codigo);
-    if (!inNF && pedItem.produtos) {
-      resultado.push({
-        produto_id:   pedItem.produtos.id,
-        qtd_nf:       0,
-        preco_nf:     0,
-        qtd_pedido:   pedItem.quantidade,
-        preco_pedido: pedItem.preco_unitario,
-        divergencia:  "faltante",
-      });
-    }
-  }
-
-  return resultado;
-}
-
-// ── Modal Upload XML ──────────────────────────────────────────────────────────
-
-function ModalUploadNF({
-  pedido,
-  onClose,
+function PainelEntradaNF({
+  unidades,
   onRegistrada,
 }: {
-  pedido: PedidoPendente;
-  onClose: () => void;
+  unidades: Props["unidades"];
   onRegistrada: () => void;
 }) {
-  const [pending, start] = useTransition();
-  const [nfeData, setNfeData] = useState<NFeData | null>(null);
-  const [xmlText, setXmlText]  = useState("");
-  const [parseError, setParseError] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [numeroBusca, setNumeroBusca] = useState("");
+  const [unidadeId, setUnidadeId]     = useState(unidades[0]?.id ?? "");
+  const [buscando, setBuscando]       = useState(false);
+  const [nfData, setNfData]           = useState<OmieNFData | null>(null);
+  const [erroOmie, setErroOmie]       = useState("");
+  const [familias, setFamilias]       = useState<Record<number, string>>({});
+  const [pending, start]              = useTransition();
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      setXmlText(text);
-      const parsed = parseNFeXML(text);
-      if (!parsed) {
-        setParseError("Não foi possível interpretar o XML. Verifique se é um arquivo NFe válido.");
-        setNfeData(null);
-      } else {
-        setParseError("");
-        setNfeData(parsed);
+  const todosSelecionados = nfData
+    ? nfData.itens.every(i => (familias[i.n_item] ?? i.familia_omie ?? "").length > 0)
+    : false;
+
+  const buscarNF = useCallback(async () => {
+    if (!numeroBusca.trim()) return;
+    setBuscando(true);
+    setErroOmie("");
+    setNfData(null);
+    setFamilias({});
+
+    try {
+      const params = new URLSearchParams({ numero: numeroBusca.trim() });
+      if (unidadeId) params.set("unidade_id", unidadeId);
+
+      const res = await fetch(`/api/omie/buscar-nf?${params}`);
+      const json = await res.json();
+
+      if (!res.ok) {
+        setErroOmie(json.error ?? "Erro ao buscar no Omie");
+        return;
       }
-    };
-    reader.readAsText(file, "UTF-8");
-  }
 
-  const divergencias = nfeData
-    ? calcularDivergencias(nfeData.itens, pedido.pedido_itens, new Map())
-    : [];
-
-  const temDivergencias = divergencias.some(d => d.divergencia !== "ok");
+      const data = json as OmieNFData;
+      setNfData(data);
+      // Pré-preencher famílias que o Omie já retornou
+      const pre: Record<number, string> = {};
+      data.itens.forEach(i => {
+        if (i.familia_omie) pre[i.n_item] = i.familia_omie;
+      });
+      setFamilias(pre);
+    } catch {
+      setErroOmie("Falha de conexão ao buscar no Omie");
+    } finally {
+      setBuscando(false);
+    }
+  }, [numeroBusca, unidadeId]);
 
   function handleRegistrar() {
-    if (!nfeData) return;
+    if (!nfData) return;
     start(async () => {
       try {
         await registrarNF({
-          pedido_id:    pedido.id,
-          chave_acesso: nfeData.chave_acesso,
-          numero:       nfeData.numero,
-          serie:        nfeData.serie,
-          emissao:      nfeData.emissao,
-          valor_total:  nfeData.valor_total,
-          itens:        divergencias.map(d => ({
-            produto_id:   d.produto_id,
-            qtd_nf:       d.qtd_nf,
-            preco_nf:     d.preco_nf,
-            qtd_pedido:   d.qtd_pedido,
-            preco_pedido: d.preco_pedido,
-            divergencia:  d.divergencia,
+          unidade_id:   nfData.unidade_id,
+          chave_acesso: nfData.cabecalho.chave_acesso ?? undefined,
+          numero:       nfData.cabecalho.numero,
+          omie_num_nf:  nfData.cabecalho.numero,
+          serie:        nfData.cabecalho.serie,
+          emissao:      nfData.cabecalho.data_emissao,
+          valor_total:  nfData.cabecalho.valor_total,
+          itens: nfData.itens.map(i => ({
+            descricao_omie: i.descricao,
+            familia_omie:   familias[i.n_item] ?? i.familia_omie ?? null,
+            qtd_nf:         i.qtd,
+            preco_nf:       i.preco_unit,
+            divergencia:    "ok" as const,
           })),
         });
-        toast.success("NF registrada com sucesso");
+        toast.success(`NF ${nfData.cabecalho.numero} registrada com sucesso`);
+        setNfData(null);
+        setNumeroBusca("");
+        setFamilias({});
         onRegistrada();
-        onClose();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao registrar NF");
       }
@@ -289,318 +230,278 @@ function ModalUploadNF({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[8vh] px-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-[720px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+    <div className="space-y-4">
+      {/* Barra de busca */}
+      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+        <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-3 font-medium">
+          Consultar NF no Omie
+        </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80 shrink-0">
-          <div className="flex items-center gap-2">
-            <FileText size={14} className="text-sky-400" />
-            <h2 className="text-sm font-semibold text-zinc-50">Registrar Nota Fiscal</h2>
-            <span className="text-[11px] text-zinc-600 font-mono">{pedido.numero}</span>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
-            <X size={14} />
+        <div className="flex items-center gap-2">
+          {/* Unidade */}
+          {unidades.length > 1 && (
+            <div className="relative shrink-0">
+              <select
+                value={unidadeId}
+                onChange={e => setUnidadeId(e.target.value)}
+                className="appearance-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 pr-7 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+              >
+                {unidades.map(u => (
+                  <option key={u.id} value={u.id}>{u.nome}</option>
+                ))}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            </div>
+          )}
+
+          {/* Input número */}
+          <input
+            type="text"
+            value={numeroBusca}
+            onChange={e => setNumeroBusca(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && buscarNF()}
+            placeholder="Número da NF (ex: 12345)"
+            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600 font-mono"
+          />
+
+          <button
+            onClick={buscarNF}
+            disabled={buscando || !numeroBusca.trim()}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+              "border border-sky-700/60 bg-sky-500/10 text-sky-400",
+              "hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed",
+            )}
+          >
+            {buscando
+              ? <><Loader2 size={13} className="animate-spin" /> Buscando…</>
+              : <><Search size={13} /> Buscar no Omie</>
+            }
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Info do pedido */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Pedido</div>
-              <div className="text-sm font-medium text-zinc-200">{getFornNome(pedido.fornecedores)} · {pedido.numero}</div>
-              <div className="text-[11px] text-zinc-500">{pedido.pedido_itens.length} itens</div>
+        {/* Erro */}
+        {erroOmie && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-700/40 bg-red-500/[0.06] px-3 py-2 text-[12px] text-red-400">
+            <AlertTriangle size={12} className="shrink-0" />
+            {erroOmie}
+          </div>
+        )}
+      </div>
+
+      {/* Resultado */}
+      {nfData && (
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+          {/* Cabeçalho da NF */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/60 bg-zinc-900/60">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-zinc-100">
+                  NF-e {nfData.cabecalho.numero} · Série {nfData.cabecalho.serie}
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  {nfData.cabecalho.razao_social ?? `CNPJ ${nfData.cabecalho.cnpj ?? "—"}`}
+                  {" · "}Emissão: {nfData.cabecalho.data_emissao}
+                  {" · "}{nfData.unidade_nome}
+                </div>
+              </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-600">Valor do pedido</div>
-              <div className="font-mono text-sm font-semibold text-zinc-100">{formatBRL(pedido.valor_total)}</div>
-            </div>
-          </div>
-
-          {/* Upload XML */}
-          <div>
-            <div
-              onClick={() => fileRef.current?.click()}
-              className={cn(
-                "border-2 border-dashed rounded-xl px-6 py-8 text-center cursor-pointer transition-colors",
-                nfeData
-                  ? "border-emerald-500/40 bg-emerald-500/[0.04]"
-                  : "border-zinc-800 hover:border-zinc-600 bg-zinc-900/20",
-              )}
-            >
-              {nfeData ? (
-                <div className="flex flex-col items-center gap-2">
-                  <CheckCircle2 size={24} className="text-emerald-400" />
-                  <div className="text-sm font-medium text-emerald-300">XML interpretado com sucesso</div>
-                  <div className="text-[12px] text-zinc-500">
-                    NF-e {nfeData.numero} · Série {nfeData.serie} · {formatBRL(nfeData.valor_total)}
-                  </div>
-                  <div className="text-[11px] font-mono text-zinc-600 mt-1">{nfeData.chave_acesso}</div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload size={24} className="text-zinc-600" />
-                  <div className="text-sm text-zinc-400">Clique para fazer upload do XML da NFe</div>
-                  <div className="text-[11px] text-zinc-600">Arquivos .xml · NFe 4.0</div>
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xml,text/xml,application/xml"
-              onChange={handleFile}
-              className="hidden"
-            />
-            {parseError && (
-              <div className="mt-2 flex items-center gap-2 text-[12px] text-red-400">
-                <AlertTriangle size={12} />
-                {parseError}
+              <div className="font-mono text-lg font-bold text-zinc-100">
+                {formatBRL(nfData.cabecalho.valor_total)}
               </div>
-            )}
+              <div className="text-[11px] text-zinc-600">{nfData.itens.length} iten{nfData.itens.length !== 1 ? "s" : ""}</div>
+            </div>
           </div>
 
-          {/* Grid de conferência */}
-          {nfeData && divergencias.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium">Conferência de itens</span>
-                {temDivergencias && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/20 rounded-full px-2 py-0.5">
-                    <AlertTriangle size={9} />
-                    {divergencias.filter(d => d.divergencia !== "ok").length} divergência{divergencias.filter(d => d.divergencia !== "ok").length !== 1 ? "s" : ""}
-                  </span>
+          {/* Tabela de itens com seleção de família */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-zinc-800/60">
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto (Omie)</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Valor Unit.</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Total</th>
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600 w-[220px]">
+                    Família de Produto
+                    <span className="ml-1 text-red-400">*</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {nfData.itens.map(item => (
+                  <tr key={item.n_item} className="border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                    <td className="px-4 py-2.5">
+                      <div className="text-sm text-zinc-200 truncate max-w-[260px]">{item.descricao}</div>
+                      <div className="text-[10px] text-zinc-600 font-mono">{item.codigo} · {item.unidade}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-300">
+                      {item.qtd}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-300">
+                      {formatBRL(item.preco_unit)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-sm font-mono font-semibold text-zinc-100">
+                      {formatBRL(item.valor_total)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <FamiliaSelect
+                        value={familias[item.n_item] ?? item.familia_omie ?? ""}
+                        onChange={v => setFamilias(prev => ({ ...prev, [item.n_item]: v }))}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-zinc-800/60 bg-zinc-900/40">
+            <div className="text-[12px] text-zinc-500">
+              {todosSelecionados
+                ? <span className="text-emerald-400 flex items-center gap-1"><Check size={12} /> Todas as famílias selecionadas</span>
+                : <span className="text-amber-400">Selecione a família de todos os itens para continuar</span>
+              }
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setNfData(null); setFamilias({}); }}
+                className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRegistrar}
+                disabled={!todosSelecionados || pending}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border",
+                  "border-emerald-700/60 bg-emerald-500/10 px-4 py-2",
+                  "text-sm font-semibold text-emerald-400",
+                  "hover:bg-emerald-500/20 transition-colors",
+                  "disabled:opacity-40 disabled:cursor-not-allowed",
                 )}
-              </div>
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-zinc-800/60">
-                      <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto</th>
-                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd Pedido</th>
-                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd NF</th>
-                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço Pedido</th>
-                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço NF</th>
-                      <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-zinc-600">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {divergencias.map((div, i) => {
-                      const cfg = DIVERGENCIA_CONFIG[div.divergencia];
-                      const pedItem = pedido.pedido_itens.find(pi => pi.produtos?.id === div.produto_id);
-                      const nfeItemData = nfeData.itens[i];
-                      return (
-                        <tr key={i} className={cn(
-                          "border-b border-zinc-800/40 last:border-0",
-                          div.divergencia !== "ok" && "bg-amber-500/[0.02]",
-                        )}>
-                          <td className="px-4 py-2.5">
-                            <div className="text-sm text-zinc-200 truncate max-w-[180px]">
-                              {pedItem?.produtos?.nome ?? nfeItemData?.produto_desc ?? "Produto extra"}
-                            </div>
-                            <div className="text-[10px] text-zinc-600 font-mono">{nfeItemData?.produto_codigo}</div>
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-400">
-                            {div.qtd_pedido ?? "—"}
-                          </td>
-                          <td className={cn(
-                            "px-4 py-2.5 text-right text-sm font-mono font-semibold",
-                            div.divergencia === "qtd" || div.divergencia === "faltante" || div.divergencia === "extra"
-                              ? "text-amber-300"
-                              : "text-zinc-200",
-                          )}>
-                            {div.qtd_nf || "—"}
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-400">
-                            {formatBRL(div.preco_pedido)}
-                          </td>
-                          <td className={cn(
-                            "px-4 py-2.5 text-right text-sm font-mono font-semibold",
-                            div.divergencia === "preco" ? "text-amber-300" : "text-zinc-200",
-                          )}>
-                            {formatBRL(div.preco_nf)}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <span className={cn(
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-                              cfg.color,
-                            )}>
-                              {cfg.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              >
+                {pending ? <Loader2 size={13} className="animate-spin" /> : <ReceiptText size={13} />}
+                {pending ? "Registrando…" : "Registrar NF"}
+              </button>
             </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-t border-zinc-800/60 shrink-0">
-          <div>
-            {nfeData && (
-              <div className="text-[12px] text-zinc-500">
-                Total NF: <span className="font-mono font-semibold text-zinc-300">{formatBRL(nfeData.valor_total)}</span>
-                {temDivergencias && (
-                  <span className="ml-3 text-amber-500">⚠ Existem divergências — registre e revise antes de lançar no Omie</span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={handleRegistrar}
-              disabled={!nfeData || pending}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-lg border",
-                "border-emerald-700/60 bg-emerald-500/10 px-4 py-2",
-                "text-sm font-semibold text-emerald-400",
-                "hover:bg-emerald-500/20 transition-colors",
-                "disabled:opacity-40 disabled:cursor-not-allowed",
-              )}
-            >
-              {pending ? <Loader2 size={13} className="animate-spin" /> : <ReceiptText size={13} />}
-              {pending ? "Registrando…" : "Registrar NF"}
-            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-// ── Detalhe de NF registrada ──────────────────────────────────────────────────
+// ── Card de NF registrada ─────────────────────────────────────────────────────
 
-function NFDetalhe({ nf }: { nf: NotaFiscal }) {
+function NFCard({ nf }: { nf: NotaFiscal }) {
   const [pending, start] = useTransition();
-
-  const temDivergencias = nf.nf_itens.some(i => i.divergencia !== "ok");
-  const divergencias    = nf.nf_itens.filter(i => i.divergencia !== "ok");
+  const [expandida, setExpandida] = useState(false);
 
   function handleLancarOmie() {
     start(async () => {
       try {
         await lancarNFOmie(nf.id);
-        toast.success("NF enviada para o Omie");
+        toast.success("NF lançada no Omie com sucesso");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao lançar no Omie");
       }
     });
   }
 
+  const numDisplay = nf.numero ?? nf.omie_num_nf ?? "—";
+  const fornNome   = nf.fornecedores
+    ? nf.fornecedores.nome_fantasia || nf.fornecedores.razao_social
+    : nf.pedidos?.numero ? `Pedido ${nf.pedidos.numero}` : "—";
+
   return (
-    <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
-      {/* Header NF */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-zinc-800/60">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-              nf.lancada_no_omie
-                ? "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20"
-                : "text-amber-400 bg-amber-500/10 ring-amber-500/20",
-            )}>
-              {nf.lancada_no_omie ? "✓ Lançada no Omie" : "Aguardando Omie"}
-            </span>
-            {temDivergencias && (
-              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-amber-400 bg-amber-500/10 ring-amber-500/20">
-                <AlertTriangle size={9} />
-                {divergencias.length} divergência{divergencias.length !== 1 ? "s" : ""}
+    <div className={cn(
+      "rounded-xl border bg-zinc-900/40 overflow-hidden transition-all",
+      nf.status === "erro_omie" ? "border-red-700/40" : "border-zinc-800/80",
+    )}>
+      <div
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-zinc-800/20 transition-colors"
+        onClick={() => setExpandida(v => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full shrink-0",
+            nf.lancada_no_omie ? "bg-emerald-400" : nf.status === "erro_omie" ? "bg-red-400" : "bg-amber-400",
+          )} />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-zinc-100">NF-e {numDisplay}</span>
+              {nf.serie && <span className="text-[11px] text-zinc-600">Série {nf.serie}</span>}
+              <span className={cn(
+                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                nf.lancada_no_omie
+                  ? "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20"
+                  : nf.status === "erro_omie"
+                  ? "text-red-400 bg-red-500/10 ring-red-500/20"
+                  : "text-amber-400 bg-amber-500/10 ring-amber-500/20",
+              )}>
+                {nf.lancada_no_omie ? "✓ No Omie" : nf.status === "erro_omie" ? "Erro Omie" : "Ag. Omie"}
               </span>
-            )}
-          </div>
-          <div className="text-sm font-semibold text-zinc-100">
-            NF-e {nf.numero ?? "—"} · Série {nf.serie ?? "—"}
-          </div>
-          <div className="text-[11px] text-zinc-500 font-mono mt-0.5">{nf.chave_acesso}</div>
-          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-600">
-            <span>Pedido: {nf.pedidos?.numero}</span>
-            {nf.emissao && <span>Emissão: {formatDate(nf.emissao)}</span>}
-            {nf.lancada_em && <span>Lançada: {formatDate(nf.lancada_em)}</span>}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">
+              {fornNome}
+              {nf.emissao && ` · Emissão: ${formatDate(nf.emissao)}`}
+              {` · Registrada: ${formatDate(nf.created_at)}`}
+            </div>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-600">Valor total</div>
-          <div className="font-mono text-lg font-bold text-zinc-100">{formatBRL(nf.valor_total)}</div>
-          {!nf.lancada_no_omie && (
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="font-mono text-sm font-semibold text-zinc-100">{formatBRL(nf.valor_total)}</div>
+            <div className="text-[10px] text-zinc-600">{nf.nf_itens.length} iten{nf.nf_itens.length !== 1 ? "s" : ""}</div>
+          </div>
+          {!nf.lancada_no_omie && nf.status !== "lancada" && (
             <button
-              onClick={handleLancarOmie}
+              onClick={e => { e.stopPropagation(); handleLancarOmie(); }}
               disabled={pending}
-              className={cn(
-                "mt-2 inline-flex items-center gap-1.5 rounded-lg border",
-                "border-amber-700/60 bg-amber-500/10 px-3 py-1.5 text-[12px] font-medium text-amber-400",
-                "hover:bg-amber-500/20 transition-colors disabled:opacity-50",
-              )}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-700/60 bg-amber-500/10 px-3 py-1.5 text-[12px] font-medium text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
             >
               {pending ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-              {pending ? "Lançando…" : "Lançar no Omie"}
+              {pending ? "Lançando…" : "Lançar Omie"}
             </button>
           )}
+          <ArrowRight size={13} className={cn("text-zinc-600 transition-transform", expandida && "rotate-90")} />
         </div>
       </div>
 
-      {/* Grid de conferência */}
-      {nf.nf_itens.length > 0 && (
-        <div className="overflow-x-auto">
+      {/* Itens expandidos */}
+      {expandida && nf.nf_itens.length > 0 && (
+        <div className="border-t border-zinc-800/60 overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800/60">
+              <tr className="border-b border-zinc-800/40">
                 <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd Ped.</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd NF</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço Ped.</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço NF</th>
-                <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-zinc-600">Status</th>
+                <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Família</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço Unit.</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Total</th>
               </tr>
             </thead>
             <tbody>
-              {nf.nf_itens.map((item, i) => {
-                const cfg = DIVERGENCIA_CONFIG[item.divergencia];
-                return (
-                  <tr key={item.id} className="border-b border-zinc-800/40 last:border-0">
-                    <td className="px-4 py-2.5">
-                      <div className="text-sm text-zinc-200 truncate max-w-[200px]">
-                        {item.produtos?.nome ?? "Produto extra"}
-                      </div>
-                      {item.produtos?.codigo && (
-                        <div className="text-[10px] text-zinc-600 font-mono">{item.produtos.codigo}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-500">{item.qtd_pedido ?? "—"}</td>
-                    <td className={cn(
-                      "px-4 py-2.5 text-right text-sm font-mono font-semibold",
-                      item.divergencia === "qtd" ? "text-amber-300" : "text-zinc-200",
-                    )}>
-                      {item.qtd_nf ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-500">
-                      {formatBRL(item.preco_pedido)}
-                    </td>
-                    <td className={cn(
-                      "px-4 py-2.5 text-right text-sm font-mono font-semibold",
-                      item.divergencia === "preco" ? "text-amber-300" : "text-zinc-200",
-                    )}>
-                      {formatBRL(item.preco_nf)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-                        cfg.color,
-                      )}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {nf.nf_itens.map(item => (
+                <tr key={item.id} className="border-b border-zinc-800/30 last:border-0">
+                  <td className="px-4 py-2 text-sm text-zinc-300 max-w-[200px] truncate">{item.descricao_omie ?? "—"}</td>
+                  <td className="px-4 py-2">
+                    {item.familia_omie
+                      ? <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-sky-400 bg-sky-500/10 ring-sky-500/20">{item.familia_omie}</span>
+                      : <span className="text-[10px] text-zinc-600">—</span>
+                    }
+                  </td>
+                  <td className="px-4 py-2 text-right text-sm font-mono text-zinc-400">{item.qtd_nf ?? "—"}</td>
+                  <td className="px-4 py-2 text-right text-sm font-mono text-zinc-400">{formatBRL(item.preco_nf)}</td>
+                  <td className="px-4 py-2 text-right text-sm font-mono font-semibold text-zinc-200">
+                    {formatBRL(item.qtd_nf != null && item.preco_nf != null ? item.qtd_nf * item.preco_nf : null)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -611,27 +512,19 @@ function NFDetalhe({ nf }: { nf: NotaFiscal }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function NFClient({ notas, pedidosPendentes }: Props) {
-  const [busca, setBusca]         = useState("");
-  const [uploadPedido, setUploadPedido] = useState<PedidoPendente | null>(null);
-  const [abaSelecionada, setAba]  = useState<"notas" | "pedidos">("notas");
+export function NFClient({ notas: notasInit, unidades }: Props) {
+  const [notas, setNotas]   = useState(notasInit);
+  const [busca, setBusca]   = useState("");
+  const [aba, setAba]       = useState<"notas" | "entrada">("notas");
 
   const notasFiltradas = notas.filter(n => {
     const q = busca.toLowerCase().trim();
     if (!q) return true;
+    const num = n.numero ?? n.omie_num_nf ?? "";
     return (
-      (n.numero?.toLowerCase().includes(q) ?? false) ||
-      n.chave_acesso.toLowerCase().includes(q) ||
-      getFornNome(n.pedidos?.fornecedores ?? null).toLowerCase().includes(q)
-    );
-  });
-
-  const pedidosFiltrados = pedidosPendentes.filter(p => {
-    const q = busca.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      p.numero.toLowerCase().includes(q) ||
-      getFornNome(p.fornecedores).toLowerCase().includes(q)
+      num.toLowerCase().includes(q) ||
+      (n.fornecedores?.razao_social?.toLowerCase().includes(q) ?? false) ||
+      (n.fornecedores?.nome_fantasia?.toLowerCase().includes(q) ?? false)
     );
   });
 
@@ -643,7 +536,7 @@ export function NFClient({ notas, pedidosPendentes }: Props) {
         <div>
           <h1 className="text-xl font-semibold text-zinc-50">Entrada de Notas Fiscais</h1>
           <p className="text-[12px] text-zinc-500 mt-0.5">
-            Conferência automática de itens e lançamento no Omie
+            Consulta Omie · Classificação por Família de Produto
           </p>
         </div>
         <div className="flex items-center gap-2 text-[12px] text-zinc-500">
@@ -656,8 +549,8 @@ export function NFClient({ notas, pedidosPendentes }: Props) {
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Registradas",  value: notas.length,                                 color: "text-zinc-100" },
-          { label: "No Omie",      value: notas.filter(n => n.lancada_no_omie).length,  color: "text-emerald-400" },
+          { label: "Registradas",    value: notas.length,                                            color: "text-zinc-100" },
+          { label: "No Omie",        value: notas.filter(n => n.lancada_no_omie).length,             color: "text-emerald-400" },
           { label: "Ag. Lançamento", value: notas.filter(n => !n.lancada_no_omie && n.status !== "conferencia").length, color: "text-amber-400" },
         ].map(k => (
           <div key={k.label} className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
@@ -667,103 +560,67 @@ export function NFClient({ notas, pedidosPendentes }: Props) {
         ))}
       </div>
 
-      {/* Tabs + busca */}
+      {/* Tabs */}
       <div className="flex items-center gap-3">
         <div className="flex gap-1 bg-zinc-900/60 rounded-lg p-0.5 border border-zinc-800">
           {([
-            { key: "notas", label: `NFs registradas (${notas.length})` },
-            { key: "pedidos", label: `Pedidos aguardando NF (${pedidosPendentes.length})` },
+            { key: "notas",   label: `NFs Registradas (${notas.length})` },
+            { key: "entrada", label: "Nova Entrada" },
           ] as const).map(t => (
             <button
               key={t.key}
               onClick={() => setAba(t.key)}
               className={cn(
                 "rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
-                abaSelecionada === t.key
-                  ? "bg-zinc-700 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-300",
+                aba === t.key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
               )}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <div className="relative flex-1 max-w-[300px]">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
-          <input
-            type="text"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar…"
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 pl-8 pr-3 py-2 text-sm text-zinc-300 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700 transition-all"
-          />
-        </div>
+
+        {aba === "notas" && (
+          <div className="relative flex-1 max-w-[300px]">
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por número ou fornecedor…"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 pl-8 pr-3 py-2 text-sm text-zinc-300 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700 transition-all"
+            />
+          </div>
+        )}
       </div>
 
       {/* Conteúdo */}
-      {abaSelecionada === "notas" ? (
-        <div className="space-y-3">
+      {aba === "entrada" ? (
+        <PainelEntradaNF
+          unidades={unidades}
+          onRegistrada={() => setAba("notas")}
+        />
+      ) : (
+        <div className="space-y-2">
           {notasFiltradas.length === 0 ? (
             <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 flex flex-col items-center justify-center py-16 gap-3">
               <ReceiptText size={32} className="text-zinc-700" strokeWidth={1.2} />
               <p className="text-sm text-zinc-500">Nenhuma nota fiscal registrada</p>
-              <p className="text-[12px] text-zinc-600">Selecione um pedido na aba "Pedidos" e faça o upload do XML</p>
-            </div>
-          ) : (
-            notasFiltradas.map(nf => <NFDetalhe key={nf.id} nf={nf} />)
-          )}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {pedidosFiltrados.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 flex flex-col items-center justify-center py-16 gap-2">
-              <Package size={32} className="text-zinc-700" strokeWidth={1.2} />
-              <p className="text-sm text-zinc-500">Nenhum pedido aguardando NF</p>
-            </div>
-          ) : (
-            pedidosFiltrados.map(p => (
-              <div
-                key={p.id}
-                className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-5 py-4 flex items-center justify-between"
+              <p className="text-[12px] text-zinc-600">
+                Use a aba <strong className="text-zinc-400">Nova Entrada</strong> para registrar uma NF pelo número
+              </p>
+              <button
+                onClick={() => setAba("entrada")}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-sky-700/60 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-400 hover:bg-sky-500/20 transition-colors"
               >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-[11px] text-zinc-500">{p.numero}</span>
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-sky-400 bg-sky-500/10 ring-sky-500/20">
-                      <Clock size={9} />
-                      {p.status === "enviado" ? "Enviado" : p.status === "em_transito" ? "Em trânsito" : "Recebido"}
-                    </span>
-                  </div>
-                  <div className="text-sm font-medium text-zinc-200">{getFornNome(p.fornecedores)}</div>
-                  <div className="text-[11px] text-zinc-600 mt-0.5">
-                    {p.pedido_itens.length} iten{p.pedido_itens.length !== 1 ? "s" : ""} · {formatDate(p.created_at)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="font-mono text-sm font-semibold text-zinc-100">{formatBRL(p.valor_total)}</div>
-                  </div>
-                  <button
-                    onClick={() => setUploadPedido(p)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-700/60 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-400 hover:bg-sky-500/20 transition-colors"
-                  >
-                    <Upload size={13} />
-                    Upload XML
-                  </button>
-                </div>
-              </div>
-            ))
+                <Package size={13} />
+                Fazer primeira entrada
+              </button>
+            </div>
+          ) : (
+            notasFiltradas.map(nf => <NFCard key={nf.id} nf={nf} />)
           )}
         </div>
-      )}
-
-      {/* Modal Upload */}
-      {uploadPedido && (
-        <ModalUploadNF
-          pedido={uploadPedido}
-          onClose={() => setUploadPedido(null)}
-          onRegistrada={() => setUploadPedido(null)}
-        />
       )}
     </div>
   );

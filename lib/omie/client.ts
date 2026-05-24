@@ -425,6 +425,58 @@ export interface OmieIncluirNotaResponse {
   cDescStatus: string;
 }
 
+// ── Tipos: Consulta NF Entrada ────────────────────────────────────────────────
+
+export interface OmieNFEntradaCabecalho {
+  nCodNF:            number;
+  cNumNF:            string;
+  cSerie:            string;
+  dDtEmissao:        string;   // DD/MM/YYYY
+  nCodFornecedor:    number;
+  cCNPJFornecedor?:  string;
+  cRazaoSocial?:     string;
+  nValTotalNF:       number;
+  cChaveNFe?:        string;   // 44 dígitos (NF-e); ausente em NF papel
+}
+
+export interface OmieNFEntradaProduto {
+  cCodProd:     string;
+  cDescricao:   string;
+  nQtde:        number;
+  nValUnit:     number;
+  nValTotal:    number;
+  cUnid:        string;
+  cFamProd?:    string;  // família de produto no Omie (pré-fill do dropdown)
+}
+
+export interface OmieNFEntradaDet {
+  nItem:   number;
+  produto: OmieNFEntradaProduto;
+}
+
+export interface OmieNFEntradaResponse {
+  cabecalho: OmieNFEntradaCabecalho;
+  det:       OmieNFEntradaDet[];
+}
+
+/**
+ * Consulta uma Nota Fiscal de Entrada no Omie pelo número.
+ * Endpoint: /produtos/notaentrada/ — call: ConsultarNota
+ *
+ * Referência: https://app.omie.com.br/api/v1/produtos/notaentrada/
+ */
+export async function consultarNFEntrada(
+  creds: OmieCredentials,
+  numero: string,
+): Promise<OmieNFEntradaResponse> {
+  return omiePost<{ nCodNF: number; cNumNF: string }, OmieNFEntradaResponse>(
+    "/produtos/notaentrada/",
+    "ConsultarNota",
+    creds,
+    { nCodNF: 0, cNumNF: numero },
+  );
+}
+
 /**
  * Inclui uma nota de entrada no Omie ERP.
  * Endpoint: /produtos/notaentrada/ — call: IncluirNota

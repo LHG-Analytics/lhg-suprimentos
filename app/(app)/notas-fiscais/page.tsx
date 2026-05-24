@@ -1,6 +1,6 @@
 /**
- * app/(app)/notas-fiscais/page.tsx — LHG-216/217
- * Entrada de Notas Fiscais: upload XML + conferência + lançamento Omie.
+ * app/(app)/notas-fiscais/page.tsx — LHG-216/217 v2
+ * Entrada de NF via consulta Omie + classificação por família de produto.
  */
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -12,41 +12,32 @@ export default async function NotasFiscaisPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: notas }, { data: pedidosPendentes }] = await Promise.all([
-    // NFs já registradas
+  const [{ data: notas }, { data: unidades }] = await Promise.all([
+    // NFs já registradas (novo formato + legado)
     supabase
       .from("notas_fiscais")
       .select(`
-        id, chave_acesso, numero, serie, emissao, valor_total,
-        status, lancada_no_omie, lancada_em, xml_url, created_at,
-        pedidos(id, numero, fornecedores(razao_social, nome_fantasia)),
-        nf_itens(
-          id, divergencia, decisao,
-          qtd_nf, qtd_pedido, preco_nf, preco_pedido,
-          produtos(id, nome, codigo, unidade_med)
-        )
+        id, numero, omie_num_nf, serie, emissao, valor_total,
+        status, lancada_no_omie, lancada_em, created_at,
+        fornecedores!notas_fiscais_fornecedor_id_fkey(razao_social, nome_fantasia),
+        pedidos(numero),
+        nf_itens(id, descricao_omie, familia_omie, qtd_nf, preco_nf)
       `)
       .order("created_at", { ascending: false }),
 
-    // Pedidos aguardando NF (enviado, em_transito, recebido sem NF)
+    // Unidades com credenciais Omie configuradas
     supabase
-      .from("pedidos")
-      .select(`
-        id, numero, valor_total, status, created_at,
-        fornecedores(razao_social, nome_fantasia),
-        pedido_itens(
-          id, quantidade, preco_unitario,
-          produtos(id, nome, codigo, unidade_med)
-        )
-      `)
-      .in("status", ["enviado", "em_transito", "recebido"])
-      .order("created_at", { ascending: false }),
+      .from("unidades")
+      .select("id, nome, slug")
+      .eq("ativa", true)
+      .not("omie_app_key", "is", null)
+      .order("nome"),
   ]);
 
   return (
     <NFClient
       notas={notas ?? []}
-      pedidosPendentes={pedidosPendentes ?? []}
+      unidades={unidades ?? []}
     />
   );
 }

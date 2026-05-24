@@ -442,8 +442,11 @@ export type Database = {
       }
       nf_itens: {
         Row: {
+          created_at: string
           decisao: string | null
+          descricao_omie: string | null
           divergencia: Database["public"]["Enums"]["nf_item_kind"]
+          familia_omie: string | null
           id: string
           nf_id: string
           preco_nf: number | null
@@ -453,8 +456,11 @@ export type Database = {
           qtd_pedido: number | null
         }
         Insert: {
+          created_at?: string
           decisao?: string | null
+          descricao_omie?: string | null
           divergencia?: Database["public"]["Enums"]["nf_item_kind"]
+          familia_omie?: string | null
           id?: string
           nf_id: string
           preco_nf?: number | null
@@ -464,8 +470,11 @@ export type Database = {
           qtd_pedido?: number | null
         }
         Update: {
+          created_at?: string
           decisao?: string | null
+          descricao_omie?: string | null
           divergencia?: Database["public"]["Enums"]["nf_item_kind"]
+          familia_omie?: string | null
           id?: string
           nf_id?: string
           preco_nf?: number | null
@@ -493,44 +502,59 @@ export type Database = {
       }
       notas_fiscais: {
         Row: {
-          chave_acesso: string
+          chave_acesso: string | null
           created_at: string
           emissao: string | null
+          fornecedor_id: string | null
           id: string
           lancada_em: string | null
           lancada_no_omie: boolean | null
           numero: string | null
-          pedido_id: string
+          omie_cod_nota: number | null
+          omie_num_nf: string | null
+          pedido_id: string | null
           serie: string | null
           status: string
+          unidade_id: string | null
+          updated_at: string
           valor_total: number | null
           xml_url: string | null
         }
         Insert: {
-          chave_acesso: string
+          chave_acesso?: string | null
           created_at?: string
           emissao?: string | null
+          fornecedor_id?: string | null
           id?: string
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          pedido_id: string
+          omie_cod_nota?: number | null
+          omie_num_nf?: string | null
+          pedido_id?: string | null
           serie?: string | null
           status?: string
+          unidade_id?: string | null
+          updated_at?: string
           valor_total?: number | null
           xml_url?: string | null
         }
         Update: {
-          chave_acesso?: string
+          chave_acesso?: string | null
           created_at?: string
           emissao?: string | null
+          fornecedor_id?: string | null
           id?: string
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          pedido_id?: string
+          omie_cod_nota?: number | null
+          omie_num_nf?: string | null
+          pedido_id?: string | null
           serie?: string | null
           status?: string
+          unidade_id?: string | null
+          updated_at?: string
           valor_total?: number | null
           xml_url?: string | null
         }
@@ -540,6 +564,20 @@ export type Database = {
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
             referencedColumns: ["id"]
           },
         ]
