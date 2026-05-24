@@ -30,7 +30,7 @@ const QUICK_LINKS = [
   { label: "Pedidos de compra",   href: "/pedidos",      icon: ShoppingCart },
   { label: "Entrada de NF",       href: "/nf",           icon: FileText },
   { label: "Fornecedores",        href: "/fornecedores", icon: Truck },
-  { label: "Produtos & catálogo", href: "/catalogo",     icon: Package },
+  { label: "Produtos & catálogo", href: "/produtos",     icon: Package },
   { label: "Assistente IA",       href: "/chat",         icon: Sparkles },
   { label: "Relatórios",          href: "/relatorios",   icon: BarChart2 },
   { label: "Configurações",       href: "/admin",        icon: Settings },
