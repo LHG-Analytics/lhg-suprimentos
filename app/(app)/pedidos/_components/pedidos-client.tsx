@@ -82,7 +82,7 @@ function getFornNome(f: NonNullable<Pedido["fornecedores"]>) {
 }
 
 const STATUS_CONFIG: Record<PedStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  rascunho:             { label: "Rascunho",          color: "text-zinc-400 bg-zinc-800 ring-zinc-700/50",                      icon: <Package size={11} /> },
+  rascunho:             { label: "Rascunho",          color: "text-muted-foreground bg-muted ring-border/50",                    icon: <Package size={11} /> },
   aguardando_aprovacao: { label: "Ag. Aprovação",     color: "text-amber-400 bg-amber-500/10 ring-amber-500/20",               icon: <Clock size={11} /> },
   enviado:              { label: "Enviado",            color: "text-sky-400 bg-sky-500/10 ring-sky-500/20",                    icon: <Send size={11} /> },
   em_transito:          { label: "Em Trânsito",        color: "text-violet-400 bg-violet-500/10 ring-violet-500/20",           icon: <Truck size={11} /> },
@@ -93,12 +93,12 @@ const STATUS_CONFIG: Record<PedStatus, { label: string; color: string; icon: Rea
 };
 
 const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
-  criacao:       { color: "bg-zinc-700",           icon: <Package size={11} className="text-zinc-400" /> },
-  aprovacao:     { color: "bg-emerald-500/20",     icon: <CheckCircle2 size={11} className="text-emerald-400" /> },
-  rejeicao:      { color: "bg-red-500/20",         icon: <XCircle size={11} className="text-red-400" /> },
-  email_enviado: { color: "bg-sky-500/20",         icon: <Mail size={11} className="text-sky-400" /> },
-  recebimento:   { color: "bg-violet-500/20",      icon: <Truck size={11} className="text-violet-400" /> },
-  omie:          { color: "bg-amber-500/20",       icon: <Sparkles size={11} className="text-amber-400" /> },
+  criacao:       { color: "bg-muted",               icon: <Package size={11} className="text-muted-foreground" /> },
+  aprovacao:     { color: "bg-emerald-500/20",       icon: <CheckCircle2 size={11} className="text-emerald-400" /> },
+  rejeicao:      { color: "bg-red-500/20",           icon: <XCircle size={11} className="text-red-400" /> },
+  email_enviado: { color: "bg-sky-500/20",           icon: <Mail size={11} className="text-sky-400" /> },
+  recebimento:   { color: "bg-violet-500/20",        icon: <Truck size={11} className="text-violet-400" /> },
+  omie:          { color: "bg-amber-500/20",         icon: <Sparkles size={11} className="text-amber-400" /> },
 };
 
 const FILTROS: { key: string; label: string }[] = [
@@ -141,69 +141,69 @@ function ModalEmail({
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-[520px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-[520px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
           <div className="flex items-center gap-2">
             <Mail size={14} className="text-sky-400" />
-            <h2 className="text-sm font-semibold text-zinc-50">Enviar pedido ao fornecedor</h2>
+            <h2 className="text-sm font-semibold text-foreground">Enviar pedido ao fornecedor</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={14} />
           </button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           {/* Destinatário */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Destinatário</div>
-            <div className="text-sm font-medium text-zinc-200">{forn ? getFornNome(forn) : "—"}</div>
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Destinatário</div>
+            <div className="text-sm font-medium text-foreground">{forn ? getFornNome(forn) : "—"}</div>
             {forn?.email ? (
-              <div className="text-[12px] text-zinc-500 mt-0.5">{forn.email}</div>
+              <div className="text-[12px] text-muted-foreground mt-0.5">{forn.email}</div>
             ) : (
               <div className="text-[12px] text-red-400 mt-0.5">⚠ Fornecedor sem e-mail cadastrado</div>
             )}
           </div>
 
           {/* Itens do pedido */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-2">Pedido {pedido.numero}</div>
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">Pedido {pedido.numero}</div>
             <div className="space-y-1">
               {pedido.pedido_itens.slice(0, 4).map(i => (
                 <div key={i.id} className="flex items-center justify-between text-[12px]">
-                  <span className="text-zinc-400 truncate">{i.quantidade}× {i.produtos?.nome ?? "Produto"}</span>
-                  <span className="text-zinc-500 font-mono shrink-0 ml-3">{formatBRL(i.preco_unitario * i.quantidade)}</span>
+                  <span className="text-muted-foreground truncate">{i.quantidade}× {i.produtos?.nome ?? "Produto"}</span>
+                  <span className="text-muted-foreground/70 font-mono shrink-0 ml-3">{formatBRL(i.preco_unitario * i.quantidade)}</span>
                 </div>
               ))}
               {pedido.pedido_itens.length > 4 && (
-                <div className="text-[11px] text-zinc-600">+{pedido.pedido_itens.length - 4} itens</div>
+                <div className="text-[11px] text-muted-foreground/60">+{pedido.pedido_itens.length - 4} itens</div>
               )}
             </div>
-            <div className="flex justify-between mt-2 pt-2 border-t border-zinc-800/60">
-              <span className="text-[11px] text-zinc-500">Total</span>
-              <span className="text-sm font-mono font-semibold text-zinc-100">{formatBRL(pedido.valor_total)}</span>
+            <div className="flex justify-between mt-2 pt-2 border-t border-border/60">
+              <span className="text-[11px] text-muted-foreground">Total</span>
+              <span className="text-sm font-mono font-semibold text-foreground">{formatBRL(pedido.valor_total)}</span>
             </div>
           </div>
 
           {/* Mensagem adicional */}
           <div>
-            <label className="block text-[11px] text-zinc-500 mb-1.5">Mensagem adicional (opcional)</label>
+            <label className="block text-[11px] text-muted-foreground mb-1.5">Mensagem adicional (opcional)</label>
             <textarea
               value={msg}
               onChange={e => setMsg(e.target.value)}
               placeholder="Ex: Urgente — necessário até dia 30/05…"
               rows={3}
               className={cn(
-                "w-full rounded-lg border border-zinc-800 bg-zinc-900/60",
-                "px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600",
-                "focus:outline-none focus:ring-1 focus:ring-zinc-600 resize-none transition-all",
+                "w-full rounded-lg border border-border bg-muted/60",
+                "px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50",
+                "focus:outline-none focus:ring-1 focus:ring-border resize-none transition-all",
               )}
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-800/60">
-          <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors">
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border/60">
+          <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors">
             Cancelar
           </button>
           <button
@@ -252,32 +252,32 @@ function ModalRejeitar({
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[15vh] px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-[440px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80">
+      <div className="relative w-full max-w-[440px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
           <div className="flex items-center gap-2">
             <XCircle size={14} className="text-red-400" />
-            <h2 className="text-sm font-semibold text-zinc-50">Rejeitar pedido</h2>
+            <h2 className="text-sm font-semibold text-foreground">Rejeitar pedido</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={14} />
           </button>
         </div>
         <div className="px-5 py-4 space-y-3">
-          <p className="text-sm text-zinc-400">Informe o motivo da rejeição (opcional):</p>
+          <p className="text-sm text-muted-foreground">Informe o motivo da rejeição (opcional):</p>
           <textarea
             value={motivo}
             onChange={e => setMotivo(e.target.value)}
             placeholder="Ex: Preço acima do orçamento aprovado…"
             rows={3}
             className={cn(
-              "w-full rounded-lg border border-zinc-800 bg-zinc-900/60",
-              "px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600",
-              "focus:outline-none focus:ring-1 focus:ring-zinc-600 resize-none",
+              "w-full rounded-lg border border-border bg-muted/60",
+              "px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50",
+              "focus:outline-none focus:ring-1 focus:ring-border resize-none",
             )}
           />
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-zinc-800/60">
-          <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors">Cancelar</button>
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border/60">
+          <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors">Cancelar</button>
           <button
             onClick={handleRejeitar}
             disabled={pending}
@@ -352,7 +352,7 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header do detalhe */}
-      <div className="px-6 py-5 border-b border-zinc-800/60 shrink-0">
+      <div className="px-6 py-5 border-b border-border/60 shrink-0">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
@@ -363,12 +363,12 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
                 {st.icon}
                 {st.label}
               </span>
-              <span className="text-[12px] font-mono text-zinc-500">{pedido.numero}</span>
+              <span className="text-[12px] font-mono text-muted-foreground">{pedido.numero}</span>
             </div>
-            <h2 className="text-lg font-semibold text-zinc-50 leading-tight">
+            <h2 className="text-lg font-semibold text-foreground leading-tight">
               {forn ? getFornNome(forn) : "Fornecedor desconhecido"}
             </h2>
-            <div className="flex items-center gap-4 mt-1.5 text-[12px] text-zinc-500">
+            <div className="flex items-center gap-4 mt-1.5 text-[12px] text-muted-foreground">
               {pedido.cotacoes && (
                 <span className="flex items-center gap-1">
                   <ReceiptText size={10} />
@@ -383,10 +383,10 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
           </div>
 
           <div className="text-right shrink-0">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600">Total do pedido</div>
-            <div className="font-mono text-xl font-bold text-zinc-100">{formatBRL(pedido.valor_total)}</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Total do pedido</div>
+            <div className="font-mono text-xl font-bold text-foreground">{formatBRL(pedido.valor_total)}</div>
             {pedido.condicao_pgto && (
-              <div className="text-[11px] text-zinc-600 mt-0.5">{pedido.condicao_pgto}</div>
+              <div className="text-[11px] text-muted-foreground/60 mt-0.5">{pedido.condicao_pgto}</div>
             )}
           </div>
         </div>
@@ -429,7 +429,7 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
               pedido.email_enviado_em
-                ? "border-zinc-700 bg-zinc-800/40 text-zinc-500 hover:text-zinc-300"
+                ? "border-border bg-muted/40 text-muted-foreground hover:text-foreground/80"
                 : "border-sky-700/60 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20",
             )}
           >
@@ -472,40 +472,40 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
         {/* Itens */}
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium">
               Itens do pedido
             </span>
-            <span className="text-[10px] text-zinc-700">({pedido.pedido_itens.length})</span>
+            <span className="text-[10px] text-muted-foreground/40">({pedido.pedido_itens.length})</span>
           </div>
-          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+          <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-800/60">
-                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Unit.</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Total</th>
+                <tr className="border-b border-border/60">
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground/60">Produto</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Qtd</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Unit.</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {pedido.pedido_itens.map((item, i) => (
-                  <tr key={item.id} className={cn(i < pedido.pedido_itens.length - 1 && "border-b border-zinc-800/40")}>
+                  <tr key={item.id} className={cn(i < pedido.pedido_itens.length - 1 && "border-b border-border/40")}>
                     <td className="px-4 py-2.5">
-                      <div className="text-sm text-zinc-200 truncate max-w-[220px]">{item.produtos?.nome ?? "—"}</div>
-                      <div className="text-[11px] text-zinc-600 font-mono">{item.produtos?.codigo} · {item.produtos?.unidade_med}</div>
+                      <div className="text-sm text-foreground truncate max-w-[220px]">{item.produtos?.nome ?? "—"}</div>
+                      <div className="text-[11px] text-muted-foreground/60 font-mono">{item.produtos?.codigo} · {item.produtos?.unidade_med}</div>
                     </td>
-                    <td className="px-4 py-2.5 text-right text-sm text-zinc-400 font-mono">{item.quantidade}</td>
-                    <td className="px-4 py-2.5 text-right text-sm text-zinc-400 font-mono">{formatBRL(item.preco_unitario)}</td>
-                    <td className="px-4 py-2.5 text-right text-sm font-semibold text-zinc-200 font-mono">
+                    <td className="px-4 py-2.5 text-right text-sm text-muted-foreground font-mono">{item.quantidade}</td>
+                    <td className="px-4 py-2.5 text-right text-sm text-muted-foreground font-mono">{formatBRL(item.preco_unitario)}</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-semibold text-foreground font-mono">
                       {formatBRL(item.valor_total ?? item.preco_unitario * item.quantidade)}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-zinc-700/60 bg-zinc-900/60">
-                  <td colSpan={3} className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-zinc-600 font-medium">Total</td>
-                  <td className="px-4 py-2.5 text-right font-mono font-bold text-zinc-100">{formatBRL(pedido.valor_total)}</td>
+                <tr className="border-t border-border/60 bg-muted/60">
+                  <td colSpan={3} className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-muted-foreground/60 font-medium">Total</td>
+                  <td className="px-4 py-2.5 text-right font-mono font-bold text-foreground">{formatBRL(pedido.valor_total)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -514,18 +514,18 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
 
         {/* Fornecedor info */}
         {forn && (
-          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-2">Fornecedor</div>
+          <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">Fornecedor</div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-[11px] font-bold text-zinc-400 shrink-0">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold text-muted-foreground shrink-0">
                 {getFornNome(forn).slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-zinc-200">{getFornNome(forn)}</div>
-                {forn.email && <div className="text-[11px] text-zinc-500">{forn.email}</div>}
+                <div className="text-sm font-medium text-foreground">{getFornNome(forn)}</div>
+                {forn.email && <div className="text-[11px] text-muted-foreground">{forn.email}</div>}
               </div>
               {forn.rating !== null && (
-                <div className="flex items-center gap-1 text-[11px] text-zinc-600 shrink-0">
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground/60 shrink-0">
                   <Star size={10} className="text-amber-500/70 fill-amber-500/40" />
                   {forn.rating.toFixed(1)}
                 </div>
@@ -537,10 +537,10 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
         {/* Timeline de eventos */}
         {eventos.length > 0 && (
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600 font-medium mb-3">Histórico</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium mb-3">Histórico</div>
             <div className="relative">
               {/* Linha vertical */}
-              <div className="absolute left-[15px] top-0 bottom-0 w-px bg-zinc-800/60" />
+              <div className="absolute left-[15px] top-0 bottom-0 w-px bg-border/60" />
 
               <div className="space-y-3">
                 {eventos.map((ev, idx) => {
@@ -556,8 +556,8 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
                       </div>
                       {/* Content */}
                       <div className="flex-1 min-w-0 pt-1">
-                        <p className="text-[13px] text-zinc-300 leading-snug">{ev.texto}</p>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-600">
+                        <p className="text-[13px] text-foreground/80 leading-snug">{ev.texto}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground/60">
                           <span>{formatDateTime(ev.created_at)}</span>
                           {(ev.autor?.nome || ev.autor_nome) && (
                             <>
@@ -639,29 +639,29 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
     <div className="flex h-[calc(100vh-56px)]">
 
       {/* ── Painel esquerdo: lista ──────────────────────────────────────────── */}
-      <div className="w-[340px] border-r border-zinc-800/60 flex flex-col shrink-0 bg-zinc-950">
+      <div className="w-[340px] border-r border-border/60 flex flex-col shrink-0 bg-card">
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-zinc-800/60 space-y-3 shrink-0">
+        <div className="px-4 pt-4 pb-3 border-b border-border/60 space-y-3 shrink-0">
           <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
-              <ShoppingCart size={15} className="text-zinc-500" />
+            <h1 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <ShoppingCart size={15} className="text-muted-foreground" />
               Pedidos
-              <span className="text-[12px] font-normal text-zinc-600">({pedidos.length})</span>
+              <span className="text-[12px] font-normal text-muted-foreground/60">({pedidos.length})</span>
             </h1>
           </div>
 
           {/* Busca */}
           <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
             <input
               type="text"
               value={busca}
               onChange={e => setBusca(e.target.value)}
               placeholder="Buscar pedido, fornecedor…"
               className={cn(
-                "w-full rounded-lg border border-zinc-800 bg-zinc-900/40",
-                "pl-8 pr-3 py-2 text-sm text-zinc-300 placeholder-zinc-600",
-                "focus:outline-none focus:ring-1 focus:ring-zinc-700 transition-all",
+                "w-full rounded-lg border border-border bg-muted/40",
+                "pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50",
+                "focus:outline-none focus:ring-1 focus:ring-border transition-all",
               )}
             />
           </div>
@@ -675,13 +675,13 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
                 className={cn(
                   "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                   filtro === f.key
-                    ? "bg-zinc-700 text-zinc-100"
-                    : "bg-zinc-900 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800",
+                    ? "bg-muted text-foreground"
+                    : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
                 )}
               >
                 {f.label}
                 {counts[f.key] > 0 && (
-                  <span className="ml-1 text-zinc-600">{counts[f.key]}</span>
+                  <span className="ml-1 text-muted-foreground/60">{counts[f.key]}</span>
                 )}
               </button>
             ))}
@@ -691,7 +691,7 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
         {/* Lista de pedidos */}
         <div className="flex-1 overflow-y-auto p-2 space-y-px">
           {filtrados.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-2 text-zinc-600">
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground/60">
               <ShoppingCart size={24} />
               <p className="text-sm">Nenhum pedido encontrado</p>
             </div>
@@ -708,14 +708,14 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
                   className={cn(
                     "w-full text-left rounded-lg px-3 py-3 transition-colors",
                     isSel
-                      ? "bg-zinc-800 ring-1 ring-zinc-700/60"
-                      : "hover:bg-zinc-900/60",
+                      ? "bg-muted ring-1 ring-border/60"
+                      : "hover:bg-muted/60",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="font-mono text-[11px] text-zinc-500">{p.numero}</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">{p.numero}</span>
                         <span className={cn(
                           "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1",
                           st.color,
@@ -724,17 +724,17 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
                           {st.label}
                         </span>
                       </div>
-                      <div className="text-sm font-medium text-zinc-200 truncate">
+                      <div className="text-sm font-medium text-foreground truncate">
                         {forn ? getFornNome(forn) : "Fornecedor desconhecido"}
                       </div>
-                      <div className="text-[11px] text-zinc-600 mt-0.5">
+                      <div className="text-[11px] text-muted-foreground/60 mt-0.5">
                         {formatDate(p.created_at)}
                         {p.cotacoes && ` · ${p.cotacoes.numero}`}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-mono text-sm font-semibold text-zinc-100">{formatBRL(p.valor_total)}</div>
-                      <div className="text-[10px] text-zinc-600 mt-0.5">{p.pedido_itens.length} iten{p.pedido_itens.length !== 1 ? "s" : ""}</div>
+                      <div className="font-mono text-sm font-semibold text-foreground">{formatBRL(p.valor_total)}</div>
+                      <div className="text-[10px] text-muted-foreground/60 mt-0.5">{p.pedido_itens.length} iten{p.pedido_itens.length !== 1 ? "s" : ""}</div>
                     </div>
                   </div>
                 </button>
@@ -745,7 +745,7 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
       </div>
 
       {/* ── Painel direito: detalhe ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden bg-zinc-950/50">
+      <div className="flex-1 overflow-hidden bg-background/50">
         {selected ? (
           <PedidoDetalhe
             key={selected.id}
@@ -753,7 +753,7 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
             onAtualizado={handleAtualizado}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-700">
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground/40">
             <ShoppingCart size={40} strokeWidth={1.2} />
             <p className="text-sm">Selecione um pedido para ver os detalhes</p>
           </div>

@@ -233,10 +233,10 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
         {/* Breadcrumb + meta */}
-        <div className="flex items-center gap-3 text-[12px] text-zinc-500">
+        <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
           <button
             onClick={() => router.push("/cotacoes")}
-            className="flex items-center gap-1 hover:text-zinc-300 transition-colors"
+            className="flex items-center gap-1 hover:text-foreground/80 transition-colors"
           >
             <ArrowLeft size={12} />
             Cotações
@@ -263,7 +263,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                 cotacao.status === "cotacao"   ? "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20" :
                 cotacao.status === "aprovado"  ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" :
                 cotacao.status === "pendente"  ? "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20" :
-                "bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700/50",
+                "bg-muted text-muted-foreground ring-1 ring-border/50",
               )}>
                 {cotacao.status === "cotacao" ? "Em cotação" :
                  cotacao.status === "aprovado" ? "Aprovado" :
@@ -277,8 +277,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-semibold text-zinc-50 leading-tight">{cotacao.titulo}</h1>
-            <div className="flex items-center gap-4 mt-2 text-[12px] text-zinc-500">
+            <h1 className="text-2xl font-semibold text-foreground leading-tight">{cotacao.titulo}</h1>
+            <div className="flex items-center gap-4 mt-2 text-[12px] text-muted-foreground">
               {nomeUnidades && (
                 <span className="flex items-center gap-1">
                   <Users size={11} />
@@ -315,9 +315,9 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             <button
               onClick={() => setAddFornModalOpen(true)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border border-zinc-700",
-                "bg-zinc-800/60 px-3 py-2 text-sm font-medium text-zinc-300",
-                "hover:bg-zinc-700/60 transition-colors",
+                "inline-flex items-center gap-1.5 rounded-lg border border-border",
+                "bg-muted/60 px-3 py-2 text-sm font-medium text-foreground/80",
+                "hover:bg-muted transition-colors",
               )}
             >
               <Plus size={13} />
@@ -347,7 +347,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         )}>
           <button
             onClick={() => setIaBannerOpen(false)}
-            className="absolute top-3 right-3 p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="absolute top-3 right-3 p-1 text-muted-foreground hover:text-foreground/80 transition-colors"
           >
             <X size={14} />
           </button>
@@ -357,12 +357,12 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-semibold text-zinc-100">Sugestão da IA</span>
+                <span className="text-sm font-semibold text-foreground">Sugestão da IA</span>
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20 uppercase tracking-wider">
                   Economia detectada
                 </span>
               </div>
-              <p className="text-[13px] text-zinc-400 leading-relaxed">{cotacao.ai_resumo}</p>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">{cotacao.ai_resumo}</p>
               <div className="flex items-center gap-3 mt-3">
                 <button
                   onClick={aplicarSugestaoIA}
@@ -381,7 +381,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </div>
             {cotacao.economia && cotacao.economia > 0 && (
               <div className="text-right shrink-0">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Economia estimada</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Economia estimada</div>
                 <div className="text-2xl font-mono font-semibold text-emerald-400 mt-0.5">
                   -{formatBRL(cotacao.economia)}
                 </div>
@@ -396,15 +396,15 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
       {/* ── Matriz comparativa ──────────────────────────────────────────────── */}
       {cotacao.cotacao_itens.length === 0 ? (
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 flex flex-col items-center justify-center py-16 gap-2">
-          <Sparkles size={28} className="text-zinc-700" />
-          <p className="text-sm text-zinc-500">Nenhum item nesta cotação</p>
-          <p className="text-xs text-zinc-600">Crie a cotação a partir de uma requisição para importar os itens</p>
+        <div className="rounded-xl border border-border/80 bg-muted/40 flex flex-col items-center justify-center py-16 gap-2">
+          <Sparkles size={28} className="text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">Nenhum item nesta cotação</p>
+          <p className="text-xs text-muted-foreground/70">Crie a cotação a partir de uma requisição para importar os itens</p>
         </div>
       ) : fornecedores.length === 0 ? (
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 flex flex-col items-center justify-center py-16 gap-2">
-          <Users size={28} className="text-zinc-700" />
-          <p className="text-sm text-zinc-500">Nenhum fornecedor adicionado</p>
+        <div className="rounded-xl border border-border/80 bg-muted/40 flex flex-col items-center justify-center py-16 gap-2">
+          <Users size={28} className="text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">Nenhum fornecedor adicionado</p>
           <button
             onClick={() => setAddFornModalOpen(true)}
             className="mt-1 text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
@@ -413,19 +413,19 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
           </button>
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+        <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
 
           {/* Legenda */}
-          <div className="flex items-center gap-4 px-5 py-2.5 border-b border-zinc-800/60 bg-zinc-900/60">
-            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+          <div className="flex items-center gap-4 px-5 py-2.5 border-b border-border/60 bg-muted/60">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <div className="w-3 h-3 rounded-sm bg-emerald-500/20 ring-1 ring-emerald-500/40" />
               melhor preço
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-              <div className="w-3 h-3 rounded-sm border border-dashed border-zinc-700" />
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="w-3 h-3 rounded-sm border border-dashed border-border" />
               não atende
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <div className="w-3 h-3 rounded-sm bg-emerald-500/25 ring-1 ring-emerald-500/60" />
               selecionado
             </div>
@@ -442,14 +442,14 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
               {/* Header: fornecedores */}
               <thead>
-                <tr className="border-b border-zinc-800/60">
+                <tr className="border-b border-border/60">
                   <th className="px-5 py-3 text-left">
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
                       Item
                     </span>
                   </th>
                   {fornecedores.map((f, idx) => (
-                    <th key={f.id} className="px-3 py-3 text-center border-l border-zinc-800/60">
+                    <th key={f.id} className="px-3 py-3 text-center border-l border-border/60">
                       <div className="flex flex-col items-center gap-1">
                         <div className={cn(
                           "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold",
@@ -457,11 +457,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                         )}>
                           {getInitials(getFornecedorNome(f))}
                         </div>
-                        <div className="text-[12px] font-medium text-zinc-300 text-center leading-tight">
+                        <div className="text-[12px] font-medium text-foreground/80 text-center leading-tight">
                           {getFornecedorNome(f)}
                         </div>
                         {f.pontualidade_pct !== null && (
-                          <div className="text-[10px] text-zinc-600">
+                          <div className="text-[10px] text-muted-foreground/70">
                             ⭐ {f.rating?.toFixed(1) ?? "—"} · {f.pontualidade_pct}% pontual
                           </div>
                         )}
@@ -487,13 +487,13 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                 {cotacao.cotacao_itens.map((item) => {
                   const prod = item.produtos;
                   return (
-                    <tr key={item.id} className="border-b border-zinc-800/40 hover:bg-zinc-800/10 transition-colors">
+                    <tr key={item.id} className="border-b border-border/40 hover:bg-muted/10 transition-colors">
                       {/* Nome do item */}
                       <td className="px-5 py-3">
-                        <div className="text-sm font-medium text-zinc-200 truncate max-w-[220px]">
+                        <div className="text-sm font-medium text-foreground truncate max-w-[220px]">
                           {prod?.nome ?? "—"}
                         </div>
-                        <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                           {item.quantidade} {prod?.unidade_med} · {prod?.categoria}
                         </div>
                       </td>
@@ -510,14 +510,14 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                           <td
                             key={f.id}
                             className={cn(
-                              "px-3 py-2.5 text-center border-l border-zinc-800/60",
+                              "px-3 py-2.5 text-center border-l border-border/60",
                               !naoAtende && "cursor-pointer",
                             )}
                             onClick={() => !naoAtende && toggleSelecao(item.id, f.id)}
                           >
                             {naoAtende ? (
-                              <div className="flex items-center justify-center h-14 rounded-lg border border-dashed border-zinc-800/80 opacity-40">
-                                <span className="text-[11px] text-zinc-600">não atende</span>
+                              <div className="flex items-center justify-center h-14 rounded-lg border border-dashed border-border/80 opacity-40">
+                                <span className="text-[11px] text-muted-foreground/70">não atende</span>
                               </div>
                             ) : (
                               <div className={cn(
@@ -526,7 +526,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                                   ? "bg-emerald-500/20 ring-1 ring-emerald-500/50"
                                   : ehMelhor
                                     ? "bg-emerald-500/[0.07] hover:bg-emerald-500/15"
-                                    : "hover:bg-zinc-800/40",
+                                    : "hover:bg-muted/40",
                               )}>
                                 <div className="flex items-center justify-center gap-1">
                                   {ehMelhor && !ehSel && (
@@ -536,28 +536,28 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                                   )}
                                   {ehSel && (
                                     <div className="w-3 h-3 rounded-full bg-emerald-500 ring-1 ring-emerald-400 flex items-center justify-center">
-                                      <Check size={7} className="text-zinc-950" />
+                                      <Check size={7} className="text-background" />
                                     </div>
                                   )}
                                   <span className={cn(
                                     "font-mono text-sm font-semibold",
                                     ehSel ? "text-emerald-300" :
-                                    ehMelhor ? "text-emerald-400" : "text-zinc-200",
+                                    ehMelhor ? "text-emerald-400" : "text-foreground",
                                   )}>
                                     {formatBRL(cell.preco_unitario)}
                                   </span>
                                 </div>
                                 {total !== null && (
-                                  <div className={cn("text-[10px] mt-0.5", ehSel ? "text-emerald-600" : "text-zinc-600")}>
+                                  <div className={cn("text-[10px] mt-0.5", ehSel ? "text-emerald-600" : "text-muted-foreground/70")}>
                                     total {formatBRL(total)}
                                   </div>
                                 )}
                                 <div className="flex items-center justify-between gap-1 mt-1">
                                   {cell.prazo_entrega_dias !== null && (
-                                    <span className="text-[10px] text-zinc-600">{cell.prazo_entrega_dias}d</span>
+                                    <span className="text-[10px] text-muted-foreground/70">{cell.prazo_entrega_dias}d</span>
                                   )}
                                   {cell.condicao_pagamento && (
-                                    <span className="text-[10px] text-zinc-600 truncate">{cell.condicao_pagamento}</span>
+                                    <span className="text-[10px] text-muted-foreground/70 truncate">{cell.condicao_pagamento}</span>
                                   )}
                                 </div>
                               </div>
@@ -591,7 +591,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                               </div>
                             );
                           })() : (
-                            <span className="text-[11px] text-zinc-700">—</span>
+                            <span className="text-[11px] text-muted-foreground/40">—</span>
                           )}
                         </td>
                       )}
@@ -602,8 +602,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
               {/* Footer: totais por fornecedor */}
               <tfoot>
-                <tr className="border-t border-zinc-700/60 bg-zinc-900/60">
-                  <td className="px-5 py-3 text-[11px] uppercase tracking-wider text-zinc-600 font-medium">
+                <tr className="border-t border-border/60 bg-muted/60">
+                  <td className="px-5 py-3 text-[11px] uppercase tracking-wider text-muted-foreground/70 font-medium">
                     Total se 100%
                   </td>
                   {fornecedores.map((f) => {
@@ -616,21 +616,21 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                     }
                     const ehMelhorForn = atendeAll && totalForn === totalSemOtimizacao && totalSemOtimizacao > 0;
                     return (
-                      <td key={f.id} className="px-3 py-3 text-center border-l border-zinc-800/60">
+                      <td key={f.id} className="px-3 py-3 text-center border-l border-border/60">
                         {totalForn > 0 ? (
                           <div>
                             <div className={cn(
                               "font-mono text-sm font-semibold",
-                              ehMelhorForn ? "text-emerald-400" : "text-zinc-300",
+                              ehMelhorForn ? "text-emerald-400" : "text-foreground/80",
                             )}>
                               {formatBRL(totalForn)}
                             </div>
                             {!atendeAll && (
-                              <div className="text-[10px] text-zinc-600">parcial</div>
+                              <div className="text-[10px] text-muted-foreground/70">parcial</div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[12px] text-zinc-700">—</span>
+                          <span className="text-[12px] text-muted-foreground/40">—</span>
                         )}
                       </td>
                     );
@@ -647,7 +647,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-[12px] text-zinc-700">—</span>
+                        <span className="text-[12px] text-muted-foreground/60">—</span>
                       )}
                     </td>
                   )}
@@ -662,16 +662,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       {itensComSelecao > 0 && (
         <div className={cn(
           "fixed bottom-0 left-0 right-0 z-30",
-          "border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md",
+          "border-t border-border bg-background/95 backdrop-blur-md",
           "px-6 py-3.5",
         )}>
           <div className="max-w-[1600px] mx-auto flex items-center gap-6">
             {/* Seleção atual */}
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-zinc-600">Seleção atual</div>
-              <div className="font-mono text-sm font-semibold text-zinc-100">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Seleção atual</div>
+              <div className="font-mono text-sm font-semibold text-foreground">
                 {formatBRL(totalSelecao) ?? "—"}
-                <span className="text-zinc-600 text-[11px] ml-1.5">
+                <span className="text-muted-foreground/70 text-[11px] ml-1.5">
                   {itensComSelecao}/{cotacao.cotacao_itens.length} itens
                 </span>
               </div>
@@ -679,7 +679,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
             {temSugestaoIA && totalIA > 0 && (
               <>
-                <div className="w-px h-8 bg-zinc-800" />
+                <div className="w-px h-8 bg-border" />
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-emerald-700">✨ Mix ótimo IA</div>
                   <div className="font-mono text-sm font-semibold text-emerald-400">
@@ -691,10 +691,10 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
             {totalSemOtimizacao > 0 && (
               <>
-                <div className="w-px h-8 bg-zinc-800" />
+                <div className="w-px h-8 bg-border" />
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-600">Sem otimização</div>
-                  <div className="font-mono text-sm font-semibold text-zinc-500 line-through">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Sem otimização</div>
+                  <div className="font-mono text-sm font-semibold text-muted-foreground line-through">
                     {formatBRL(totalSemOtimizacao)}
                   </div>
                 </div>
@@ -759,16 +759,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
           />
           {/* Card */}
-          <div className="relative w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-xl border border-border bg-background shadow-2xl">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/60">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
               <div className="flex items-center gap-2">
                 <Mail size={14} className="text-sky-400" />
-                <span className="text-sm font-semibold text-zinc-100">Solicitar Cotação por E-mail</span>
+                <span className="text-sm font-semibold text-foreground">Solicitar Cotação por E-mail</span>
               </div>
               <button
                 onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-muted-foreground hover:text-foreground/80 transition-colors"
               >
                 <X size={15} />
               </button>
@@ -776,23 +776,23 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             {/* Body */}
             <div className="px-5 py-4 space-y-4">
               {/* Resumo */}
-              <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-4 py-3 space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Será enviado para</div>
+              <div className="rounded-lg border border-border/60 bg-muted/40 px-4 py-3 space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Será enviado para</div>
                 <div className="space-y-1">
                   {fornComEmail.map(f => (
-                    <div key={f.id} className="flex items-center gap-2 text-sm text-zinc-300">
+                    <div key={f.id} className="flex items-center gap-2 text-sm text-foreground/80">
                       <div className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
                       {f.nome_fantasia ?? f.razao_social}
                     </div>
                   ))}
                 </div>
-                <div className="text-[11px] text-zinc-600 pt-0.5">
+                <div className="text-[11px] text-muted-foreground/70 pt-0.5">
                   {cotacao.cotacao_itens.length} {cotacao.cotacao_itens.length === 1 ? "item" : "itens"} solicitados
                 </div>
               </div>
               {/* Mensagem opcional */}
               <div>
-                <label className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1.5 block">
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block">
                   Observação (opcional)
                 </label>
                 <textarea
@@ -801,8 +801,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                   placeholder="Ex: Prezamos pelo prazo de entrega máximo de 5 dias úteis…"
                   rows={3}
                   className={cn(
-                    "w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2",
-                    "text-sm text-zinc-200 placeholder:text-zinc-600",
+                    "w-full rounded-lg border border-border bg-muted px-3 py-2",
+                    "text-sm text-foreground placeholder:text-muted-foreground/50",
                     "focus:outline-none focus:ring-1 focus:ring-sky-500/50 focus:border-sky-700",
                     "resize-none transition-colors",
                   )}
@@ -810,10 +810,10 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
               </div>
             </div>
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800/60">
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/60">
               <button
                 onClick={() => { setEmailModalOpen(false); setEmailMensagem(""); }}
-                className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+                className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors"
               >
                 Cancelar
               </button>

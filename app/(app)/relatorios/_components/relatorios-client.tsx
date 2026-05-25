@@ -69,12 +69,12 @@ function CustomBarTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950 shadow-xl p-3 min-w-[160px]">
-      <div className="text-xs text-zinc-500 mb-2">{label}</div>
+    <div className="rounded-lg border border-border bg-background shadow-xl p-3 min-w-[160px]">
+      <div className="text-xs text-muted-foreground mb-2">{label}</div>
       {payload.map((p) => (
         <div key={p.name} className="flex justify-between gap-4 text-xs">
-          <span className="text-zinc-400">{p.name === "gasto" ? "Gasto" : "Economia"}</span>
-          <span className="font-mono text-zinc-100">{formatBRL(p.value)}</span>
+          <span className="text-muted-foreground">{p.name === "gasto" ? "Gasto" : "Economia"}</span>
+          <span className="font-mono text-foreground">{formatBRL(p.value)}</span>
         </div>
       ))}
     </div>
@@ -87,19 +87,19 @@ function KpiMini({ label, value, sub, icon: Icon, accent }: {
   icon: React.ElementType; accent?: "green" | "red" | "neutral";
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 flex items-start gap-3">
+    <div className="rounded-xl border border-border/80 bg-muted/40 p-4 flex items-start gap-3">
       <div className={cn(
         "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
         accent === "green"  ? "bg-emerald-500/10 text-emerald-400" :
         accent === "red"    ? "bg-red-500/10 text-red-400" :
-        "bg-zinc-800 text-zinc-400",
+        "bg-muted text-muted-foreground",
       )}>
         <Icon size={16} />
       </div>
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">{label}</div>
-        <div className="text-xl font-semibold font-mono text-zinc-50 mt-0.5">{value}</div>
-        {sub && <div className="text-[11px] text-zinc-600 mt-0.5">{sub}</div>}
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
+        <div className="text-xl font-semibold font-mono text-foreground mt-0.5">{value}</div>
+        {sub && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -140,8 +140,8 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-100">Relatórios</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Últimos 12 meses · pedidos recebidos e finalizados</p>
+          <h1 className="text-lg font-semibold text-foreground">Relatórios</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Últimos 12 meses · pedidos recebidos e finalizados</p>
         </div>
       </div>
 
@@ -181,10 +181,10 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[320px]">
 
         {/* Barras: gasto vs economia */}
-        <div className="lg:col-span-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 flex flex-col">
+        <div className="lg:col-span-2 rounded-xl border border-border/80 bg-muted/40 p-5 flex flex-col">
           <div className="mb-4 shrink-0">
-            <div className="text-sm font-medium text-zinc-100">Evolução mensal</div>
-            <div className="text-xs text-zinc-500 mt-0.5">Gasto total e economia por IA — últimos 12 meses</div>
+            <div className="text-sm font-medium text-foreground">Evolução mensal</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Gasto total e economia por IA — últimos 12 meses</div>
           </div>
           <div className="flex-1 min-h-0 -mx-2">
             <ResponsiveContainer width="100%" height="100%">
@@ -200,25 +200,25 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
           </div>
           {/* Legenda */}
           <div className="flex items-center gap-4 mt-3 shrink-0">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="w-3 h-3 rounded-sm bg-sky-400 shrink-0" /> Gasto
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="w-3 h-3 rounded-sm bg-emerald-400 shrink-0" /> Economia IA
             </div>
           </div>
         </div>
 
         {/* Pizza: por categoria */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 flex flex-col">
+        <div className="rounded-xl border border-border/80 bg-muted/40 p-5 flex flex-col">
           <div className="mb-2 shrink-0">
-            <div className="text-sm font-medium text-zinc-100">Por categoria</div>
-            <div className="text-xs text-zinc-500 mt-0.5">% do total gasto</div>
+            <div className="text-sm font-medium text-foreground">Por categoria</div>
+            <div className="text-xs text-muted-foreground mt-0.5">% do total gasto</div>
           </div>
 
           {categorias.length === 0 ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-xs text-zinc-600">Sem dados</p>
+              <p className="text-xs text-muted-foreground/60">Sem dados</p>
             </div>
           ) : (
             <>
@@ -253,9 +253,9 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
                   <div key={c.categoria} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: CORES[i % CORES.length] }} />
-                      <span className="text-zinc-400 truncate">{c.categoria}</span>
+                      <span className="text-muted-foreground truncate">{c.categoria}</span>
                     </div>
-                    <span className="font-mono text-zinc-500 shrink-0 ml-2">
+                    <span className="font-mono text-muted-foreground shrink-0 ml-2">
                       {totalCategorias > 0 ? ((c.total / totalCategorias) * 100).toFixed(0) : 0}%
                     </span>
                   </div>
@@ -267,11 +267,10 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
       </div>
 
       {/* ── Abas: evolução / fornecedores / NFs ────────────────────── */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Tabs */}
-        <div className="flex border-b border-zinc-800/80 px-5 pt-4 gap-5">
+        <div className="flex border-b border-border/80 px-5 pt-4 gap-5">
           {(["evolucao", "fornecedores", "nfs"] as const).map((tab) => {
-            const labels = { evolucao: "Top fornecedores", fornecedores: "Por fornecedor", nfs: "Notas fiscais" };
             const labelsFinal = { evolucao: "Top fornecedores", fornecedores: "Por fornecedor", nfs: "NFs registradas" };
             return (
               <button
@@ -280,8 +279,8 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
                 className={cn(
                   "pb-3 text-sm font-medium border-b-2 transition-colors",
                   abaAtiva === tab
-                    ? "border-emerald-500 text-zinc-100"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300",
+                    ? "border-emerald-500 text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground/80",
                 )}
               >
                 {labelsFinal[tab]}
@@ -295,13 +294,13 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
           {abaAtiva === "evolucao" && (
             <div className="overflow-x-auto">
               {fornecedores.length === 0 ? (
-                <p className="text-xs text-zinc-600 py-8 text-center">Nenhum pedido finalizado nos últimos 12 meses</p>
+                <p className="text-xs text-muted-foreground/60 py-8 text-center">Nenhum pedido finalizado nos últimos 12 meses</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-800">
+                    <tr className="border-b border-border">
                       {["Fornecedor", "Categoria", "Pedidos", "Total gasto", "% do total", "Rating"].map((h) => (
-                        <th key={h} className="text-left text-[11px] uppercase tracking-wider text-zinc-500 font-medium pb-3 pr-4">{h}</th>
+                        <th key={h} className="text-left text-[11px] uppercase tracking-wider text-muted-foreground font-medium pb-3 pr-4">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -310,25 +309,25 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
                       const totalGeral = fornecedores.reduce((s, x) => s + x.total, 0);
                       const pct = totalGeral > 0 ? (f.total / totalGeral) * 100 : 0;
                       return (
-                        <tr key={f.id} className="border-b border-zinc-800/40 hover:bg-zinc-800/20 transition-colors">
+                        <tr key={f.id} className="border-b border-border/40 hover:bg-muted/40 transition-colors">
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-zinc-600 font-mono w-5">{i + 1}</span>
-                              <span className="text-zinc-200 font-medium">{f.nome}</span>
+                              <span className="text-[11px] text-muted-foreground/60 font-mono w-5">{i + 1}</span>
+                              <span className="text-foreground font-medium">{f.nome}</span>
                             </div>
                           </td>
-                          <td className="py-3 pr-4 text-zinc-500 text-xs">{f.categoria ?? "—"}</td>
-                          <td className="py-3 pr-4 text-zinc-400 font-mono text-center">{f.pedidos}</td>
-                          <td className="py-3 pr-4 font-mono text-zinc-100">{formatBRL(f.total)}</td>
+                          <td className="py-3 pr-4 text-muted-foreground text-xs">{f.categoria ?? "—"}</td>
+                          <td className="py-3 pr-4 text-muted-foreground font-mono text-center">{f.pedidos}</td>
+                          <td className="py-3 pr-4 font-mono text-foreground">{formatBRL(f.total)}</td>
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-zinc-800 rounded-full h-1.5 min-w-[60px]">
+                              <div className="flex-1 bg-muted rounded-full h-1.5 min-w-[60px]">
                                 <div
                                   className="h-1.5 rounded-full bg-sky-500"
                                   style={{ width: `${Math.min(pct, 100)}%` }}
                                 />
                               </div>
-                              <span className="text-xs text-zinc-500 font-mono w-10 shrink-0">{pct.toFixed(0)}%</span>
+                              <span className="text-xs text-muted-foreground font-mono w-10 shrink-0">{pct.toFixed(0)}%</span>
                             </div>
                           </td>
                           <td className="py-3">
@@ -340,7 +339,7 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
                                 ★ {f.rating.toFixed(1)}
                               </span>
                             ) : (
-                              <span className="text-zinc-600 text-xs">—</span>
+                              <span className="text-muted-foreground/60 text-xs">—</span>
                             )}
                           </td>
                         </tr>
@@ -356,28 +355,28 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
           {abaAtiva === "fornecedores" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {fornecedores.length === 0 ? (
-                <p className="text-xs text-zinc-600 py-8 col-span-3 text-center">Nenhum dado disponível</p>
+                <p className="text-xs text-muted-foreground/60 py-8 col-span-3 text-center">Nenhum dado disponível</p>
               ) : (
                 fornecedores.map((f, i) => {
                   const totalGeral = fornecedores.reduce((s, x) => s + x.total, 0);
                   const pct = totalGeral > 0 ? (f.total / totalGeral) * 100 : 0;
                   return (
-                    <div key={f.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+                    <div key={f.id} className="rounded-lg border border-border bg-muted/60 p-4">
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <div>
-                          <div className="text-sm font-medium text-zinc-100 leading-snug">{f.nome}</div>
-                          <div className="text-[11px] text-zinc-500 mt-0.5">{f.categoria ?? "Sem categoria"}</div>
+                          <div className="text-sm font-medium text-foreground leading-snug">{f.nome}</div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">{f.categoria ?? "Sem categoria"}</div>
                         </div>
-                        <span className="text-[10px] text-zinc-600 font-mono shrink-0">#{i + 1}</span>
+                        <span className="text-[10px] text-muted-foreground/60 font-mono shrink-0">#{i + 1}</span>
                       </div>
-                      <div className="text-lg font-mono font-semibold text-zinc-50">{formatBRL(f.total)}</div>
+                      <div className="text-lg font-mono font-semibold text-foreground">{formatBRL(f.total)}</div>
                       <div className="mt-2 flex items-center gap-2">
-                        <div className="flex-1 bg-zinc-800 rounded-full h-1">
+                        <div className="flex-1 bg-muted rounded-full h-1">
                           <div className="h-1 rounded-full bg-emerald-500" style={{ width: `${Math.min(pct, 100)}%` }} />
                         </div>
-                        <span className="text-[11px] text-zinc-600">{pct.toFixed(1)}%</span>
+                        <span className="text-[11px] text-muted-foreground/60">{pct.toFixed(1)}%</span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-zinc-600">
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground/60">
                         <span>{f.pedidos} pedido{f.pedidos !== 1 ? "s" : ""}</span>
                         {f.rating != null && <span className="text-amber-400">★ {f.rating.toFixed(1)}</span>}
                       </div>
@@ -392,10 +391,10 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
           {abaAtiva === "nfs" && (
             <>
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs text-zinc-500">{nfs.length} notas fiscais registradas</span>
+                <span className="text-xs text-muted-foreground">{nfs.length} notas fiscais registradas</span>
                 <button
                   onClick={() => exportCSV(nfs)}
-                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-200 transition-colors border border-zinc-800 rounded-lg px-3 py-1.5"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-lg px-3 py-1.5"
                 >
                   <Download size={12} />
                   Exportar CSV
@@ -404,26 +403,26 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
 
               <div className="overflow-x-auto">
                 {nfs.length === 0 ? (
-                  <p className="text-xs text-zinc-600 py-8 text-center">Nenhuma NF registrada</p>
+                  <p className="text-xs text-muted-foreground/60 py-8 text-center">Nenhuma NF registrada</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-zinc-800">
+                      <tr className="border-b border-border">
                         {["NF", "Pedido", "Fornecedor", "Valor", "Emissão", "Omie"].map((h) => (
-                          <th key={h} className="text-left text-[11px] uppercase tracking-wider text-zinc-500 font-medium pb-3 pr-4 whitespace-nowrap">{h}</th>
+                          <th key={h} className="text-left text-[11px] uppercase tracking-wider text-muted-foreground font-medium pb-3 pr-4 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {nfs.map((n) => (
-                        <tr key={n.id} className="border-b border-zinc-800/40 hover:bg-zinc-800/20 transition-colors">
-                          <td className="py-2.5 pr-4 font-mono text-zinc-300 text-xs">{n.numero ?? "—"}</td>
-                          <td className="py-2.5 pr-4 font-mono text-zinc-400 text-xs">{n.pedidoNumero}</td>
-                          <td className="py-2.5 pr-4 text-zinc-300 max-w-[180px] truncate">{n.fornecedor}</td>
-                          <td className="py-2.5 pr-4 font-mono text-zinc-100 whitespace-nowrap">
+                        <tr key={n.id} className="border-b border-border/40 hover:bg-muted/40 transition-colors">
+                          <td className="py-2.5 pr-4 font-mono text-foreground/80 text-xs">{n.numero ?? "—"}</td>
+                          <td className="py-2.5 pr-4 font-mono text-muted-foreground text-xs">{n.pedidoNumero}</td>
+                          <td className="py-2.5 pr-4 text-foreground/80 max-w-[180px] truncate">{n.fornecedor}</td>
+                          <td className="py-2.5 pr-4 font-mono text-foreground whitespace-nowrap">
                             {n.valorTotal != null ? formatBRL(n.valorTotal) : "—"}
                           </td>
-                          <td className="py-2.5 pr-4 text-zinc-500 text-xs whitespace-nowrap">
+                          <td className="py-2.5 pr-4 text-muted-foreground text-xs whitespace-nowrap">
                             {n.emissao ? n.emissao.slice(0, 10).split("-").reverse().join("/") : "—"}
                           </td>
                           <td className="py-2.5">
@@ -436,7 +435,7 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
                                 <XCircle size={12} /> Erro
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 text-xs text-zinc-600">
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
                                 <Clock size={12} /> Pendente
                               </span>
                             )}

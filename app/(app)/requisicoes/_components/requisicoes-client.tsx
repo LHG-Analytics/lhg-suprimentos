@@ -70,12 +70,12 @@ function getInitials(nome: string) {
 // ── Badge de status ───────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<ReqStatus, { label: string; cls: string }> = {
-  rascunho:  { label: "Rascunho",     cls: "bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700/50" },
+  rascunho:  { label: "Rascunho",     cls: "bg-muted text-muted-foreground ring-1 ring-border/50" },
   cotacao:   { label: "Em cotação",   cls: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20" },
   pendente:  { label: "Pendente",     cls: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20" },
   aprovado:  { label: "Aprovado",     cls: "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" },
   rejeitado: { label: "Rejeitado",    cls: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20" },
-  cancelado: { label: "Cancelado",    cls: "bg-zinc-800/50 text-zinc-600 ring-1 ring-zinc-700/30" },
+  cancelado: { label: "Cancelado",    cls: "bg-muted/50 text-muted-foreground/70 ring-1 ring-border/30" },
 };
 
 const FILTER_ORDER: FilterStatus[] = [
@@ -129,10 +129,10 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50 leading-tight">
+          <h1 className="text-xl font-semibold text-foreground leading-tight">
             Requisições
           </h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">
+          <p className="text-[13px] text-muted-foreground mt-0.5">
             Solicitações de compra da rede LHG
           </p>
         </div>
@@ -163,14 +163,14 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
                 filter === s
-                  ? "border-zinc-600 bg-zinc-800 text-zinc-100"
-                  : "border-zinc-800/80 bg-zinc-900/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300",
+                  ? "border-border bg-muted text-foreground"
+                  : "border-border/80 bg-muted/40 text-muted-foreground hover:border-border hover:text-foreground/80",
               )}
             >
               {FILTER_LABELS[s]}
               <span className={cn(
                 "rounded-full px-1.5 py-0.5 text-[10px] font-mono leading-none",
-                filter === s ? "bg-zinc-700 text-zinc-300" : "bg-zinc-800/80 text-zinc-600",
+                filter === s ? "bg-muted/80 text-foreground/80" : "bg-muted/60 text-muted-foreground/60",
               )}>
                 {count}
               </span>
@@ -183,7 +183,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
       <div className="relative w-full max-w-sm">
         <Search
           size={14}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
         />
         <input
           type="text"
@@ -191,15 +191,15 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={cn(
-            "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 pl-9 pr-4 py-2",
-            "text-sm text-zinc-200 placeholder:text-zinc-600",
-            "focus:outline-none focus:border-zinc-600 transition-colors",
+            "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2",
+            "text-sm text-foreground placeholder:text-muted-foreground/50",
+            "focus:outline-none focus:border-border transition-colors",
           )}
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 text-xs"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs"
           >
             ✕
           </button>
@@ -207,11 +207,11 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header da tabela */}
-        <div className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-zinc-800/80">
+        <div className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
           {["Nº", "TÍTULO", "SOLICITANTE", "UNIDADE", "ITENS", "VALOR EST.", "STATUS", "CRIADA", ""].map((h) => (
-            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
+            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
               {h}
             </div>
           ))}
@@ -220,8 +220,8 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
         {/* Linhas */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <ClipboardList size={28} className="text-zinc-700" />
-            <p className="text-sm text-zinc-500">
+            <ClipboardList size={28} className="text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
               {query || filter !== "todas"
                 ? "Nenhuma requisição encontrada"
                 : "Nenhuma requisição ainda"}
@@ -236,7 +236,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800/60">
+          <ul className="divide-y divide-border/60">
             {filtered.map((r) => {
               const nomes = r.requisicao_unidades
                 .map(ru => ru.unidades?.nome)
@@ -250,10 +250,10 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
               return (
                 <li
                   key={r.id}
-                  className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors cursor-pointer group"
+                  className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer group"
                 >
                   {/* Nº */}
-                  <div className="self-center font-mono text-[11px] text-zinc-400">
+                  <div className="self-center font-mono text-[11px] text-muted-foreground">
                     {r.numero}
                   </div>
 
@@ -266,7 +266,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                           urgente
                         </span>
                       )}
-                      <span className="text-sm font-medium text-zinc-100 truncate">
+                      <span className="text-sm font-medium text-foreground truncate">
                         {r.titulo}
                       </span>
                     </div>
@@ -276,25 +276,25 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                   <div className="self-center flex items-center gap-2 min-w-0">
                     <div className={cn(
                       "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
-                      "bg-zinc-700 text-zinc-300",
+                      "bg-muted text-muted-foreground",
                     )}>
                       {r.solicitante ? getInitials(r.solicitante.nome) : "?"}
                     </div>
-                    <span className="text-[12px] text-zinc-400 truncate">
+                    <span className="text-[12px] text-muted-foreground truncate">
                       {r.solicitante?.nome ?? "—"}
                     </span>
                   </div>
 
                   {/* Unidade */}
                   <div className="self-center">
-                    <span className="text-[12px] text-zinc-400 truncate block">
+                    <span className="text-[12px] text-muted-foreground truncate block">
                       {unidadeLabel}
                     </span>
                   </div>
 
                   {/* Itens */}
                   <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-zinc-400">
+                    <span className="font-mono text-[12px] text-muted-foreground">
                       {r.requisicao_itens.length}
                     </span>
                   </div>
@@ -302,11 +302,11 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                   {/* Valor est. */}
                   <div className="self-center text-right">
                     {r.valor_estimado ? (
-                      <span className="font-mono text-[12px] text-zinc-300">
+                      <span className="font-mono text-[12px] text-foreground/80">
                         {formatBRL(r.valor_estimado)}
                       </span>
                     ) : (
-                      <span className="text-[12px] text-zinc-600">—</span>
+                      <span className="text-[12px] text-muted-foreground/60">—</span>
                     )}
                   </div>
 
@@ -322,7 +322,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
 
                   {/* Criada */}
                   <div className="self-center">
-                    <span className="text-[12px] text-zinc-500">
+                    <span className="text-[12px] text-muted-foreground">
                       {relativeTime(r.created_at)}
                     </span>
                   </div>
@@ -331,7 +331,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                   <div className="self-center flex justify-end">
                     <ChevronRight
                       size={14}
-                      className="text-zinc-700 group-hover:text-zinc-400 transition-colors"
+                      className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
                     />
                   </div>
                 </li>
@@ -342,8 +342,8 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
 
         {/* Footer */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-zinc-800/60">
-            <span className="text-[12px] text-zinc-600">
+          <div className="px-5 py-3 border-t border-border/60">
+            <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === requisicoes.length
                 ? `${requisicoes.length} requisição${requisicoes.length !== 1 ? "ões" : ""}`
                 : `${filtered.length} de ${requisicoes.length} requisição${requisicoes.length !== 1 ? "ões" : ""}`}

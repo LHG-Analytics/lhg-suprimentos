@@ -63,7 +63,7 @@ export function SyncOmieButton() {
       disabled={syncing}
       className={cn(
         "inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors",
-        "border-zinc-700 bg-zinc-800/60 text-zinc-200 hover:bg-zinc-700/80 hover:border-zinc-600",
+        "border-border bg-muted/60 text-foreground hover:bg-muted hover:border-border",
         "disabled:opacity-50 disabled:cursor-not-allowed",
       )}
     >

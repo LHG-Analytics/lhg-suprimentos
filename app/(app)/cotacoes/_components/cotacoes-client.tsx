@@ -71,12 +71,12 @@ function formatDate(iso: string) {
 // ── Status badge ─────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<CotStatus, { label: string; cls: string }> = {
-  rascunho:  { label: "Rascunho",    cls: "bg-zinc-800 text-zinc-400 ring-1 ring-zinc-700/50" },
+  rascunho:  { label: "Rascunho",    cls: "bg-muted text-muted-foreground ring-1 ring-border/50" },
   cotacao:   { label: "Em cotação",  cls: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20" },
   pendente:  { label: "Pendente",    cls: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20" },
   aprovado:  { label: "Aprovado",    cls: "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" },
   rejeitado: { label: "Rejeitado",   cls: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20" },
-  cancelado: { label: "Cancelado",   cls: "bg-zinc-800/50 text-zinc-600 ring-1 ring-zinc-700/30" },
+  cancelado: { label: "Cancelado",   cls: "bg-muted/50 text-muted-foreground/70 ring-1 ring-border/30" },
 };
 
 const FILTER_ORDER: FilterStatus[] = [
@@ -135,11 +135,11 @@ function NovaCotacaoModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[20vh] px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80">
-          <h2 className="text-base font-semibold text-zinc-50">Nova cotação</h2>
-          <button onClick={handleClose} className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
+          <h2 className="text-base font-semibold text-foreground">Nova cotação</h2>
+          <button onClick={handleClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             ✕
           </button>
         </div>
@@ -148,7 +148,7 @@ function NovaCotacaoModal({
         <div className="px-5 py-5 space-y-4">
           {/* Título */}
           <div>
-            <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
+            <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
               Título *
             </label>
             <input
@@ -158,9 +158,9 @@ function NovaCotacaoModal({
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               className={cn(
-                "w-full rounded-lg border bg-zinc-900/60 px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600",
+                "w-full rounded-lg border bg-muted/60 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50",
                 "focus:outline-none transition-colors",
-                errors.titulo ? "border-red-500/50" : "border-zinc-800 focus:border-zinc-600",
+                errors.titulo ? "border-red-500/50" : "border-border focus:border-border",
               )}
             />
             {errors.titulo && <p className="mt-1 text-[11px] text-red-400">{errors.titulo}</p>}
@@ -169,8 +169,8 @@ function NovaCotacaoModal({
           {/* Requisição relacionada (opcional) */}
           {requisicoes.length > 0 && (
             <div>
-              <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
-                Requisição de origem <span className="normal-case text-zinc-600">(opcional)</span>
+              <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
+                Requisição de origem <span className="normal-case text-muted-foreground/70">(opcional)</span>
               </label>
               <select
                 value={reqId}
@@ -180,8 +180,8 @@ function NovaCotacaoModal({
                   if (req && !titulo.trim()) setTitulo(req.titulo);
                 }}
                 className={cn(
-                  "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5",
-                  "text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 transition-colors",
+                  "w-full rounded-lg border border-border bg-muted/60 px-3 py-2.5",
+                  "text-sm text-foreground/80 focus:outline-none focus:border-border transition-colors",
                   "appearance-none cursor-pointer",
                 )}
               >
@@ -203,28 +203,28 @@ function NovaCotacaoModal({
                 "w-9 h-5 rounded-full border transition-colors relative",
                 urgente
                   ? "bg-red-500/30 border-red-500/50"
-                  : "bg-zinc-800 border-zinc-700",
+                  : "bg-muted border-border",
               )}
             >
               <div className={cn(
                 "absolute top-0.5 w-4 h-4 rounded-full transition-all",
-                urgente ? "left-[18px] bg-red-400" : "left-0.5 bg-zinc-500",
+                urgente ? "left-[18px] bg-red-400" : "left-0.5 bg-muted-foreground",
               )} />
             </div>
             <div>
-              <span className={cn("text-sm font-medium", urgente ? "text-red-300" : "text-zinc-400")}>
+              <span className={cn("text-sm font-medium", urgente ? "text-red-300" : "text-muted-foreground")}>
                 Cotação urgente
               </span>
-              <p className="text-[11px] text-zinc-600">Prazo reduzido e notificação imediata</p>
+              <p className="text-[11px] text-muted-foreground/70">Prazo reduzido e notificação imediata</p>
             </div>
           </label>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-800/60">
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border/60">
           <button
             onClick={handleClose}
-            className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+            className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors"
           >
             Cancelar
           </button>
@@ -295,8 +295,8 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50 leading-tight">Cotações</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Gestão de cotações e comparativo de fornecedores</p>
+          <h1 className="text-xl font-semibold text-foreground leading-tight">Cotações</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">Gestão de cotações e comparativo de fornecedores</p>
         </div>
         <button
           onClick={() => setModalOpen(true)}
@@ -330,14 +330,14 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
           {
             label: "CICLO MÉDIO (dias)",
             value: cicloMedio,
-            color: "text-zinc-50",
+            color: "text-foreground",
             sub:   "do rascunho até aprovação",
           },
         ].map(({ label, value, color, sub }) => (
-          <div key={label} className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-5 py-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">{label}</div>
+          <div key={label} className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4">
+            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{label}</div>
             <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>{value}</div>
-            <div className="text-[11px] text-zinc-600 mt-0.5">{sub}</div>
+            <div className="text-[11px] text-muted-foreground/70 mt-0.5">{sub}</div>
           </div>
         ))}
       </div>
@@ -354,14 +354,14 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
                 filter === s
-                  ? "border-zinc-600 bg-zinc-800 text-zinc-100"
-                  : "border-zinc-800/80 bg-zinc-900/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300",
+                  ? "border-border bg-muted text-foreground"
+                  : "border-border/80 bg-muted/40 text-muted-foreground hover:border-border hover:text-foreground/80",
               )}
             >
               {FILTER_LABELS[s]}
               <span className={cn(
                 "rounded-full px-1.5 py-0.5 text-[10px] font-mono leading-none",
-                filter === s ? "bg-zinc-700 text-zinc-300" : "bg-zinc-800/80 text-zinc-600",
+                filter === s ? "bg-muted text-foreground/80" : "bg-muted/80 text-muted-foreground/70",
               )}>
                 {count}
               </span>
@@ -372,39 +372,39 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
       {/* ── Busca ───────────────────────────────────────────────────────────── */}
       <div className="relative w-full max-w-sm">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <input
           type="text"
           placeholder="Buscar por nº, título, comprador…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={cn(
-            "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 pl-9 pr-4 py-2",
-            "text-sm text-zinc-200 placeholder:text-zinc-600",
-            "focus:outline-none focus:border-zinc-600 transition-colors",
+            "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2",
+            "text-sm text-foreground placeholder:text-muted-foreground/50",
+            "focus:outline-none focus:border-border transition-colors",
           )}
         />
         {query && (
-          <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 text-xs">
+          <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground text-xs">
             ✕
           </button>
         )}
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-zinc-800/80">
+        <div className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
           {["Nº", "TÍTULO", "UNIDADE", "ITENS", "FORN.", "VALOR EST.", "ECONOMIA IA", "STATUS", "PRAZO", ""].map(h => (
-            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">{h}</div>
+            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{h}</div>
           ))}
         </div>
 
         {/* Linhas */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <Scale size={28} className="text-zinc-700" />
-            <p className="text-sm text-zinc-500">
+            <Scale size={28} className="text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
               {query || filter !== "todas"
                 ? "Nenhuma cotação encontrada"
                 : "Nenhuma cotação ainda"}
@@ -419,7 +419,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800/60">
+          <ul className="divide-y divide-border/50">
             {filtered.map((c) => {
               const nomes = c.cotacao_unidades.map(cu => cu.unidades?.nome).filter(Boolean);
               const unidadeLabel = nomes.length === 0
@@ -429,10 +429,10 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                 <li
                   key={c.id}
                   onClick={() => router.push(`/cotacoes/${c.id}`)}
-                  className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors cursor-pointer group"
+                  className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer group"
                 >
                   {/* Nº */}
-                  <div className="self-center font-mono text-[11px] text-zinc-400">{c.numero}</div>
+                  <div className="self-center font-mono text-[11px] text-muted-foreground">{c.numero}</div>
 
                   {/* Título */}
                   <div className="self-center min-w-0">
@@ -443,31 +443,31 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                       {c.ai_analisada_em && (
                         <Sparkles size={11} className="text-emerald-400 shrink-0" />
                       )}
-                      <span className="text-sm font-medium text-zinc-100 truncate">{c.titulo}</span>
+                      <span className="text-sm font-medium text-foreground truncate">{c.titulo}</span>
                     </div>
                   </div>
 
                   {/* Unidade */}
                   <div className="self-center">
-                    <span className="text-[12px] text-zinc-400 truncate block">{unidadeLabel}</span>
+                    <span className="text-[12px] text-muted-foreground truncate block">{unidadeLabel}</span>
                   </div>
 
                   {/* Itens */}
                   <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-zinc-400">{c.cotacao_itens.length}</span>
+                    <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_itens.length}</span>
                   </div>
 
                   {/* Forn. */}
                   <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-zinc-400">{c.cotacao_fornecedores.length}</span>
+                    <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_fornecedores.length}</span>
                   </div>
 
                   {/* Valor est. */}
                   <div className="self-center text-right">
                     {c.valor_estimado ? (
-                      <span className="font-mono text-[12px] text-zinc-300">{formatBRL(c.valor_estimado)}</span>
+                      <span className="font-mono text-[12px] text-foreground/80">{formatBRL(c.valor_estimado)}</span>
                     ) : (
-                      <span className="text-[12px] text-zinc-600">—</span>
+                      <span className="text-[12px] text-muted-foreground/70">—</span>
                     )}
                   </div>
 
@@ -483,7 +483,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                         )}
                       </div>
                     ) : (
-                      <span className="text-[12px] text-zinc-600">—</span>
+                      <span className="text-[12px] text-muted-foreground/70">—</span>
                     )}
                   </div>
 
@@ -500,18 +500,18 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                   {/* Prazo */}
                   <div className="self-center">
                     {c.prazo ? (
-                      <div className="flex items-center gap-1 text-[12px] text-zinc-500">
+                      <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
                         <Calendar size={10} />
                         {formatDate(c.prazo)}
                       </div>
                     ) : (
-                      <span className="text-[12px] text-zinc-600">—</span>
+                      <span className="text-[12px] text-muted-foreground/70">—</span>
                     )}
                   </div>
 
                   {/* Chevron */}
                   <div className="self-center flex justify-end">
-                    <ChevronRight size={14} className="text-zinc-700 group-hover:text-zinc-400 transition-colors" />
+                    <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                   </div>
                 </li>
               );
@@ -521,8 +521,8 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
         {/* Footer */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-zinc-800/60">
-            <span className="text-[12px] text-zinc-600">
+          <div className="px-5 py-3 border-t border-border/60">
+            <span className="text-[12px] text-muted-foreground/70">
               {filtered.length === cotacoes.length
                 ? `${cotacoes.length} cotação${cotacoes.length !== 1 ? "ões" : ""}`
                 : `${filtered.length} de ${cotacoes.length} cotação${cotacoes.length !== 1 ? "ões" : ""}`}

@@ -89,10 +89,10 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50 leading-tight">
+          <h1 className="text-xl font-semibold text-foreground leading-tight">
             Fornecedores
           </h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">
+          <p className="text-[13px] text-muted-foreground mt-0.5">
             Cadastro sincronizado com o Omie ERP
           </p>
         </div>
@@ -101,13 +101,13 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         <div className="flex items-center gap-3 shrink-0">
           {lastLog && (
             <div className="text-right hidden sm:block">
-              <div className="text-[11px] text-zinc-500 leading-tight">
+              <div className="text-[11px] text-muted-foreground leading-tight">
                 Última sincronização
               </div>
-              <div className="text-[12px] text-zinc-400 font-mono leading-tight mt-0.5 flex items-center gap-1.5 justify-end">
+              <div className="text-[12px] text-muted-foreground font-mono leading-tight mt-0.5 flex items-center gap-1.5 justify-end">
                 <RefreshCw size={10} className={cn(lastLog.status === "ok" ? "text-emerald-400" : "text-red-400")} />
                 {relativeTime(lastLog.created_at)}
-                <span className="text-zinc-600">·</span>
+                <span className="text-muted-foreground/60">·</span>
                 <span>{lastLog.total ?? 0} registros</span>
               </div>
             </div>
@@ -119,22 +119,22 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       {/* ── Stats ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "TOTAL",      value: fornecedores.length, color: "text-zinc-50",     sub: null },
+          { label: "TOTAL",      value: fornecedores.length, color: "text-foreground",  sub: null },
           { label: "COM E-MAIL", value: totalComEmail,       color: "text-amber-400",   sub: `${fornecedores.length - totalComEmail} sem e-mail` },
           { label: "OMIE",       value: totalOmie,           color: "text-sky-400",     sub: null },
         ].map(({ label, value, color, sub }) => (
           <div
             key={label}
-            className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-5 py-4"
+            className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4"
           >
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
+            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
               {label}
             </div>
             <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
               {value}
             </div>
             {sub && (
-              <div className="text-[11px] text-zinc-600 mt-0.5">{sub}</div>
+              <div className="text-[11px] text-muted-foreground/60 mt-0.5">{sub}</div>
             )}
           </div>
         ))}
@@ -144,7 +144,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       <div className="relative">
         <Search
           size={14}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
         />
         <input
           type="text"
@@ -152,15 +152,15 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={cn(
-            "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 pl-9 pr-4 py-2.5",
-            "text-sm text-zinc-200 placeholder:text-zinc-600",
-            "focus:outline-none focus:border-zinc-600 focus:ring-0 transition-colors",
+            "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5",
+            "text-sm text-foreground placeholder:text-muted-foreground/50",
+            "focus:outline-none focus:border-border focus:ring-0 transition-colors",
           )}
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 text-xs"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs"
           >
             ✕
           </button>
@@ -168,14 +168,14 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-zinc-800/80">
+        <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-border/80">
           {["EMPRESA", "CNPJ", "CONTATO", "LOCALIZAÇÃO"].map(
             (h) => (
               <div
                 key={h}
-                className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500"
+                className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground"
               >
                 {h}
               </div>
@@ -186,56 +186,56 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         {/* Linhas */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <Building2 size={28} className="text-zinc-700" />
-            <p className="text-sm text-zinc-500">
+            <Building2 size={28} className="text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
               {query ? "Nenhum fornecedor encontrado" : "Nenhum fornecedor cadastrado"}
             </p>
             {!query && (
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-muted-foreground/60">
                 Clique em &quot;Sincronizar Omie&quot; para importar
               </p>
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800/60">
+          <ul className="divide-y divide-border/60">
             {filtered.map((f) => (
               <li
                 key={f.id}
-                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
+                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
               >
                 {/* Empresa */}
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-zinc-100 truncate leading-tight">
+                  <div className="text-sm font-medium text-foreground truncate leading-tight">
                     {f.nome_fantasia || f.razao_social}
                   </div>
                   {f.nome_fantasia && (
-                    <div className="text-[11px] text-zinc-500 truncate mt-0.5">
+                    <div className="text-[11px] text-muted-foreground truncate mt-0.5">
                       {f.razao_social}
                     </div>
                   )}
                 </div>
 
                 {/* CNPJ */}
-                <div className="font-mono text-[12px] text-zinc-400 self-center">
+                <div className="font-mono text-[12px] text-muted-foreground self-center">
                   {formatCnpj(f.cnpj)}
                 </div>
 
                 {/* Contato — e-mail em destaque, telefone abaixo */}
                 <div className="min-w-0 self-center space-y-0.5">
                   {f.email ? (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-300 truncate">
-                      <Mail size={10} className="text-zinc-500 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-[12px] text-foreground/80 truncate">
+                      <Mail size={10} className="text-muted-foreground shrink-0" />
                       <span className="truncate">{f.email}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-600">
-                      <Mail size={10} className="text-zinc-700 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground/60">
+                      <Mail size={10} className="text-muted-foreground/40 shrink-0" />
                       <span>sem e-mail</span>
                     </div>
                   )}
                   {f.telefone && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-500">
-                      <Phone size={10} className="text-zinc-600 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                      <Phone size={10} className="text-muted-foreground/60 shrink-0" />
                       {f.telefone}
                     </div>
                   )}
@@ -244,15 +244,15 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
                 {/* Localização */}
                 <div className="self-center">
                   {f.cidade ? (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-400">
-                      <MapPin size={10} className="text-zinc-600 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                      <MapPin size={10} className="text-muted-foreground/60 shrink-0" />
                       <span className="truncate">
                         {f.cidade}
                         {f.uf && `, ${f.uf}`}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[12px] text-zinc-600">—</span>
+                    <span className="text-[12px] text-muted-foreground/60">—</span>
                   )}
                 </div>
               </li>
@@ -262,8 +262,8 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
 
         {/* Footer com contagem */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-zinc-800/60 flex items-center justify-between">
-            <span className="text-[12px] text-zinc-600">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+            <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === fornecedores.length
                 ? `${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`
                 : `${filtered.length} de ${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`}

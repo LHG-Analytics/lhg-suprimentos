@@ -34,7 +34,7 @@ const ROLE_COLOR: Record<Role, string> = {
   admin:       "text-lhg-400 bg-lhg-500/15",
   comprador:   "text-sky-400 bg-sky-500/15",
   aprovador:   "text-amber-400 bg-amber-500/15",
-  solicitante: "text-zinc-400 bg-zinc-800",
+  solicitante: "text-muted-foreground bg-muted",
 };
 
 // ── Componente ─────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ export function UserRowActions({
               className="fixed inset-0 z-10"
               onClick={() => setDropOpen(false)}
             />
-            <div className="absolute left-0 top-full mt-1 z-20 w-36 rounded-lg border border-zinc-800 bg-zinc-950 shadow-xl py-1">
+            <div className="absolute left-0 top-full mt-1 z-20 w-36 rounded-lg border border-border bg-background shadow-xl py-1">
               {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
                 <button
                   key={r}
@@ -101,8 +101,8 @@ export function UserRowActions({
                   className={cn(
                     "w-full text-left px-3 py-1.5 text-xs transition-colors",
                     r === currentRole
-                      ? "text-zinc-100 bg-zinc-800/60"
-                      : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40",
+                      ? "text-foreground bg-muted/60"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
                   )}
                 >
                   {ROLE_LABELS[r]}
@@ -121,8 +121,8 @@ export function UserRowActions({
           className={cn(
             "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
             banned
-              ? "text-zinc-500 hover:text-lhg-400 hover:bg-lhg-500/10"
-              : "text-zinc-500 hover:text-red-400 hover:bg-red-500/10",
+              ? "text-muted-foreground hover:text-lhg-400 hover:bg-lhg-500/10"
+              : "text-muted-foreground hover:text-red-400 hover:bg-red-500/10",
           )}
           title={banned ? "Restaurar acesso" : "Suspender usuário"}
         >

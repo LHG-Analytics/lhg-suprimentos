@@ -126,11 +126,11 @@ function FamiliaSelect({
         onChange={e => onChange(e.target.value)}
         className={cn(
           "w-full appearance-none rounded-lg border px-3 py-1.5 pr-7",
-          "text-[12px] font-medium bg-zinc-900 transition-colors",
-          "focus:outline-none focus:ring-1 focus:ring-zinc-600",
+          "text-[12px] font-medium bg-muted transition-colors",
+          "focus:outline-none focus:ring-1 focus:ring-border",
           value
             ? "border-emerald-700/60 text-emerald-300"
-            : "border-zinc-700 text-zinc-500",
+            : "border-border text-muted-foreground",
         )}
       >
         <option value="">Selecione a família…</option>
@@ -138,7 +138,7 @@ function FamiliaSelect({
           <option key={f} value={f}>{f}</option>
         ))}
       </select>
-      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
     </div>
   );
 }
@@ -232,8 +232,8 @@ function PainelEntradaNF({
   return (
     <div className="space-y-4">
       {/* Barra de busca */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
-        <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-3 font-medium">
+      <div className="rounded-xl border border-border/80 bg-muted/40 p-4">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-3 font-medium">
           Consultar NF no Omie
         </div>
 
@@ -244,13 +244,13 @@ function PainelEntradaNF({
               <select
                 value={unidadeId}
                 onChange={e => setUnidadeId(e.target.value)}
-                className="appearance-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 pr-7 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                className="appearance-none rounded-lg border border-border bg-muted px-3 py-2.5 pr-7 text-sm text-foreground/80 focus:outline-none focus:ring-1 focus:ring-border"
               >
                 {unidades.map(u => (
                   <option key={u.id} value={u.id}>{u.nome}</option>
                 ))}
               </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             </div>
           )}
 
@@ -261,7 +261,7 @@ function PainelEntradaNF({
             onChange={e => setNumeroBusca(e.target.value)}
             onKeyDown={e => e.key === "Enter" && buscarNF()}
             placeholder="Número da NF (ex: 12345)"
-            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600 font-mono"
+            className="flex-1 rounded-lg border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-border font-mono"
           />
 
           <button
@@ -291,16 +291,16 @@ function PainelEntradaNF({
 
       {/* Resultado */}
       {nfData && (
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+        <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
           {/* Cabeçalho da NF */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/60 bg-zinc-900/60">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-muted/60">
             <div className="flex items-center gap-3">
               <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
               <div>
-                <div className="text-sm font-semibold text-zinc-100">
+                <div className="text-sm font-semibold text-foreground">
                   NF-e {nfData.cabecalho.numero} · Série {nfData.cabecalho.serie}
                 </div>
-                <div className="text-[11px] text-zinc-500">
+                <div className="text-[11px] text-muted-foreground">
                   {nfData.cabecalho.razao_social ?? `CNPJ ${nfData.cabecalho.cnpj ?? "—"}`}
                   {" · "}Emissão: {nfData.cabecalho.data_emissao}
                   {" · "}{nfData.unidade_nome}
@@ -308,10 +308,10 @@ function PainelEntradaNF({
               </div>
             </div>
             <div className="text-right">
-              <div className="font-mono text-lg font-bold text-zinc-100">
+              <div className="font-mono text-lg font-bold text-foreground">
                 {formatBRL(nfData.cabecalho.valor_total)}
               </div>
-              <div className="text-[11px] text-zinc-600">{nfData.itens.length} iten{nfData.itens.length !== 1 ? "s" : ""}</div>
+              <div className="text-[11px] text-muted-foreground/60">{nfData.itens.length} iten{nfData.itens.length !== 1 ? "s" : ""}</div>
             </div>
           </div>
 
@@ -319,12 +319,12 @@ function PainelEntradaNF({
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-zinc-800/60">
-                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto (Omie)</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Valor Unit.</th>
-                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Total</th>
-                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600 w-[220px]">
+                <tr className="border-b border-border/60">
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground/60">Produto (Omie)</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Qtd</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Valor Unit.</th>
+                  <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Total</th>
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground/60 w-[220px]">
                     Família de Produto
                     <span className="ml-1 text-red-400">*</span>
                   </th>
@@ -332,18 +332,18 @@ function PainelEntradaNF({
               </thead>
               <tbody>
                 {nfData.itens.map(item => (
-                  <tr key={item.n_item} className="border-b border-zinc-800/40 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                  <tr key={item.n_item} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
                     <td className="px-4 py-2.5">
-                      <div className="text-sm text-zinc-200 truncate max-w-[260px]">{item.descricao}</div>
-                      <div className="text-[10px] text-zinc-600 font-mono">{item.codigo} · {item.unidade}</div>
+                      <div className="text-sm text-foreground truncate max-w-[260px]">{item.descricao}</div>
+                      <div className="text-[10px] text-muted-foreground/60 font-mono">{item.codigo} · {item.unidade}</div>
                     </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-300">
+                    <td className="px-4 py-2.5 text-right text-sm font-mono text-foreground/80">
                       {item.qtd}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-mono text-zinc-300">
+                    <td className="px-4 py-2.5 text-right text-sm font-mono text-foreground/80">
                       {formatBRL(item.preco_unit)}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-mono font-semibold text-zinc-100">
+                    <td className="px-4 py-2.5 text-right text-sm font-mono font-semibold text-foreground">
                       {formatBRL(item.valor_total)}
                     </td>
                     <td className="px-4 py-2.5">
@@ -359,8 +359,8 @@ function PainelEntradaNF({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-zinc-800/60 bg-zinc-900/40">
-            <div className="text-[12px] text-zinc-500">
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-border/60 bg-muted/40">
+            <div className="text-[12px] text-muted-foreground">
               {todosSelecionados
                 ? <span className="text-emerald-400 flex items-center gap-1"><Check size={12} /> Todas as famílias selecionadas</span>
                 : <span className="text-amber-400">Selecione a família de todos os itens para continuar</span>
@@ -369,7 +369,7 @@ function PainelEntradaNF({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setNfData(null); setFamilias({}); }}
-                className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+                className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors"
               >
                 Cancelar
               </button>
@@ -419,11 +419,11 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
 
   return (
     <div className={cn(
-      "rounded-xl border bg-zinc-900/40 overflow-hidden transition-all",
-      nf.status === "erro_omie" ? "border-red-700/40" : "border-zinc-800/80",
+      "rounded-xl border bg-muted/40 overflow-hidden transition-all",
+      nf.status === "erro_omie" ? "border-red-700/40" : "border-border/80",
     )}>
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-zinc-800/20 transition-colors"
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-muted/60 transition-colors"
         onClick={() => setExpandida(v => !v)}
       >
         <div className="flex items-center gap-3">
@@ -433,8 +433,8 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
           )} />
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-zinc-100">NF-e {numDisplay}</span>
-              {nf.serie && <span className="text-[11px] text-zinc-600">Série {nf.serie}</span>}
+              <span className="text-sm font-semibold text-foreground">NF-e {numDisplay}</span>
+              {nf.serie && <span className="text-[11px] text-muted-foreground/60">Série {nf.serie}</span>}
               <span className={cn(
                 "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
                 nf.lancada_no_omie
@@ -446,7 +446,7 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
                 {nf.lancada_no_omie ? "✓ No Omie" : nf.status === "erro_omie" ? "Erro Omie" : "Ag. Omie"}
               </span>
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">
+            <div className="text-[11px] text-muted-foreground mt-0.5">
               {fornNome}
               {nf.emissao && ` · Emissão: ${formatDate(nf.emissao)}`}
               {` · Registrada: ${formatDate(nf.created_at)}`}
@@ -455,8 +455,8 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="font-mono text-sm font-semibold text-zinc-100">{formatBRL(nf.valor_total)}</div>
-            <div className="text-[10px] text-zinc-600">{nf.nf_itens.length} iten{nf.nf_itens.length !== 1 ? "s" : ""}</div>
+            <div className="font-mono text-sm font-semibold text-foreground">{formatBRL(nf.valor_total)}</div>
+            <div className="text-[10px] text-muted-foreground/60">{nf.nf_itens.length} iten{nf.nf_itens.length !== 1 ? "s" : ""}</div>
           </div>
           {!nf.lancada_no_omie && nf.status !== "lancada" && (
             <button
@@ -468,36 +468,36 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
               {pending ? "Lançando…" : "Lançar Omie"}
             </button>
           )}
-          <ArrowRight size={13} className={cn("text-zinc-600 transition-transform", expandida && "rotate-90")} />
+          <ArrowRight size={13} className={cn("text-muted-foreground/60 transition-transform", expandida && "rotate-90")} />
         </div>
       </div>
 
       {/* Itens expandidos */}
       {expandida && nf.nf_itens.length > 0 && (
-        <div className="border-t border-zinc-800/60 overflow-x-auto">
+        <div className="border-t border-border/60 overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-zinc-800/40">
-                <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Produto</th>
-                <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-zinc-600">Família</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Qtd</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Preço Unit.</th>
-                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-zinc-600">Total</th>
+              <tr className="border-b border-border/40">
+                <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground/60">Produto</th>
+                <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground/60">Família</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Qtd</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Preço Unit.</th>
+                <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wider text-muted-foreground/60">Total</th>
               </tr>
             </thead>
             <tbody>
               {nf.nf_itens.map(item => (
-                <tr key={item.id} className="border-b border-zinc-800/30 last:border-0">
-                  <td className="px-4 py-2 text-sm text-zinc-300 max-w-[200px] truncate">{item.descricao_omie ?? "—"}</td>
+                <tr key={item.id} className="border-b border-border/30 last:border-0">
+                  <td className="px-4 py-2 text-sm text-foreground/80 max-w-[200px] truncate">{item.descricao_omie ?? "—"}</td>
                   <td className="px-4 py-2">
                     {item.familia_omie
                       ? <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 text-sky-400 bg-sky-500/10 ring-sky-500/20">{item.familia_omie}</span>
-                      : <span className="text-[10px] text-zinc-600">—</span>
+                      : <span className="text-[10px] text-muted-foreground/60">—</span>
                     }
                   </td>
-                  <td className="px-4 py-2 text-right text-sm font-mono text-zinc-400">{item.qtd_nf ?? "—"}</td>
-                  <td className="px-4 py-2 text-right text-sm font-mono text-zinc-400">{formatBRL(item.preco_nf)}</td>
-                  <td className="px-4 py-2 text-right text-sm font-mono font-semibold text-zinc-200">
+                  <td className="px-4 py-2 text-right text-sm font-mono text-muted-foreground">{item.qtd_nf ?? "—"}</td>
+                  <td className="px-4 py-2 text-right text-sm font-mono text-muted-foreground">{formatBRL(item.preco_nf)}</td>
+                  <td className="px-4 py-2 text-right text-sm font-mono font-semibold text-foreground">
                     {formatBRL(item.qtd_nf != null && item.preco_nf != null ? item.qtd_nf * item.preco_nf : null)}
                   </td>
                 </tr>
@@ -534,12 +534,12 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50">Entrada de Notas Fiscais</h1>
-          <p className="text-[12px] text-zinc-500 mt-0.5">
+          <h1 className="text-xl font-semibold text-foreground">Entrada de Notas Fiscais</h1>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
             Consulta Omie · Classificação por Família de Produto
           </p>
         </div>
-        <div className="flex items-center gap-2 text-[12px] text-zinc-500">
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span className="text-emerald-400 font-semibold">{notas.filter(n => n.lancada_no_omie).length}</span> lançadas
           <span>·</span>
           <span className="text-amber-400 font-semibold">{notas.filter(n => !n.lancada_no_omie).length}</span> pendentes
@@ -549,12 +549,12 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Registradas",    value: notas.length,                                            color: "text-zinc-100" },
+          { label: "Registradas",    value: notas.length,                                            color: "text-foreground" },
           { label: "No Omie",        value: notas.filter(n => n.lancada_no_omie).length,             color: "text-emerald-400" },
           { label: "Ag. Lançamento", value: notas.filter(n => !n.lancada_no_omie && n.status !== "conferencia").length, color: "text-amber-400" },
         ].map(k => (
-          <div key={k.label} className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-600">{k.label}</div>
+          <div key={k.label} className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">{k.label}</div>
             <div className={cn("text-2xl font-mono font-semibold mt-0.5", k.color)}>{k.value}</div>
           </div>
         ))}
@@ -562,7 +562,7 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
 
       {/* Tabs */}
       <div className="flex items-center gap-3">
-        <div className="flex gap-1 bg-zinc-900/60 rounded-lg p-0.5 border border-zinc-800">
+        <div className="flex gap-1 bg-muted/60 rounded-lg p-0.5 border border-border">
           {([
             { key: "notas",   label: `NFs Registradas (${notas.length})` },
             { key: "entrada", label: "Nova Entrada" },
@@ -572,7 +572,7 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
               onClick={() => setAba(t.key)}
               className={cn(
                 "rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors",
-                aba === t.key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
+                aba === t.key ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground/80",
               )}
             >
               {t.label}
@@ -582,13 +582,13 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
 
         {aba === "notas" && (
           <div className="relative flex-1 max-w-[300px]">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
             <input
               type="text"
               value={busca}
               onChange={e => setBusca(e.target.value)}
               placeholder="Buscar por número ou fornecedor…"
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/40 pl-8 pr-3 py-2 text-sm text-zinc-300 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700 transition-all"
+              className="w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-border transition-all"
             />
           </div>
         )}
@@ -603,11 +603,11 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
       ) : (
         <div className="space-y-2">
           {notasFiltradas.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 flex flex-col items-center justify-center py-16 gap-3">
-              <ReceiptText size={32} className="text-zinc-700" strokeWidth={1.2} />
-              <p className="text-sm text-zinc-500">Nenhuma nota fiscal registrada</p>
-              <p className="text-[12px] text-zinc-600">
-                Use a aba <strong className="text-zinc-400">Nova Entrada</strong> para registrar uma NF pelo número
+            <div className="rounded-xl border border-border/80 bg-muted/40 flex flex-col items-center justify-center py-16 gap-3">
+              <ReceiptText size={32} className="text-muted-foreground/40" strokeWidth={1.2} />
+              <p className="text-sm text-muted-foreground">Nenhuma nota fiscal registrada</p>
+              <p className="text-[12px] text-muted-foreground/60">
+                Use a aba <strong className="text-muted-foreground">Nova Entrada</strong> para registrar uma NF pelo número
               </p>
               <button
                 onClick={() => setAba("entrada")}

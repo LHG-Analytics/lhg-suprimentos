@@ -21,7 +21,7 @@ function Avatar({ name, size = 32 }: { name: string; size?: number }) {
     .join("");
   return (
     <div
-      className="shrink-0 rounded-full bg-lhg-800 text-zinc-50 flex items-center justify-center font-mono font-semibold select-none"
+      className="shrink-0 rounded-full bg-lhg-800 text-foreground flex items-center justify-center font-mono font-semibold select-none"
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {initials}
@@ -47,10 +47,10 @@ export default async function UsuariosPage() {
   if (myProfile?.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center gap-4">
-        <ShieldAlert size={40} className="text-zinc-600" />
+        <ShieldAlert size={40} className="text-muted-foreground/40" />
         <div>
-          <p className="text-zinc-100 font-medium">Acesso restrito</p>
-          <p className="text-zinc-500 text-sm mt-1">
+          <p className="text-foreground font-medium">Acesso restrito</p>
+          <p className="text-muted-foreground text-sm mt-1">
             Apenas administradores podem acessar esta página.
           </p>
         </div>
@@ -87,10 +87,10 @@ export default async function UsuariosPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-2">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-zinc-50">
+          <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
             Usuários
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {users.length} usuário{users.length !== 1 ? "s" : ""} cadastrado{users.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -98,7 +98,7 @@ export default async function UsuariosPage() {
       </div>
 
       {/* Tabela */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
             <thead>
@@ -106,7 +106,7 @@ export default async function UsuariosPage() {
                 {["Usuário", "Papel / Ações", "Membro desde"].map((h) => (
                   <th
                     key={h}
-                    className="text-left px-4 h-10 text-[11px] uppercase tracking-wider text-zinc-500 font-medium"
+                    className="text-left px-4 h-10 text-[11px] uppercase tracking-wider text-muted-foreground font-medium"
                   >
                     {h}
                   </th>
@@ -121,7 +121,7 @@ export default async function UsuariosPage() {
                 return (
                   <tr
                     key={u.id}
-                    className="border-t border-zinc-800/60 hover:bg-zinc-900/40 transition-colors"
+                    className="border-t border-border/60 hover:bg-muted/40 transition-colors"
                   >
                     {/* Usuário */}
                     <td className="px-4 py-2.5">
@@ -130,17 +130,17 @@ export default async function UsuariosPage() {
                           <Avatar name={u.nome} size={32} />
                           {/* Indicador suspenso */}
                           {banned && (
-                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-zinc-950 bg-red-500" />
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-red-500" />
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-zinc-100 font-medium text-sm leading-tight truncate">
+                          <div className="text-foreground font-medium text-sm leading-tight truncate">
                             {u.nome}
                             {isSelf && (
-                              <span className="ml-1.5 text-[10px] text-zinc-500">(você)</span>
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">(você)</span>
                             )}
                           </div>
-                          <div className="text-zinc-500 text-xs leading-tight truncate">
+                          <div className="text-muted-foreground text-xs leading-tight truncate">
                             {u.email}
                           </div>
                         </div>
@@ -158,7 +158,7 @@ export default async function UsuariosPage() {
                     </td>
 
                     {/* Membro desde */}
-                    <td className="px-4 py-2.5 text-zinc-500 text-xs font-mono">
+                    <td className="px-4 py-2.5 text-muted-foreground text-xs font-mono">
                       {u.created_at ? formatDate(u.created_at, "dd/MM/yyyy") : "—"}
                     </td>
                   </tr>
@@ -169,7 +169,7 @@ export default async function UsuariosPage() {
                 <tr>
                   <td
                     colSpan={3}
-                    className="px-4 py-10 text-center text-zinc-600 text-sm border-t border-zinc-800/60"
+                    className="px-4 py-10 text-center text-muted-foreground/60 text-sm border-t border-border/60"
                   >
                     <Users size={24} className="mx-auto mb-2 opacity-40" />
                     Nenhum usuário cadastrado.
@@ -182,22 +182,22 @@ export default async function UsuariosPage() {
       </div>
 
       {/* Legenda de papéis */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/20 px-5 py-4">
-        <div className="text-[11px] uppercase tracking-wider text-zinc-600 mb-3">
+      <div className="rounded-xl border border-border/80 bg-muted/20 px-5 py-4">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground/60 mb-3">
           Papéis e permissões
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { role: "Solicitante", color: "text-zinc-400",  bg: "bg-zinc-800",      desc: "Abre requisições e confere NF da sua unidade" },
-            { role: "Comprador",   color: "text-sky-400",   bg: "bg-sky-500/15",    desc: "Gerencia cotações e pedidos de todas as unidades" },
-            { role: "Aprovador",   color: "text-amber-400", bg: "bg-amber-500/15",  desc: "Aprova pedidos acima da alçada do comprador" },
-            { role: "Admin",       color: "text-lhg-400",   bg: "bg-lhg-500/15",    desc: "Acesso total: usuários, configs e relatórios" },
+            { role: "Solicitante", color: "text-muted-foreground",  bg: "bg-muted",          desc: "Abre requisições e confere NF da sua unidade" },
+            { role: "Comprador",   color: "text-sky-400",           bg: "bg-sky-500/15",      desc: "Gerencia cotações e pedidos de todas as unidades" },
+            { role: "Aprovador",   color: "text-amber-400",         bg: "bg-amber-500/15",    desc: "Aprova pedidos acima da alçada do comprador" },
+            { role: "Admin",       color: "text-lhg-400",           bg: "bg-lhg-500/15",      desc: "Acesso total: usuários, configs e relatórios" },
           ].map((r) => (
             <div key={r.role} className="flex items-start gap-2.5">
               <span className={`text-[11px] font-medium px-2 py-0.5 rounded shrink-0 ${r.bg} ${r.color}`}>
                 {r.role}
               </span>
-              <span className="text-[11px] text-zinc-500 leading-snug">{r.desc}</span>
+              <span className="text-[11px] text-muted-foreground leading-snug">{r.desc}</span>
             </div>
           ))}
         </div>

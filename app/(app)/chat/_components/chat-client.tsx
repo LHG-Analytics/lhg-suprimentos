@@ -46,8 +46,8 @@ function renderMarkdown(text: string) {
     elements.push(
       <ul key={`ul-${elements.length}`} className="space-y-1 my-2">
         {listItems.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-zinc-300">
-            <span className="mt-1.5 w-1 h-1 rounded-full bg-zinc-600 shrink-0" />
+          <li key={i} className="flex items-start gap-2 text-foreground/80">
+            <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/60 shrink-0" />
             <span>{item}</span>
           </li>
         ))}
@@ -61,7 +61,7 @@ function renderMarkdown(text: string) {
     if (line.startsWith("## ")) {
       flushList();
       elements.push(
-        <h3 key={i} className="text-sm font-semibold text-zinc-100 mt-3 mb-1">
+        <h3 key={i} className="text-sm font-semibold text-foreground mt-3 mb-1">
           {line.slice(3)}
         </h3>,
       );
@@ -71,7 +71,7 @@ function renderMarkdown(text: string) {
     if (line.startsWith("### ")) {
       flushList();
       elements.push(
-        <h4 key={i} className="text-sm font-medium text-zinc-200 mt-2 mb-0.5">
+        <h4 key={i} className="text-sm font-medium text-foreground/80 mt-2 mb-0.5">
           {line.slice(4)}
         </h4>,
       );
@@ -92,10 +92,10 @@ function renderMarkdown(text: string) {
     // Bold inline
     const parts = line.split(/(\*\*[^*]+\*\*)/g);
     elements.push(
-      <p key={i} className="text-zinc-300 leading-relaxed">
+      <p key={i} className="text-foreground/80 leading-relaxed">
         {parts.map((part, j) =>
           part.startsWith("**") && part.endsWith("**")
-            ? <strong key={j} className="text-zinc-100 font-semibold">{part.slice(2, -2)}</strong>
+            ? <strong key={j} className="text-foreground font-semibold">{part.slice(2, -2)}</strong>
             : part,
         )}
       </p>,
@@ -124,11 +124,11 @@ function MessageBubble({ msg }: { msg: Message }) {
       <div className={cn(
         "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
         isUser
-          ? "bg-zinc-800 ring-1 ring-zinc-700"
+          ? "bg-muted ring-1 ring-border"
           : "bg-gradient-to-br from-emerald-500 to-sky-500",
       )}>
         {isUser
-          ? <User size={13} className="text-zinc-400" />
+          ? <User size={13} className="text-muted-foreground" />
           : <Sparkles size={12} className="text-white" />
         }
       </div>
@@ -141,14 +141,14 @@ function MessageBubble({ msg }: { msg: Message }) {
         <div className={cn(
           "rounded-2xl px-4 py-3 text-sm relative",
           isUser
-            ? "bg-zinc-800 text-zinc-100 rounded-tr-sm"
-            : "bg-zinc-900/60 border border-zinc-800/60 rounded-tl-sm",
+            ? "bg-muted text-foreground rounded-tr-sm"
+            : "bg-muted/40 border border-border/60 rounded-tl-sm",
         )}>
           {msg.loading ? (
-            <div className="flex items-center gap-1.5 text-zinc-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
           ) : isUser ? (
             <span className="whitespace-pre-wrap">{msg.content}</span>
@@ -161,7 +161,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         {!isUser && !msg.loading && msg.content && (
           <button
             onClick={handleCopy}
-            className="ml-1 flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 opacity-0 group-hover:opacity-100 transition-all"
+            className="ml-1 flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground opacity-0 group-hover:opacity-100 transition-all"
           >
             {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
             {copied ? "Copiado!" : "Copiar"}
@@ -297,20 +297,20 @@ export function ChatClient({ contexto }: Props) {
     <div className="flex flex-col h-[calc(100vh-56px)] max-w-[840px] mx-auto">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/60 shrink-0">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
             <Sparkles size={15} className="text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-zinc-100">Assistente IA de Compras</h1>
-            <p className="text-[11px] text-zinc-500">Powered by Claude · Contexto das cotações atualizado</p>
+            <h1 className="text-sm font-semibold text-foreground">Assistente IA de Compras</h1>
+            <p className="text-[11px] text-muted-foreground">Powered by Claude · Contexto das cotações atualizado</p>
           </div>
         </div>
         {messages.length > 0 && (
           <button
             onClick={handleLimpar}
-            className="flex items-center gap-1.5 text-[12px] text-zinc-600 hover:text-zinc-400 transition-colors"
+            className="flex items-center gap-1.5 text-[12px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
           >
             <RotateCcw size={12} />
             Nova conversa
@@ -326,8 +326,8 @@ export function ChatClient({ contexto }: Props) {
               <Sparkles size={28} className="text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-zinc-100 mb-2">Olá! Como posso ajudar?</h2>
-              <p className="text-[13px] text-zinc-500 leading-relaxed">
+              <h2 className="text-lg font-semibold text-foreground mb-2">Olá! Como posso ajudar?</h2>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
                 Sou seu assistente especializado em compras do LHG. Tenho acesso ao contexto das cotações, pedidos e fornecedores ativos.
               </p>
             </div>
@@ -340,14 +340,14 @@ export function ChatClient({ contexto }: Props) {
                   onClick={() => sendMessage(s.prompt)}
                   disabled={isLoading}
                   className={cn(
-                    "flex items-start gap-2.5 text-left rounded-xl border border-zinc-800",
-                    "bg-zinc-900/40 px-3.5 py-3 transition-colors",
-                    "hover:bg-zinc-800/60 hover:border-zinc-700",
+                    "flex items-start gap-2.5 text-left rounded-xl border border-border",
+                    "bg-muted/40 px-3.5 py-3 transition-colors",
+                    "hover:bg-muted/60 hover:border-border/80",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                   )}
                 >
-                  <s.icon size={14} className="text-zinc-500 shrink-0 mt-0.5" />
-                  <span className="text-[12px] text-zinc-400 leading-snug">{s.label}</span>
+                  <s.icon size={14} className="text-muted-foreground shrink-0 mt-0.5" />
+                  <span className="text-[12px] text-muted-foreground leading-snug">{s.label}</span>
                 </button>
               ))}
             </div>
@@ -363,11 +363,11 @@ export function ChatClient({ contexto }: Props) {
       </div>
 
       {/* Input */}
-      <div className="px-6 py-4 border-t border-zinc-800/60 shrink-0">
+      <div className="px-6 py-4 border-t border-border/60 shrink-0">
         <div className={cn(
-          "flex items-end gap-2 rounded-xl border bg-zinc-900/60",
-          "focus-within:ring-1 focus-within:ring-zinc-600 focus-within:border-zinc-600",
-          "transition-all border-zinc-800",
+          "flex items-end gap-2 rounded-xl border bg-muted/40",
+          "focus-within:ring-1 focus-within:ring-border focus-within:border-border",
+          "transition-all border-border",
         )}>
           <textarea
             ref={inputRef}
@@ -379,7 +379,7 @@ export function ChatClient({ contexto }: Props) {
             disabled={isLoading}
             className={cn(
               "flex-1 resize-none bg-transparent px-4 py-3.5",
-              "text-sm text-zinc-200 placeholder-zinc-600",
+              "text-sm text-foreground placeholder:text-muted-foreground/50",
               "focus:outline-none max-h-[120px] overflow-y-auto",
               "disabled:opacity-50",
             )}
@@ -392,7 +392,7 @@ export function ChatClient({ contexto }: Props) {
               "mr-2 mb-2 p-2 rounded-lg transition-all",
               input.trim() && !isLoading
                 ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                : "text-zinc-700 cursor-not-allowed",
+                : "text-muted-foreground/30 cursor-not-allowed",
             )}
           >
             {isLoading
@@ -401,7 +401,7 @@ export function ChatClient({ contexto }: Props) {
             }
           </button>
         </div>
-        <p className="text-[10px] text-zinc-700 text-center mt-2">
+        <p className="text-[10px] text-muted-foreground/40 text-center mt-2">
           Enter para enviar · Shift+Enter para quebrar linha
         </p>
       </div>

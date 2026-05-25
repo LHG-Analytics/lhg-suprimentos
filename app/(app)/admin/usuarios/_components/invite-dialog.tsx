@@ -73,19 +73,19 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
           />
 
           {/* Dialog */}
-          <div className="relative w-full max-w-[480px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="relative w-full max-w-[480px] rounded-xl border border-border bg-background shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
               <div>
-                <h2 className="text-base font-semibold text-zinc-100">Convidar usuário</h2>
-                <p className="text-xs text-zinc-500 mt-0.5">
+                <h2 className="text-base font-semibold text-foreground">Convidar usuário</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   O usuário receberá um email com link de acesso.
                 </p>
               </div>
               <button
                 onClick={() => setOpen(false)}
                 disabled={isPending}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
               >
                 <X size={14} />
               </button>
@@ -95,7 +95,7 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
             <form ref={formRef} onSubmit={handleSubmit} className="p-5 space-y-4">
               {/* Nome */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5">
+                <label className="block text-xs text-muted-foreground mb-1.5">
                   Nome completo <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -104,8 +104,8 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
                   placeholder="Ex: Keila Ferreira"
                   className={cn(
                     "w-full h-9 px-3 rounded-lg text-sm",
-                    "bg-zinc-900 border border-zinc-800",
-                    "text-zinc-100 placeholder:text-zinc-600",
+                    "bg-muted border border-border",
+                    "text-foreground placeholder:text-muted-foreground/50",
                     "focus:outline-none focus:border-lhg-500/50 focus:ring-1 focus:ring-lhg-500/20",
                     "transition-all",
                   )}
@@ -114,7 +114,7 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
 
               {/* Email */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5">
+                <label className="block text-xs text-muted-foreground mb-1.5">
                   Email corporativo <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -124,8 +124,8 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
                   placeholder="keila@lhgmoteis.com.br"
                   className={cn(
                     "w-full h-9 px-3 rounded-lg text-sm",
-                    "bg-zinc-900 border border-zinc-800",
-                    "text-zinc-100 placeholder:text-zinc-600",
+                    "bg-muted border border-border",
+                    "text-foreground placeholder:text-muted-foreground/50",
                     "focus:outline-none focus:border-lhg-500/50 focus:ring-1 focus:ring-lhg-500/20",
                     "transition-all",
                   )}
@@ -134,7 +134,7 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
 
               {/* Papel */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-2">
+                <label className="block text-xs text-muted-foreground mb-2">
                   Papel <span className="text-red-400">*</span>
                 </label>
                 <input type="hidden" name="role" value={role} />
@@ -147,12 +147,12 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
                       className={cn(
                         "text-left p-2.5 rounded-lg border text-xs transition-colors",
                         role === r.value
-                          ? "border-lhg-500/50 bg-lhg-500/10 text-zinc-100"
-                          : "border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300",
+                          ? "border-lhg-500/50 bg-lhg-500/10 text-foreground"
+                          : "border-border text-muted-foreground hover:border-border/80 hover:text-foreground/80",
                       )}
                     >
                       <div className="font-medium">{r.label}</div>
-                      <div className={cn("mt-0.5 leading-snug", role === r.value ? "text-zinc-400" : "text-zinc-600")}>
+                      <div className={cn("mt-0.5 leading-snug", role === r.value ? "text-muted-foreground" : "text-muted-foreground/60")}>
                         {r.desc}
                       </div>
                     </button>
@@ -163,15 +163,15 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
               {/* Unidade (só para solicitante) */}
               {role === "solicitante" && (
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1.5">
+                  <label className="block text-xs text-muted-foreground mb-1.5">
                     Unidade
                   </label>
                   <select
                     name="unidade_id"
                     className={cn(
                       "w-full h-9 px-3 rounded-lg text-sm",
-                      "bg-zinc-900 border border-zinc-800",
-                      "text-zinc-100",
+                      "bg-muted border border-border",
+                      "text-foreground",
                       "focus:outline-none focus:border-lhg-500/50 focus:ring-1 focus:ring-lhg-500/20",
                       "transition-all",
                     )}
@@ -192,14 +192,14 @@ export function InviteDialog({ unidades }: InviteDialogProps) {
                   type="button"
                   onClick={() => setOpen(false)}
                   disabled={isPending}
-                  className="h-9 px-4 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 text-sm transition-colors"
+                  className="h-9 px-4 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="h-9 px-4 rounded-lg bg-lhg-500 hover:bg-lhg-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-950 font-medium text-sm flex items-center gap-2 transition-colors"
+                  className="h-9 px-4 rounded-lg bg-lhg-500 hover:bg-lhg-400 disabled:bg-muted disabled:text-muted-foreground text-zinc-950 font-medium text-sm flex items-center gap-2 transition-colors"
                 >
                   {isPending ? (
                     <>

@@ -91,13 +91,13 @@ export function AdicionarFornecedorModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh] px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-[520px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-[520px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/80">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
           <div className="flex items-center gap-2">
-            <Users size={15} className="text-zinc-400" />
-            <h2 className="text-sm font-semibold text-zinc-50">Adicionar fornecedores</h2>
+            <Users size={15} className="text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Adicionar fornecedores</h2>
             {selecionados.size > 0 && (
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold ring-1 ring-emerald-500/30">
                 {selecionados.size}
@@ -106,7 +106,7 @@ export function AdicionarFornecedorModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <X size={15} />
           </button>
@@ -115,7 +115,7 @@ export function AdicionarFornecedorModal({
         {/* Busca */}
         <div className="px-5 pt-3 pb-2">
           <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input
               ref={inputRef}
               type="text"
@@ -123,9 +123,9 @@ export function AdicionarFornecedorModal({
               onChange={e => setBusca(e.target.value)}
               placeholder="Buscar fornecedor…"
               className={cn(
-                "w-full rounded-lg border border-zinc-800 bg-zinc-900/60",
-                "pl-8 pr-3 py-2 text-sm text-zinc-200 placeholder-zinc-600",
-                "focus:outline-none focus:ring-1 focus:ring-zinc-600 transition-all",
+                "w-full rounded-lg border border-border bg-muted/60",
+                "pl-8 pr-3 py-2 text-sm text-foreground placeholder-muted-foreground/50",
+                "focus:outline-none focus:ring-1 focus:ring-border transition-all",
               )}
             />
           </div>
@@ -135,13 +135,13 @@ export function AdicionarFornecedorModal({
         <div className="px-2 pb-2 max-h-[44vh] overflow-y-auto">
           {disponiveis.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 gap-2">
-              <Users size={24} className="text-zinc-700" />
-              <p className="text-sm text-zinc-500">Todos os fornecedores já foram adicionados</p>
+              <Users size={24} className="text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Todos os fornecedores já foram adicionados</p>
             </div>
           ) : filtrados.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 gap-2">
-              <Search size={24} className="text-zinc-700" />
-              <p className="text-sm text-zinc-500">Nenhum resultado para "{busca}"</p>
+              <Search size={24} className="text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Nenhum resultado para "{busca}"</p>
             </div>
           ) : (
             filtrados.map(f => {
@@ -154,7 +154,7 @@ export function AdicionarFornecedorModal({
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
                     sel
                       ? "bg-emerald-500/10 hover:bg-emerald-500/15"
-                      : "hover:bg-zinc-800/60",
+                      : "hover:bg-muted/60",
                   )}
                 >
                   {/* Checkbox */}
@@ -162,15 +162,15 @@ export function AdicionarFornecedorModal({
                     "w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all",
                     sel
                       ? "bg-emerald-500 ring-1 ring-emerald-400"
-                      : "bg-zinc-800 ring-1 ring-zinc-700",
+                      : "bg-muted ring-1 ring-border",
                   )}>
-                    {sel && <Check size={10} className="text-zinc-950" strokeWidth={3} />}
+                    {sel && <Check size={10} className="text-background" strokeWidth={3} />}
                   </div>
 
                   {/* Avatar */}
                   <div className={cn(
                     "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
-                    sel ? "bg-emerald-500/20 text-emerald-300" : "bg-zinc-800 text-zinc-400",
+                    sel ? "bg-emerald-500/20 text-emerald-300" : "bg-muted text-muted-foreground",
                   )}>
                     {getFornNome(f).slice(0, 2).toUpperCase()}
                   </div>
@@ -179,22 +179,22 @@ export function AdicionarFornecedorModal({
                   <div className="flex-1 min-w-0">
                     <div className={cn(
                       "text-sm font-medium truncate",
-                      sel ? "text-emerald-300" : "text-zinc-200",
+                      sel ? "text-emerald-300" : "text-foreground",
                     )}>
                       {getFornNome(f)}
                     </div>
                     {f.nome_fantasia && f.nome_fantasia !== f.razao_social && (
-                      <div className="text-[11px] text-zinc-600 truncate">{f.razao_social}</div>
+                      <div className="text-[11px] text-muted-foreground/70 truncate">{f.razao_social}</div>
                     )}
                   </div>
 
                   {/* Rating */}
                   {f.rating !== null && (
-                    <div className="flex items-center gap-1 shrink-0 text-[11px] text-zinc-600">
+                    <div className="flex items-center gap-1 shrink-0 text-[11px] text-muted-foreground/70">
                       <Star size={10} className="text-amber-500/70 fill-amber-500/40" />
                       {f.rating.toFixed(1)}
                       {f.pontualidade_pct !== null && (
-                        <span className="ml-1 text-zinc-700">· {f.pontualidade_pct}%</span>
+                        <span className="ml-1 text-muted-foreground/60">· {f.pontualidade_pct}%</span>
                       )}
                     </div>
                   )}
@@ -205,15 +205,15 @@ export function AdicionarFornecedorModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-zinc-800/60">
-          <span className="text-[12px] text-zinc-600">
+        <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-border/60">
+          <span className="text-[12px] text-muted-foreground/70">
             {disponiveis.length} disponíve{disponiveis.length !== 1 ? "is" : "l"}
             {selecionados.size > 0 && ` · ${selecionados.size} selecionado${selecionados.size !== 1 ? "s" : ""}`}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="text-sm text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground/80 px-3 py-2 transition-colors"
             >
               Cancelar
             </button>

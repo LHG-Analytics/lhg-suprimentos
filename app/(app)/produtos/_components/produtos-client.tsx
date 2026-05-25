@@ -68,7 +68,7 @@ const CATEGORIA_COLORS: Record<string, string> = {
 };
 
 function categoriaCor(cat: string) {
-  return CATEGORIA_COLORS[cat] ?? "bg-zinc-800 text-zinc-400 ring-zinc-700/50";
+  return CATEGORIA_COLORS[cat] ?? "bg-muted text-muted-foreground ring-border/50";
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -119,10 +119,10 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50 leading-tight">
+          <h1 className="text-xl font-semibold text-foreground leading-tight">
             Produtos &amp; Catálogo
           </h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">
+          <p className="text-[13px] text-muted-foreground mt-0.5">
             Catálogo sincronizado com o Omie ERP
           </p>
         </div>
@@ -130,13 +130,13 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         <div className="flex items-center gap-3 shrink-0">
           {lastLog && (
             <div className="text-right hidden sm:block">
-              <div className="text-[11px] text-zinc-500 leading-tight">
+              <div className="text-[11px] text-muted-foreground leading-tight">
                 Última sincronização
               </div>
-              <div className="text-[12px] text-zinc-400 font-mono leading-tight mt-0.5 flex items-center gap-1.5 justify-end">
+              <div className="text-[12px] text-muted-foreground font-mono leading-tight mt-0.5 flex items-center gap-1.5 justify-end">
                 <RefreshCw size={10} className={cn(lastLog.status === "ok" ? "text-emerald-400" : "text-red-400")} />
                 {relativeTime(lastLog.created_at)}
-                <span className="text-zinc-600">·</span>
+                <span className="text-muted-foreground/60">·</span>
                 <span>{lastLog.total ?? 0} registros</span>
               </div>
             </div>
@@ -148,23 +148,23 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
       {/* ── Stats ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "TOTAL",        value: produtos.length,  color: "text-zinc-50" },
+          { label: "TOTAL",        value: produtos.length,  color: "text-foreground" },
           { label: "CATEGORIAS",   value: categorias.length, color: "text-violet-400" },
           { label: "FAMÍLIAS OMIE",value: familias.length,  color: "text-amber-400" },
           { label: "OMIE",         value: totalOmie,        color: "text-sky-400" },
         ].map(({ label, value, color }) => (
           <div
             key={label}
-            className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-5 py-4"
+            className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4"
           >
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
+            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
               {label}
             </div>
             <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
               {value}
             </div>
             {label === "TOTAL" && totalInativos > 0 && (
-              <div className="text-[11px] text-zinc-600 mt-0.5">
+              <div className="text-[11px] text-muted-foreground/60 mt-0.5">
                 {totalInativos} inativo{totalInativos !== 1 ? "s" : ""}
               </div>
             )}
@@ -183,7 +183,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         <div className="relative flex-1 min-w-[200px]">
           <Search
             size={14}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
           />
           <input
             type="text"
@@ -191,15 +191,15 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className={cn(
-              "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 pl-9 pr-4 py-2.5",
-              "text-sm text-zinc-200 placeholder:text-zinc-600",
-              "focus:outline-none focus:border-zinc-600 focus:ring-0 transition-colors",
+              "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5",
+              "text-sm text-foreground placeholder:text-muted-foreground/50",
+              "focus:outline-none focus:border-border focus:ring-0 transition-colors",
             )}
           />
           {query && (
             <button
               onClick={() => setQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 text-xs"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs"
             >
               ✕
             </button>
@@ -208,14 +208,14 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
 
         {/* Filtro de categoria (orçamento) */}
         <div className="relative">
-          <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <select
             value={categoria}
             onChange={(e) => setCategoria(e.target.value)}
             className={cn(
-              "rounded-lg border border-zinc-800 bg-zinc-900/60 pl-8 pr-8 py-2.5",
-              "text-sm text-zinc-300 appearance-none cursor-pointer",
-              "focus:outline-none focus:border-zinc-600 transition-colors",
+              "rounded-lg border border-border bg-muted/60 pl-8 pr-8 py-2.5",
+              "text-sm text-foreground appearance-none cursor-pointer",
+              "focus:outline-none focus:border-border transition-colors",
             )}
           >
             <option value="todas">Todas as categorias</option>
@@ -228,14 +228,14 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         {/* Filtro de família Omie */}
         {familias.length > 0 && (
           <div className="relative">
-            <Layers size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <Layers size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <select
               value={familia}
               onChange={(e) => setFamilia(e.target.value)}
               className={cn(
-                "rounded-lg border border-zinc-800 bg-zinc-900/60 pl-8 pr-8 py-2.5",
-                "text-sm text-zinc-300 appearance-none cursor-pointer",
-                "focus:outline-none focus:border-zinc-600 transition-colors",
+                "rounded-lg border border-border bg-muted/60 pl-8 pr-8 py-2.5",
+                "text-sm text-foreground appearance-none cursor-pointer",
+                "focus:outline-none focus:border-border transition-colors",
               )}
             >
               <option value="todas">Todas as famílias Omie</option>
@@ -248,13 +248,13 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-zinc-800/80">
+        <div className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-border/80">
           {["PRODUTO", "CATEGORIA ORÇAMENTO", "FAMÍLIA OMIE", "UNIDADE", "PREÇO CUSTO", "STATUS"].map((h) => (
             <div
               key={h}
-              className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500"
+              className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground"
             >
               {h}
             </div>
@@ -264,35 +264,35 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         {/* Linhas */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <Package size={28} className="text-zinc-700" />
-            <p className="text-sm text-zinc-500">
+            <Package size={28} className="text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
               {query || categoria !== "todas" || familia !== "todas"
                 ? "Nenhum produto encontrado"
                 : "Nenhum produto cadastrado"}
             </p>
             {!query && categoria === "todas" && familia === "todas" && (
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-muted-foreground/60">
                 Clique em &quot;Sincronizar Omie&quot; para importar
               </p>
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800/60">
+          <ul className="divide-y divide-border/60">
             {filtered.map((p) => (
               <li
                 key={p.id}
-                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
+                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
               >
                 {/* Produto */}
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-zinc-100 truncate leading-tight">
+                  <div className="text-sm font-medium text-foreground truncate leading-tight">
                     {p.nome}
                   </div>
-                  <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                  <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
                     {p.codigo}
                     {p.omie_codigo && (
                       <>
-                        <span className="mx-1 text-zinc-700">·</span>
+                        <span className="mx-1 text-muted-foreground/40">·</span>
                         <span className="text-sky-600">Omie</span>
                       </>
                     )}
@@ -319,13 +319,13 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                       {p.familia_omie}
                     </span>
                   ) : (
-                    <span className="text-[11px] text-zinc-600">—</span>
+                    <span className="text-[11px] text-muted-foreground/60">—</span>
                   )}
                 </div>
 
                 {/* Unidade de medida */}
                 <div className="self-center">
-                  <span className="text-[12px] text-zinc-400 font-mono uppercase">
+                  <span className="text-[12px] text-muted-foreground font-mono uppercase">
                     {p.unidade_med}
                   </span>
                 </div>
@@ -333,11 +333,11 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                 {/* Preço de custo */}
                 <div className="self-center">
                   {formatPreco(p.preco_custo) ? (
-                    <span className="text-[12px] text-zinc-300 font-mono">
+                    <span className="text-[12px] text-foreground/80 font-mono">
                       {formatPreco(p.preco_custo)}
                     </span>
                   ) : (
-                    <span className="text-[12px] text-zinc-600">—</span>
+                    <span className="text-[12px] text-muted-foreground/60">—</span>
                   )}
                 </div>
 
@@ -347,12 +347,12 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                     "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
                     p.ativo
                       ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
-                      : "bg-zinc-800 text-zinc-500 ring-1 ring-zinc-700/50",
+                      : "bg-muted text-muted-foreground ring-1 ring-border/50",
                   )}>
                     {p.ativo ? "Ativo" : "Inativo"}
                   </span>
                   {p.omie_sincronizado_em && (
-                    <div className="text-[10px] text-zinc-700 mt-0.5 font-mono">
+                    <div className="text-[10px] text-muted-foreground/40 mt-0.5 font-mono">
                       {relativeTime(p.omie_sincronizado_em)}
                     </div>
                   )}
@@ -364,8 +364,8 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
 
         {/* Footer */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-zinc-800/60 flex items-center justify-between">
-            <span className="text-[12px] text-zinc-600">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+            <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === produtos.length
                 ? `${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`
                 : `${filtered.length} de ${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`}
