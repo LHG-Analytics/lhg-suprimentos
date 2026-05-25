@@ -4,11 +4,7 @@
  * sidebar.tsx — LHG-203
  * Sidebar 248 px (expandida) / 64 px (colapsada).
  * Desktop: sticky no fluxo. Mobile: drawer fixo com backdrop.
- *
- * Novidades vs LHG-202:
- *  - Logo maior (md=32px) com área de padding generosa
- *  - Seletor de unidade com dropdown e logos das unidades
- *  - Integração com UnidadeContext (lib/unidade-context)
+ * Tokens semânticos bg-sidebar / text-sidebar-foreground para suporte light/dark.
  */
 
 import Link from "next/link";
@@ -57,7 +53,7 @@ function UserAvatar({ name, size = 30 }: { name: string; size?: number }) {
     .join("");
   return (
     <div
-      className="shrink-0 rounded-full bg-lhg-700 text-zinc-50 flex items-center justify-center font-mono font-semibold select-none"
+      className="shrink-0 rounded-full bg-lhg-700 text-white flex items-center justify-center font-mono font-semibold select-none"
       style={{ width: size, height: size, fontSize: size * 0.38 }}
       aria-label={name}
     >
@@ -85,15 +81,17 @@ function NavLink({
         "w-full flex items-center gap-2.5 rounded-md transition-colors group",
         collapsed ? "h-10 justify-center" : "h-9 px-2.5",
         active
-          ? "bg-zinc-800/80 text-zinc-50"
-          : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40",
+          ? "bg-sidebar-accent text-sidebar-foreground"
+          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
       )}
     >
       <Icon
         size={16}
         className={cn(
           "shrink-0",
-          active ? "text-zinc-50" : "text-zinc-500 group-hover:text-zinc-300",
+          active
+            ? "text-lhg-500"
+            : "text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70",
         )}
       />
       {!collapsed && (
@@ -101,11 +99,11 @@ function NavLink({
           <span className="text-sm flex-1 text-left leading-none">{item.label}</span>
           {item.badge !== undefined &&
             (typeof item.badge === "number" ? (
-              <span className="font-mono text-[10px] text-zinc-500 tabular-nums">
+              <span className="font-mono text-[10px] text-sidebar-foreground/40 tabular-nums">
                 {item.badge}
               </span>
             ) : (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-lhg-500/15 text-lhg-400 font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-lhg-500/15 text-lhg-500 font-medium">
                 {item.badge}
               </span>
             ))}
@@ -119,15 +117,13 @@ function NavLink({
 function UnitSelector({ collapsed }: { collapsed: boolean }) {
   const { unidade, setUnidade } = useUnidade();
 
-  // ── Versão colapsada: logo preenche a largura da sidebar ────────────────────
   if (collapsed) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger
           title={unidade.codigo ? `${unidade.nome} (${unidade.codigo})` : unidade.nome}
-          className="w-full h-10 rounded-md flex items-center justify-center hover:bg-zinc-800/60 transition-colors outline-none px-1"
+          className="w-full h-10 rounded-md flex items-center justify-center hover:bg-sidebar-accent/60 transition-colors outline-none px-1"
         >
-          {/* Usa toda a largura disponível do sidebar colapsado (≈52px) */}
           <div className="w-full h-7 flex items-center justify-center overflow-hidden">
             <Image
               src={unidade.logo}
@@ -138,20 +134,14 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
             />
           </div>
         </DropdownMenuTrigger>
-        <UnitDropdownContent
-          unidade={unidade}
-          setUnidade={setUnidade}
-          side="right"
-        />
+        <UnitDropdownContent unidade={unidade} setUnidade={setUnidade} side="right" />
       </DropdownMenu>
     );
   }
 
-  // ── Versão expandida: botão completo ────────────────────────────────────────
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="w-full flex items-center gap-2.5 px-2.5 h-10 rounded-lg hover:bg-zinc-800/40 transition-colors group border border-zinc-800/60 hover:border-zinc-700/80 text-left outline-none">
-        {/* Logo no trigger expandido — tamanho moderado */}
+      <DropdownMenuTrigger className="w-full flex items-center gap-2.5 px-2.5 h-10 rounded-lg hover:bg-sidebar-accent/60 transition-colors group border border-sidebar-border hover:border-sidebar-border text-left outline-none">
         <div className="w-9 h-5 shrink-0 flex items-center justify-center overflow-hidden">
           <Image
             src={unidade.logo}
@@ -161,25 +151,19 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
             className="object-contain max-h-full max-w-full"
           />
         </div>
-        {/* Nome */}
-        <span className="flex-1 min-w-0 text-[13px] text-zinc-200 truncate font-medium">
+        <span className="flex-1 min-w-0 text-[13px] text-sidebar-foreground truncate font-medium">
           {unidade.id === "todas"
             ? "Todas as unidades"
             : unidade.codigo
               ? `${unidade.nome} (${unidade.codigo})`
               : unidade.nome}
         </span>
-        {/* Chevron */}
         <ChevronDown
           size={13}
-          className="text-zinc-500 shrink-0 group-hover:text-zinc-400 transition-colors"
+          className="text-sidebar-foreground/40 shrink-0 group-hover:text-sidebar-foreground/70 transition-colors"
         />
       </DropdownMenuTrigger>
-      <UnitDropdownContent
-        unidade={unidade}
-        setUnidade={setUnidade}
-        side="bottom"
-      />
+      <UnitDropdownContent unidade={unidade} setUnidade={setUnidade} side="bottom" />
     </DropdownMenu>
   );
 }
@@ -201,59 +185,41 @@ function UnitDropdownContent({
       side={side}
       align="start"
       sideOffset={4}
-      className="w-[240px] bg-zinc-950 border-zinc-800 p-1"
+      className="w-[240px] bg-popover border-border p-1"
     >
-      {/* Todas as unidades */}
       <DropdownMenuItem
         onClick={() => setUnidade(todas)}
-        className="flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md focus:bg-zinc-800/60"
+        className="flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md focus:bg-muted/60"
       >
         <div className="w-10 h-6 shrink-0 flex items-center justify-center overflow-hidden">
-          <Image
-            src={todas.logo}
-            alt={todas.nome}
-            width={40}
-            height={24}
-            className="object-contain max-h-full max-w-full"
-          />
+          <Image src={todas.logo} alt={todas.nome} width={40} height={24} className="object-contain max-h-full max-w-full" />
         </div>
-        <span className="text-[13px] flex-1 text-zinc-300">{todas.nome}</span>
-        {unidade.id === "todas" && (
-          <Check size={13} className="text-lhg-400 shrink-0" />
-        )}
+        <span className="text-[13px] flex-1 text-foreground">{todas.nome}</span>
+        {unidade.id === "todas" && <Check size={13} className="text-lhg-500 shrink-0" />}
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator className="bg-zinc-800/60 my-1" />
+      <DropdownMenuSeparator className="bg-border/60 my-1" />
 
-      {/* Unidades individuais */}
       {unidades.map((u) => (
         <DropdownMenuItem
           key={u.id}
           onClick={u.disabled ? undefined : () => setUnidade(u)}
           disabled={u.disabled}
           className={cn(
-            "flex items-center gap-2.5 px-2 py-1.5 rounded-md focus:bg-zinc-800/60",
-            u.disabled
-              ? "opacity-35 cursor-not-allowed pointer-events-none"
-              : "cursor-pointer",
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md focus:bg-muted/60",
+            u.disabled ? "opacity-35 cursor-not-allowed pointer-events-none" : "cursor-pointer",
           )}
         >
           <div className="w-10 h-6 shrink-0 flex items-center justify-center overflow-hidden">
-            <Image
-              src={u.logo}
-              alt={u.nome}
-              width={40}
-              height={24}
-              className="object-contain max-h-full max-w-full"
-            />
+            <Image src={u.logo} alt={u.nome} width={40} height={24} className="object-contain max-h-full max-w-full" />
           </div>
-          <span className="text-[13px] flex-1 text-zinc-300">
+          <span className="text-[13px] flex-1 text-foreground">
             {u.codigo ? `${u.nome} (${u.codigo})` : u.nome}
           </span>
           {u.disabled ? (
-            <span className="text-[10px] text-zinc-600 shrink-0">em breve</span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">em breve</span>
           ) : unidade.id === u.id ? (
-            <Check size={13} className="text-lhg-400 shrink-0" />
+            <Check size={13} className="text-lhg-500 shrink-0" />
           ) : null}
         </DropdownMenuItem>
       ))}
@@ -302,37 +268,33 @@ export function Sidebar({
       <aside
         style={{ width: sidebarWidth }}
         className={cn(
-          "shrink-0 h-screen border-r border-zinc-800/80 bg-zinc-950 flex flex-col",
+          "shrink-0 h-screen border-r border-sidebar-border bg-sidebar flex flex-col",
           "transition-[width,transform] duration-200",
-          // Desktop: sticky no fluxo
           "lg:sticky lg:top-0 lg:translate-x-0",
-          // Mobile: drawer fixo
           "fixed top-0 left-0 z-50 lg:z-auto",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        {/* ── Seletor de unidade + collapse trigger (área unificada) ─── */}
+        {/* ── Seletor de unidade + collapse trigger ─────────────────────── */}
         {collapsed ? (
-          /* Colapsado: ícone da unidade acima, botão de expand abaixo */
-          <div className="border-b border-zinc-800/80 flex flex-col items-center gap-1 py-2.5 px-1.5">
+          <div className="border-b border-sidebar-border flex flex-col items-center gap-1 py-2.5 px-1.5">
             <UnitSelector collapsed />
             <button
               onClick={() => { setCollapsed(false); setMobileOpen(false); }}
-              className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
               aria-label="Expandir sidebar"
             >
               <PanelLeftOpen size={14} />
             </button>
           </div>
         ) : (
-          /* Expandido: seletor + botão colapso na mesma linha */
-          <div className="border-b border-zinc-800/80 h-[56px] flex items-center gap-2 px-2.5">
+          <div className="border-b border-sidebar-border h-[56px] flex items-center gap-2 px-2.5">
             <div className="flex-1 min-w-0">
               <UnitSelector collapsed={false} />
             </div>
             <button
               onClick={() => { setCollapsed(true); setMobileOpen(false); }}
-              className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+              className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
               aria-label="Colapsar sidebar"
             >
               <PanelLeftClose size={14} />
@@ -340,24 +302,21 @@ export function Sidebar({
           </div>
         )}
 
-        {/* ── Navegação ───────────────────────────────────────────────── */}
+        {/* ── Navegação ───────────────────────────────────────────────────── */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3">
           {NAV_SECTIONS.map((section) => {
             const items = NAV_ITEMS.filter(
-              (n) =>
-                n.section === section &&
-                (!n.adminOnly || user.role === "admin"),
+              (n) => n.section === section && (!n.adminOnly || user.role === "admin"),
             );
             if (items.length === 0) return null;
             return (
               <div key={section} className={cn("space-y-0.5", collapsed && "space-y-1")}>
                 {!collapsed && (
-                  <div className="px-2.5 pb-1 text-[10px] uppercase tracking-[0.1em] font-medium text-zinc-600">
+                  <div className="px-2.5 pb-1 text-[10px] uppercase tracking-[0.1em] font-medium text-sidebar-foreground/40">
                     {section}
                   </div>
                 )}
                 {items.map((item) => {
-                  // Badge dinâmico: cotações abertas vem do servidor
                   const resolvedItem =
                     item.id === "cotacoes" && cotacoesBadge !== undefined
                       ? { ...item, badge: cotacoesBadge > 0 ? cotacoesBadge : undefined }
@@ -376,13 +335,13 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* ── Rodapé: usuário ─────────────────────────────────────────── */}
-        <div className="p-2 border-t border-zinc-800/80">
+        {/* ── Rodapé: usuário ─────────────────────────────────────────────── */}
+        <div className="p-2 border-t border-sidebar-border">
           {collapsed ? (
             <div className="flex flex-col items-center gap-2 py-1">
               <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="w-9 h-9 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                className="w-9 h-9 rounded-md flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
                 aria-label="Alternar tema"
               >
                 {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
@@ -393,23 +352,23 @@ export function Sidebar({
             <div className="rounded-md p-1.5 flex items-center gap-2.5">
               <UserAvatar name={user.nome} size={30} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-zinc-100 font-medium truncate leading-tight">
+                <div className="text-sm text-sidebar-foreground font-medium truncate leading-tight">
                   {user.nome}
                 </div>
-                <div className="text-[11px] text-zinc-500 capitalize leading-tight">
+                <div className="text-[11px] text-sidebar-foreground/50 capitalize leading-tight">
                   {user.role}
                 </div>
               </div>
               <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                className="w-7 h-7 rounded-md flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
                 aria-label="Alternar tema"
               >
                 {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
               </button>
               <button
                 onClick={handleLogout}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+                className="w-7 h-7 rounded-md flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
                 aria-label="Sair"
                 title="Sair"
               >

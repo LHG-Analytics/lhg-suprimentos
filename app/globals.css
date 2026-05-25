@@ -46,16 +46,15 @@
   --chart-4: 268 55% 52%;
   --chart-5: 0 72% 52%;
 
-  /* Sidebar tokens — não usados pelos componentes (hardcoded zinc),
-     mas mantidos para shadcn sidebar components caso sejam adotados. */
-  --sidebar: 222 22% 12%;
-  --sidebar-foreground: 0 0% 92%;
-  --sidebar-primary: 152 76% 47%;
-  --sidebar-primary-foreground: 222 22% 12%;
-  --sidebar-accent: 222 18% 18%;
-  --sidebar-accent-foreground: 0 0% 92%;
-  --sidebar-border: 222 15% 20%;
-  --sidebar-ring: 152 60% 50%;
+  /* Sidebar tokens — light mode: warm stone sidebar */
+  --sidebar: 34 22% 91%;             /* stone quente, distinto do background marfim */
+  --sidebar-foreground: 222 18% 13%; /* tinta escura */
+  --sidebar-primary: 158 75% 34%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 34 16% 85%;      /* hover: um tom mais escuro */
+  --sidebar-accent-foreground: 222 18% 13%;
+  --sidebar-border: 34 16% 82%;      /* borda sutil */
+  --sidebar-ring: 152 60% 40%;
 }
 
 .dark {
