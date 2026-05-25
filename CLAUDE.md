@@ -485,4 +485,13 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
 
 - ✅ LHG-229: Editar Produto e Fornecedor com sync bidirecional Omie — `alterarProduto()` / `alterarFornecedor()` em `lib/omie/client.ts`; Server Actions `editarProduto` / `editarFornecedor`; modais com banner âmbar (sem omie_codigo) e banner vermelho (erro Omie); linhas da tabela clicáveis; `fornecedores/page.tsx` busca `endereco` e `cep`
 
-### Nota: última migration aplicada — 0014 (`omie_unidade_id` em `produtos`, constraint composta)
+- ✅ LHG-230: Admin settings, perfil, histórico de chat IA e convites
+  - `/admin`: aba Usuários (role selector inline) + aba Convites (Resend email ou link manual fallback); revogar/remover via service client
+  - `/perfil`: editar nome (usado pela IA) + upload avatar → Supabase Storage `avatars/{uid}/`; sidebar mostra foto real e linka para /perfil
+  - `auth/callback`: auto-cria `user_profiles` para usuários convidados ao primeiro login Google — match por email em `invites` → role do convite → marca usado
+  - `api/chat/route.ts`: system prompt reescrito como "LHG IA — especialista sênior em compras hoteleiras"; personaliza pelo nome do usuário
+  - `/chat`: sidebar de sessões persistentes (estilo ChatGPT) via Supabase browser client; criar/carregar/deletar sessões; mensagens persistidas em `ai_chat_messages`
+  - Migration 0015: tabelas `invites`, `ai_chat_sessions`, `ai_chat_messages` + bucket `avatars` (RLS por uid)
+  - `lib/supabase/types.ts` atualizado com as 3 novas tabelas
+
+### Nota: última migration pendente de execução — 0015 (`invites`, `ai_chat_sessions`, `ai_chat_messages`, bucket `avatars`). Rodar no Supabase SQL Editor.
