@@ -612,11 +612,16 @@ export interface OmieListarPedidosResponse extends OmiePaginacaoResponse {
   pedidos?: OmiePedidoCompraListItem[];
   // alguns endpoints retornam em "lista_pedidos"
   lista_pedidos?: OmiePedidoCompraListItem[];
+  // Omie frequentemente usa singular "pedido" neste endpoint
+  pedido?: OmiePedidoCompraListItem[];
 }
 
 /**
  * Busca uma página de pedidos de compra no Omie.
- * Endpoint: /compras/pedidocompras/ — call: ListarPedidoCompras
+ * Endpoint correto: /produtos/pedidocompra/ — call: PesquisarPedCompra
+ *
+ * ⚠️ Atenção: o endpoint é /produtos/pedidocompra/ (singular, módulo produtos),
+ * NÃO /compras/pedidocompras/ (módulo compras — requer plano separado).
  */
 export async function listPedidosCompraPage(
   creds: OmieCredentials,
@@ -624,8 +629,8 @@ export async function listPedidosCompraPage(
   registrosPorPagina = 50,
 ): Promise<OmieListarPedidosResponse> {
   return omiePost<OmieListarPedidosParam, OmieListarPedidosResponse>(
-    "/compras/pedidocompras/",
-    "ListarPedidoCompras",
+    "/produtos/pedidocompra/",
+    "PesquisarPedCompra",
     creds,
     {
       pagina,
@@ -654,8 +659,8 @@ export async function listAllPedidosCompra(
       throw err;
     }
     totalPaginas = res.total_de_paginas;
-    // Normaliza: alguns endpoints usam "pedidos", outros "lista_pedidos"
-    const items = res.pedidos ?? res.lista_pedidos ?? [];
+    // Normaliza: Omie usa "pedidos", "lista_pedidos" ou "pedido" (singular)
+    const items = res.pedidos ?? res.lista_pedidos ?? res.pedido ?? [];
     all.push(...items);
     onPage?.(pagina, totalPaginas);
     pagina++;
