@@ -13,6 +13,8 @@ import { Topbar } from "./topbar";
 import { AiChip } from "./ai-chip";
 import { UnidadeProvider } from "@/lib/unidade-context";
 import { useRealtimeNotifications } from "@/hooks/use-realtime-notifications";
+import { TourProvider } from "@/components/lhg/tour/tour-context";
+import { TourOverlay } from "@/components/lhg/tour/tour-overlay";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface ShellClientProps {
@@ -36,33 +38,38 @@ export function ShellClient({ children, user, cotacoesBadge }: ShellClientProps)
 
   return (
     <UnidadeProvider>
-      <div className="flex min-h-screen bg-background">
-        {/* Sidebar */}
-        <Sidebar
-          collapsed={collapsed}
-          setCollapsed={setCollapsed}
-          mobileOpen={mobileOpen}
-          setMobileOpen={setMobileOpen}
-          user={user}
-          cotacoesBadge={cotacoesBadge}
-        />
-
-        {/* Área principal */}
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-          <Topbar
-            onToggleMobile={() => setMobileOpen(true)}
-            notifications={notifications}
-            unreadCount={unreadCount}
-            onMarkAllRead={markAllRead}
+      <TourProvider>
+        <div className="flex min-h-screen bg-background">
+          {/* Sidebar */}
+          <Sidebar
+            collapsed={collapsed}
+            setCollapsed={setCollapsed}
+            mobileOpen={mobileOpen}
+            setMobileOpen={setMobileOpen}
+            user={user}
+            cotacoesBadge={cotacoesBadge}
           />
-          <main className="flex-1 p-4 sm:p-6 overflow-auto">
-            {children}
-          </main>
-        </div>
 
-        {/* Chip flutuante da IA */}
-        <AiChip />
-      </div>
+          {/* Área principal */}
+          <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+            <Topbar
+              onToggleMobile={() => setMobileOpen(true)}
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkAllRead={markAllRead}
+            />
+            <main className="flex-1 p-4 sm:p-6 overflow-auto">
+              {children}
+            </main>
+          </div>
+
+          {/* Chip flutuante da IA */}
+          <AiChip />
+
+          {/* Tour interativo (portal de alto z-index) */}
+          <TourOverlay />
+        </div>
+      </TourProvider>
     </UnidadeProvider>
   );
 }

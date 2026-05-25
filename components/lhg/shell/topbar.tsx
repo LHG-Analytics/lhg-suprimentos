@@ -2,19 +2,22 @@
 
 /**
  * topbar.tsx — LHG-202
- * Barra superior sticky h-14: breadcrumb, search ⌘K, sino de notificações, ajuda/onboarding.
+ * Barra superior sticky h-14: breadcrumb, search ⌘K, sino de notificações, tour.
+ * Botão ❓ agora dispara o tour interativo (balões de quadrinho) em vez do modal estático.
+ * Tokens semânticos para suporte a light/dark mode.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import {
   Menu, Search, Bell, HelpCircle, ChevronRight,
-  X, AlertTriangle, Info, CheckCircle2, ShoppingCart,
-  BookOpen,
+  X, AlertTriangle, Info, CheckCircle2,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BREADCRUMB_MAP } from "./nav-config";
 import { CmdK } from "./cmd-k";
+import { useTour } from "@/components/lhg/tour/tour-context";
 import type { NotificationItem } from "@/hooks/use-realtime-notifications";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -58,9 +61,9 @@ function timeAgo(date: Date): string {
 // ── Topbar ─────────────────────────────────────────────────────────────────────
 export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRead }: TopbarProps) {
   const crumbs = useBreadcrumbs();
-  const [cmdOpen,        setCmdOpen]        = useState(false);
-  const [notifOpen,      setNotifOpen]      = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const { startTour } = useTour();
+  const [cmdOpen,   setCmdOpen]   = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   // ⌘K / ⌘N
   const handleKeydown = useCallback((e: KeyboardEvent) => {
@@ -91,7 +94,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
   }, [notifOpen]);
 
   function handleNotifToggle() {
-    if (!notifOpen) onMarkAllRead(); // marca como lidas ao abrir
+    if (!notifOpen) onMarkAllRead();
     setNotifOpen((o) => !o);
   }
 
@@ -99,8 +102,8 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
     <>
       <header
         className={cn(
-          "h-14 border-b border-zinc-800/80",
-          "bg-zinc-950/80 backdrop-blur-md",
+          "h-14 border-b border-border",
+          "bg-card/80 backdrop-blur-md",
           "sticky top-0 z-20",
           "px-3 sm:px-4 flex items-center gap-2 sm:gap-3",
         )}
@@ -108,7 +111,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         {/* Hambúrguer mobile */}
         <button
           onClick={onToggleMobile}
-          className="lg:hidden w-8 h-8 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+          className="lg:hidden w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
           aria-label="Abrir menu"
         >
           <Menu size={15} />
@@ -118,8 +121,8 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         <nav aria-label="Breadcrumb" className="hidden md:flex items-center gap-1.5 text-sm min-w-0 max-w-[40%]">
           {crumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1.5 min-w-0">
-              {i > 0 && <ChevronRight size={12} className="text-zinc-600 shrink-0" />}
-              <span className={cn("truncate", i === crumbs.length - 1 ? "text-zinc-200 font-medium" : "text-zinc-500")}>
+              {i > 0 && <ChevronRight size={12} className="text-muted-foreground/50 shrink-0" />}
+              <span className={cn("truncate", i === crumbs.length - 1 ? "text-foreground font-medium" : "text-muted-foreground")}>
                 {crumb}
               </span>
             </span>
@@ -127,7 +130,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         </nav>
 
         {/* Título mobile */}
-        <span className="md:hidden text-sm font-medium text-zinc-200 truncate flex-1">
+        <span className="md:hidden text-sm font-medium text-foreground truncate flex-1">
           {crumbs[crumbs.length - 1]}
         </span>
 
@@ -137,15 +140,15 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
             onClick={() => setCmdOpen(true)}
             className={cn(
               "w-full max-w-md flex items-center gap-2 h-8 px-2.5 rounded-md",
-              "bg-zinc-900/80 border border-zinc-800/80 text-zinc-500",
-              "hover:border-zinc-700 transition-colors",
+              "bg-muted/60 border border-border text-muted-foreground",
+              "hover:border-border/80 transition-colors",
             )}
           >
             <Search size={13} />
             <span className="text-xs flex-1 text-left truncate">Buscar pedido, fornecedor, produto…</span>
             <span className="flex items-center gap-0.5">
-              <kbd className="inline-flex h-4 items-center rounded border border-zinc-700 bg-zinc-800 px-1 font-mono text-[9px] text-zinc-500">⌘</kbd>
-              <kbd className="inline-flex h-4 items-center rounded border border-zinc-700 bg-zinc-800 px-1 font-mono text-[9px] text-zinc-500">K</kbd>
+              <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">⌘</kbd>
+              <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">K</kbd>
             </span>
           </button>
         </div>
@@ -153,7 +156,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         {/* Search mobile */}
         <button
           onClick={() => setCmdOpen(true)}
-          className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+          className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
           aria-label="Buscar"
         >
           <Search size={15} />
@@ -163,51 +166,49 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         <div className="relative" data-notif-panel>
           <button
             onClick={handleNotifToggle}
-            className="relative w-8 h-8 rounded-md flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+            className="relative w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             aria-label="Notificações"
           >
-            <Bell size={15} className={notifOpen ? "text-zinc-200" : undefined} />
+            <Bell size={15} className={notifOpen ? "text-foreground" : undefined} />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-lhg-500 border-2 border-zinc-950" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-lhg-500 border-2 border-card" />
             )}
           </button>
 
-          {/* Dropdown */}
+          {/* Dropdown de notificações */}
           {notifOpen && (
-            <div className="absolute right-0 top-11 z-50 w-[340px] rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden">
-              {/* Cabeçalho */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/80">
-                <span className="text-sm font-semibold text-zinc-100">Notificações</span>
+            <div className="absolute right-0 top-11 z-50 w-[340px] rounded-xl border border-border bg-card shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/80">
+                <span className="text-sm font-semibold text-foreground">Notificações</span>
                 <button
                   onClick={() => setNotifOpen(false)}
-                  className="w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors"
+                  className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <X size={13} />
                 </button>
               </div>
 
-              {/* Lista */}
               {notifications.length === 0 ? (
-                <div className="py-10 flex flex-col items-center gap-2 text-zinc-600">
+                <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground/50">
                   <Bell size={22} strokeWidth={1.5} />
                   <span className="text-xs">Nenhuma notificação nesta sessão</span>
                 </div>
               ) : (
-                <ul className="max-h-[400px] overflow-y-auto divide-y divide-zinc-800/50">
+                <ul className="max-h-[400px] overflow-y-auto divide-y divide-border/50">
                   {notifications.map((n) => (
                     <li key={n.id}>
                       <a
                         href={n.href ?? "#"}
-                        className="flex gap-3 items-start px-4 py-3 hover:bg-zinc-900/60 transition-colors"
+                        className="flex gap-3 items-start px-4 py-3 hover:bg-muted/40 transition-colors"
                       >
                         <NotifIcon type={n.type} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-zinc-200 leading-snug">{n.title}</p>
+                          <p className="text-xs text-foreground leading-snug">{n.title}</p>
                           {n.description && (
-                            <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{n.description}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{n.description}</p>
                           )}
                         </div>
-                        <span className="text-[10px] text-zinc-600 shrink-0">{timeAgo(n.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground/70 shrink-0">{timeAgo(n.createdAt)}</span>
                       </a>
                     </li>
                   ))}
@@ -217,11 +218,12 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
           )}
         </div>
 
-        {/* ── Ajuda / Onboarding ────────────────────────────────────────── */}
+        {/* ── Tour interativo ───────────────────────────────────────────── */}
         <button
-          onClick={() => setOnboardingOpen(true)}
-          className="hidden sm:flex w-8 h-8 rounded-md items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
-          aria-label="Ajuda"
+          onClick={startTour}
+          className="hidden sm:flex w-8 h-8 rounded-md items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          aria-label="Tour guiado"
+          title="Ver tour guiado"
         >
           <HelpCircle size={15} />
         </button>
@@ -229,126 +231,6 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
 
       {/* Paleta de comandos */}
       <CmdK open={cmdOpen} onClose={() => setCmdOpen(false)} />
-
-      {/* ── Modal de onboarding ────────────────────────────────────────── */}
-      {onboardingOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-            onClick={() => setOnboardingOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-2xl max-h-[88vh] rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl flex flex-col">
-            {/* Cabeçalho */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800/80 shrink-0">
-              <div className="w-7 h-7 rounded-lg bg-lhg-500/15 flex items-center justify-center">
-                <BookOpen size={14} className="text-lhg-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-100">Guia de uso — LHG Suprimentos</h2>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Fluxo de trabalho e atalhos do sistema</p>
-              </div>
-              <button
-                onClick={() => setOnboardingOpen(false)}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {/* Conteúdo */}
-            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6 text-sm">
-
-              {/* Atalhos */}
-              <section>
-                <h3 className="text-[10px] uppercase tracking-[0.12em] text-zinc-600 font-medium mb-3">Atalhos</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { keys: ["⌘", "K"], label: "Busca global" },
-                    { keys: ["⌘", "N"], label: "Nova ação" },
-                    { keys: ["Esc"],    label: "Fechar" },
-                  ].map(({ keys, label }) => (
-                    <div key={label} className="flex flex-col items-center gap-2 rounded-lg bg-zinc-900/60 border border-zinc-800/60 px-3 py-3">
-                      <div className="flex gap-1">
-                        {keys.map((k) => (
-                          <kbd key={k} className="inline-flex h-5 items-center rounded border border-zinc-700 bg-zinc-800 px-1.5 font-mono text-[10px] text-zinc-300">
-                            {k}
-                          </kbd>
-                        ))}
-                      </div>
-                      <span className="text-[11px] text-zinc-400 text-center">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Fluxo principal */}
-              <section>
-                <h3 className="text-[10px] uppercase tracking-[0.12em] text-zinc-600 font-medium mb-3">Fluxo de trabalho</h3>
-                <ol className="space-y-3">
-                  {[
-                    {
-                      n: "1", title: "Nova Requisição",
-                      desc: "⌘N → Nova Requisição · Preencha itens, quantidades e unidade solicitante · Salve como Rascunho",
-                    },
-                    {
-                      n: "2", title: "Criar Cotação",
-                      desc: "Menu Cotações → + Nova Cotação · Vincule a requisição · Adicione os fornecedores que participarão",
-                    },
-                    {
-                      n: "3", title: "Solicitar preços por email",
-                      desc: 'Clique "Solicitar cotação" para enviar email automático a todos os fornecedores com a lista de itens',
-                    },
-                    {
-                      n: "4", title: "Preencher Matriz de Preços",
-                      desc: 'Abra a cotação → Matriz Comparativa · Preencha os preços · Clique "Aplicar sugestão IA" para seleção automática',
-                    },
-                    {
-                      n: "5", title: "Gerar e Aprovar Pedido",
-                      desc: 'Clique "Gerar pedidos" · No menu Pedidos, aprove os pedidos aguardando aprovação',
-                    },
-                    {
-                      n: "6", title: "Enviar ao Omie (opcional)",
-                      desc: 'No pedido aprovado, clique "Enviar ao Omie" para registrar automaticamente no ERP',
-                    },
-                    {
-                      n: "7", title: "Entrada de Nota Fiscal",
-                      desc: "Menu Notas Fiscais → + Nova NF · Digite o número da NF · O sistema busca os dados automaticamente no Omie",
-                    },
-                  ].map(({ n, title, desc }) => (
-                    <li key={n} className="flex gap-3">
-                      <span className="w-6 h-6 rounded-full bg-lhg-500/15 text-lhg-400 text-[11px] font-mono font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        {n}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-zinc-200">{title}</p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">{desc}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-
-              {/* Notificações */}
-              <section>
-                <h3 className="text-[10px] uppercase tracking-[0.12em] text-zinc-600 font-medium mb-3">Notificações em tempo real</h3>
-                <div className="rounded-lg bg-zinc-900/50 border border-zinc-800/60 px-4 py-3 space-y-1.5 text-[12px] text-zinc-400">
-                  <p>• Pedido aprovado ou rejeitado</p>
-                  <p>• Nova cotação criada</p>
-                  <p>• Pedido gerado a partir de cotação</p>
-                  <p>• Novo pedido aguardando sua aprovação</p>
-                </div>
-              </section>
-            </div>
-
-            {/* Rodapé */}
-            <div className="px-6 py-3 border-t border-zinc-800/80 shrink-0 flex items-center justify-between">
-              <span className="text-[11px] text-zinc-600">
-                Dúvidas? Contate: <span className="text-zinc-400">danilo@lushmotel.com.br</span>
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

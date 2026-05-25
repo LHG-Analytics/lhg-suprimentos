@@ -300,6 +300,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         </div>
         <button
           onClick={() => setModalOpen(true)}
+          data-tour="btn-nova-cotacao"
           className={cn(
             "inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors",
             "border-emerald-700/60 bg-emerald-500/10 text-emerald-400",
