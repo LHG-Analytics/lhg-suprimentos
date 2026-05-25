@@ -28,6 +28,8 @@ export interface Unidade {
   logo:      string;
   shortName: string;
   cor:       string;
+  /** Código/sigla curto exibido entre parênteses no seletor. Ex: "RCC" */
+  codigo?:   string;
   /** true = unidade em implantação; aparece opaca e não é clicável */
   disabled?: boolean;
 }
@@ -47,6 +49,7 @@ export const UNIDADES: Unidade[] = [
     logo:      "/unidades/lush.png",
     shortName: "Ipiranga",
     cor:       "#10b981",
+    codigo:    "RCC",
   },
   {
     id:        "lush-lapa",

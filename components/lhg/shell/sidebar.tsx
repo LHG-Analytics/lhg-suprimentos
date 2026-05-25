@@ -124,7 +124,7 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger
-          title={unidade.nome}
+          title={unidade.codigo ? `${unidade.nome} (${unidade.codigo})` : unidade.nome}
           className="w-full h-10 rounded-md flex items-center justify-center hover:bg-zinc-800/60 transition-colors outline-none px-1"
         >
           {/* Usa toda a largura disponível do sidebar colapsado (≈52px) */}
@@ -163,7 +163,11 @@ function UnitSelector({ collapsed }: { collapsed: boolean }) {
         </div>
         {/* Nome */}
         <span className="flex-1 min-w-0 text-[13px] text-zinc-200 truncate font-medium">
-          {unidade.id === "todas" ? "Todas as unidades" : unidade.nome}
+          {unidade.id === "todas"
+            ? "Todas as unidades"
+            : unidade.codigo
+              ? `${unidade.nome} (${unidade.codigo})`
+              : unidade.nome}
         </span>
         {/* Chevron */}
         <ChevronDown
@@ -243,7 +247,9 @@ function UnitDropdownContent({
               className="object-contain max-h-full max-w-full"
             />
           </div>
-          <span className="text-[13px] flex-1 text-zinc-300">{u.nome}</span>
+          <span className="text-[13px] flex-1 text-zinc-300">
+            {u.codigo ? `${u.nome} (${u.codigo})` : u.nome}
+          </span>
           {u.disabled ? (
             <span className="text-[10px] text-zinc-600 shrink-0">em breve</span>
           ) : unidade.id === u.id ? (
