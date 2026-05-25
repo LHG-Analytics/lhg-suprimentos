@@ -3,8 +3,10 @@
  * Página de Pedidos de Compra.
  * Layout 2-col: lista à esquerda, detalhe + timeline à direita.
  * Inclui aba "Pedidos Omie" com pedidos sincronizados do ERP (migration 0016).
+ * Pedidos Omie filtrados pela unidade ativa (cookie lhg-unidade-slug).
  */
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosClient } from "./_components/pedidos-client";
 
@@ -14,7 +16,35 @@ export default async function PedidosPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: pedidos }, { data: omie_pedidos }, { data: unidades }] = await Promise.all([
+  // Lê a unidade ativa do cookie definido pelo UnidadeContext client-side
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+  // Resolve UUID da unidade quando não é "todas"
+  let unidadeId: string | null = null;
+  if (slug && slug !== "todas") {
+    const { data: unidade } = await supabase
+      .from("unidades")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+    unidadeId = unidade?.id ?? null;
+  }
+
+  // Query de omie_pedidos filtrada pela unidade ativa
+  const omieQuery = supabase
+    .from("omie_pedidos_compra")
+    .select(`
+      id, omie_codigo, numero, data_pedido, data_previsao,
+      fornecedor_nome, valor_total, situacao, situacao_aprovacao,
+      etapa, numero_pedido_forn, omie_sincronizado_em, unidade_id,
+      unidades(nome, slug)
+    `)
+    .order("numero", { ascending: false });
+
+  if (unidadeId) omieQuery.eq("unidade_id", unidadeId);
+
+  const [{ data: pedidos }, { data: omie_pedidos }] = await Promise.all([
     supabase
       .from("pedidos")
       .select(`
@@ -35,30 +65,13 @@ export default async function PedidosPage() {
       `)
       .order("created_at", { ascending: false }),
 
-    // Pedidos sincronizados do Omie ERP (tabela espelho)
-    supabase
-      .from("omie_pedidos_compra")
-      .select(`
-        id, omie_codigo, numero, data_pedido, data_previsao,
-        fornecedor_nome, valor_total, situacao, situacao_aprovacao,
-        etapa, numero_pedido_forn, omie_sincronizado_em, unidade_id,
-        unidades(nome, slug)
-      `)
-      .order("numero", { ascending: false }),
-
-    // Unidades para exibir o filtro na aba Omie
-    supabase
-      .from("unidades")
-      .select("id, nome, slug")
-      .eq("ativa", true)
-      .order("nome"),
+    omieQuery,
   ]);
 
   return (
     <PedidosClient
       pedidos={pedidos ?? []}
       omie_pedidos={omie_pedidos ?? []}
-      unidades={unidades ?? []}
     />
   );
 }
