@@ -315,7 +315,7 @@ function ConviteModal({ onClose }: { onClose: () => void }) {
               <p className="text-[11px] text-muted-foreground/60">
                 {role === "solicitante" && "Pode criar requisições e registrar NFs da própria unidade."}
                 {role === "comprador"   && "Acesso completo a cotações, pedidos e sincronização com Omie."}
-                {role === "aprovador"   && "Pode aprovar pedidos de compra."}
+                {role === "aprovador"   && "Acesso completo a cotações, pedidos e sincronização com Omie."}
                 {role === "admin"       && "Acesso total, incluindo configurações e gestão de usuários."}
               </p>
             </div>

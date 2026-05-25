@@ -493,5 +493,4 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
   - `/chat`: sidebar de sessões persistentes (estilo ChatGPT) via Supabase browser client; criar/carregar/deletar sessões; mensagens persistidas em `ai_chat_messages`
   - Migration 0015: tabelas `invites`, `ai_chat_sessions`, `ai_chat_messages` + bucket `avatars` (RLS por uid)
   - `lib/supabase/types.ts` atualizado com as 3 novas tabelas
-
-### Nota: última migration pendente de execução — 0015 (`invites`, `ai_chat_sessions`, `ai_chat_messages`, bucket `avatars`). Rodar no Supabase SQL Editor.
+  - ✅ Fix `aprovador` = mesmo acesso que `comprador`: textos descritivos em `admin-client.tsx`, `invite-dialog.tsx` e `admin/usuarios/page.tsx` atualizados; funcionalmente já não havia guards separando os dois papéis

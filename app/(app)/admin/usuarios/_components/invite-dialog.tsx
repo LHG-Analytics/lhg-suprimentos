@@ -25,7 +25,7 @@ interface InviteDialogProps {
 const ROLES = [
   { value: "solicitante", label: "Solicitante",  desc: "Abre requisições e confere NF da sua unidade" },
   { value: "comprador",   label: "Comprador",    desc: "Gerencia cotações e pedidos de todas as unidades" },
-  { value: "aprovador",   label: "Aprovador",    desc: "Aprova pedidos acima da alçada do comprador" },
+  { value: "aprovador",   label: "Aprovador",    desc: "Acesso completo a cotações e pedidos, com alçada de aprovação" },
   { value: "admin",       label: "Admin",        desc: "Acesso total: usuários, configurações e relatórios" },
 ];
 

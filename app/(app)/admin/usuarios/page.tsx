@@ -190,7 +190,7 @@ export default async function UsuariosPage() {
           {[
             { role: "Solicitante", color: "text-muted-foreground",  bg: "bg-muted",          desc: "Abre requisições e confere NF da sua unidade" },
             { role: "Comprador",   color: "text-sky-400",           bg: "bg-sky-500/15",      desc: "Gerencia cotações e pedidos de todas as unidades" },
-            { role: "Aprovador",   color: "text-amber-400",         bg: "bg-amber-500/15",    desc: "Aprova pedidos acima da alçada do comprador" },
+            { role: "Aprovador",   color: "text-amber-400",         bg: "bg-amber-500/15",    desc: "Acesso completo a cotações e pedidos, com alçada de aprovação" },
             { role: "Admin",       color: "text-lhg-400",           bg: "bg-lhg-500/15",      desc: "Acesso total: usuários, configs e relatórios" },
           ].map((r) => (
             <div key={r.role} className="flex items-start gap-2.5">
