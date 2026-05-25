@@ -1,11 +1,10 @@
 /**
- * app/api/chat/route.ts — LHG-218
+ * app/api/chat/route.ts — LHG-218 / LHG-230
  * Rota de streaming para o Assistente IA via OpenRouter.
  * Usa a API OpenAI-compatible do OpenRouter com stream: true.
  */
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { fetchOrcamento, formatBudgetContextoIA } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 
@@ -21,6 +20,14 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
+
+  // Busca nome do usuário para personalização
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("nome")
+    .eq("id", user.id)
+    .single();
+  const userName = profile?.nome ?? user.email?.split("@")[0] ?? "usuário";
 
   const { messages, contexto } = await req.json() as {
     messages: Message[];
@@ -43,21 +50,28 @@ export async function POST(req: NextRequest) {
     : null;
   const budgetCtx = formatBudgetContextoIA(orcamento);
 
-  // System prompt com contexto do LHG + orçamento dinâmico
-  const systemPrompt = `Você é o Assistente IA de Compras do LHG Suprimentos — um sistema de gestão de compras para hotéis.
-Você ajuda compradores e gestores a tomar decisões mais inteligentes sobre cotações, fornecedores, pedidos e custos.
+  // ── System prompt especializado ───────────────────────────────────────────
+  const systemPrompt = `Você é a LHG IA — assistente especialista sênior em compras e suprimentos para hotéis da rede LHG (Lush Hotels Group).
 
-Habilidades principais:
-- Analisar cotações e sugerir o melhor mix de fornecedores
-- Comparar preços e identificar economias potenciais
-- Verificar inconsistências em pedidos e notas fiscais
-- Sugerir substituição de produtos por alternativas de custo menor
-- Interpretar dados de pontualidade e rating de fornecedores
-- Calcular totais, médias e variações de custo
+Sua especialidade abrange:
+- **Gestão de compras hoteleiras**: amenities, enxovais, produtos de limpeza, frigobar, manutenção predial e importados
+- **Análise de cotações**: identificar o melhor mix de fornecedores balanceando preço, qualidade, prazo e confiabilidade
+- **Controle de custos**: monitorar variações de preço, identificar desvios orçamentários, sugerir reduções sem perda de qualidade
+- **Gestão de fornecedores**: avaliar rating, pontualidade, histórico de entregas e risco de dependência
+- **Inteligência de mercado**: comparar preços de mercado, identificar sazonalidades e negociar melhores condições
+- **Conformidade e auditoria**: verificar notas fiscais, detectar inconsistências, validar pedidos antes da aprovação
+- **Planejamento**: sugerir pedidos antecipados baseados em histórico de consumo e lead time dos fornecedores
+
+Características da sua resposta:
+- Seja **direta, objetiva e factual** — use números e dados sempre que disponíveis
+- **Personalize** pelo nome quando adequado (o usuário atual se chama **${userName}**)
+- Use **bullet points** para listas de recomendações ou análises comparativas
+- Formate valores monetários em **R$** com duas casas decimais
+- Quando identificar um problema, sempre ofereça pelo menos **uma ação concreta** que o usuário pode tomar
+- Se não tiver dados suficientes para uma recomendação segura, diga explicitamente e sugira o que verificar
+- Use um tom **profissional mas acessível** — como um consultor experiente que conhece bem o negócio
 ${budgetCtx}
-Tom: profissional, direto e factual. Use dados quando disponíveis.
-Formate respostas com bullet points e valores monetários em Real brasileiro (R$).
-${contexto ? `\nContexto atual do usuário:\n${contexto}` : ""}`;
+${contexto ? `\n## Contexto atual do sistema\n${contexto}` : ""}`;
 
   const payload = {
     model:    process.env.OPENROUTER_MODEL ?? "anthropic/claude-haiku-4-5",

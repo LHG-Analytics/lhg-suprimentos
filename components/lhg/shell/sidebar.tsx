@@ -44,13 +44,27 @@ interface SidebarProps {
   cotacoesBadge?: number;
 }
 
-// ── Avatar por iniciais ────────────────────────────────────────────────────────
-function UserAvatar({ name, size = 30 }: { name: string; size?: number }) {
+// ── Avatar por iniciais (ou foto) ─────────────────────────────────────────────
+function UserAvatar({ name, avatarUrl, size = 30 }: { name: string; avatarUrl?: string | null; size?: number }) {
   const initials = name
     .split(" ")
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="shrink-0 rounded-full object-cover select-none"
+        style={{ width: size, height: size }}
+        aria-label={name}
+      />
+    );
+  }
+
   return (
     <div
       className="shrink-0 rounded-full bg-lhg-700 text-white flex items-center justify-center font-mono font-semibold select-none"
@@ -346,19 +360,23 @@ export function Sidebar({
               >
                 {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
               </button>
-              <UserAvatar name={user.nome} size={32} />
+              <Link href="/perfil" title="Meu perfil">
+                <UserAvatar name={user.nome} avatarUrl={user.avatarUrl} size={32} />
+              </Link>
             </div>
           ) : (
             <div className="rounded-md p-1.5 flex items-center gap-2.5">
-              <UserAvatar name={user.nome} size={30} />
-              <div className="flex-1 min-w-0">
+              <Link href="/perfil" className="shrink-0" title="Meu perfil">
+                <UserAvatar name={user.nome} avatarUrl={user.avatarUrl} size={30} />
+              </Link>
+              <Link href="/perfil" className="flex-1 min-w-0 hover:opacity-80 transition-opacity">
                 <div className="text-sm text-sidebar-foreground font-medium truncate leading-tight">
                   {user.nome}
                 </div>
                 <div className="text-[11px] text-sidebar-foreground/50 capitalize leading-tight">
                   {user.role}
                 </div>
-              </div>
+              </Link>
               <button
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 className="w-7 h-7 rounded-md flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"

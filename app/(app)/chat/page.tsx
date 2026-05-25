@@ -1,6 +1,6 @@
 /**
- * app/(app)/chat/page.tsx — LHG-218
- * Assistente IA de Compras com streaming via OpenRouter.
+ * app/(app)/chat/page.tsx — LHG-218 / LHG-230
+ * Assistente IA de Compras com streaming via OpenRouter e histórico de sessões.
  */
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -12,8 +12,14 @@ export default async function ChatPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Contexto enriquecido para o sistema IA
-  const [{ data: cotacoesAtivas }, { data: pedidosPendentes }, { data: topFornecedores }] = await Promise.all([
+  // Busca dados para o contexto da IA em paralelo
+  const [
+    { data: cotacoesAtivas },
+    { data: pedidosPendentes },
+    { data: topFornecedores },
+    { data: sessoes },
+    { data: profile },
+  ] = await Promise.all([
     supabase
       .from("cotacoes")
       .select("numero, titulo, status, valor_estimado, economia")
@@ -33,6 +39,20 @@ export default async function ChatPage() {
       .eq("ativo", true)
       .order("rating", { ascending: false })
       .limit(10),
+
+    // Sessões existentes do usuário (sidebar de histórico)
+    supabase
+      .from("ai_chat_sessions")
+      .select("id, title, updated_at")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(30),
+
+    supabase
+      .from("user_profiles")
+      .select("nome")
+      .eq("id", user.id)
+      .single(),
   ]);
 
   // Montar contexto textual para injetar no system prompt
@@ -61,6 +81,11 @@ export default async function ChatPage() {
   }
 
   return (
-    <ChatClient contexto={contextoLinhas.join("\n")} />
+    <ChatClient
+      userId={user.id}
+      userName={profile?.nome ?? ""}
+      contexto={contextoLinhas.join("\n")}
+      sessoesIniciais={sessoes ?? []}
+    />
   );
 }

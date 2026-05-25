@@ -67,6 +67,80 @@ export type Database = {
           },
         ]
       }
+      ai_chat_messages: {
+        Row: {
+          id: string
+          session_id: string
+          user_id: string
+          role: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          user_id: string
+          role: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          user_id?: string
+          role?: string
+          content?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chat_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_chat_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cotacao_fornecedores: {
         Row: {
           cotacao_id: string
@@ -504,6 +578,47 @@ export type Database = {
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invites: {
+        Row: {
+          id: string
+          email: string
+          role: string
+          token: string
+          invited_by: string | null
+          expires_at: string
+          used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          role?: string
+          token?: string
+          invited_by?: string | null
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          role?: string
+          token?: string
+          invited_by?: string | null
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invites_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
