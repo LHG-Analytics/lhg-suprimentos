@@ -801,6 +801,7 @@ export type Database = {
           omie_codigo: string | null
           omie_descricao: string | null
           omie_sincronizado_em: string | null
+          omie_unidade_id: string | null
           preco_custo: number | null
           unidade_med: string
         }
@@ -817,6 +818,7 @@ export type Database = {
           omie_codigo?: string | null
           omie_descricao?: string | null
           omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
           preco_custo?: number | null
           unidade_med: string
         }
@@ -833,10 +835,19 @@ export type Database = {
           omie_codigo?: string | null
           omie_descricao?: string | null
           omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
           preco_custo?: number | null
           unidade_med?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "produtos_omie_unidade_id_fkey"
+            columns: ["omie_unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       regras_aprovacao: {
         Row: {
