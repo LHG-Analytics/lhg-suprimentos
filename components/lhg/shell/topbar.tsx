@@ -147,7 +147,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
             <Search size={13} />
             <span className="text-xs flex-1 text-left truncate">Buscar pedido, fornecedor, produto…</span>
             <span className="flex items-center gap-0.5">
-              <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">⌘</kbd>
+              <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1.5 font-mono text-[9px] text-muted-foreground">Ctrl</kbd>
               <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">K</kbd>
             </span>
           </button>

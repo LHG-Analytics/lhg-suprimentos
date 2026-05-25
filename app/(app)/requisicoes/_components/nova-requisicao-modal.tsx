@@ -11,6 +11,7 @@
  * Tokens semânticos para suporte light/dark mode.
  */
 import { useState, useTransition, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X, ChevronLeft, ChevronRight, Plus, Trash2, Search,
   AlertTriangle, Check, Loader2, ClipboardList, SlidersHorizontal,
@@ -72,6 +73,8 @@ function estimarTotal(itens: ItemRow[]) {
 const STEP_LABELS = ["Unidades & urgência", "Itens", "Revisão"];
 
 // ── Produto Combobox ──────────────────────────────────────────────────────────
+// O dropdown é renderizado via createPortal no document.body com position:fixed
+// para escapar do overflow:hidden do modal pai.
 
 function ProdutoCombobox({
   value, onChange, produtos, familiaFiltro,
@@ -83,15 +86,36 @@ function ProdutoCombobox({
 }) {
   const [open,  setOpen]  = useState(false);
   const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos,   setPos]   = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef  = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Fecha ao clicar fora (trigger ou dropdown)
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (
+        triggerRef.current?.contains(t) ||
+        dropdownRef.current?.contains(t)
+      ) return;
+      setOpen(false);
     }
-    document.addEventListener("mousedown", handler);
+    if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [open]);
+
+  function openDropdown() {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPos({
+        top:   rect.bottom + 4,
+        left:  rect.left,
+        width: Math.max(rect.width, 380),
+      });
+    }
+    setOpen((v) => !v);
+    setQuery("");
+  }
 
   const filtered = produtos.filter((p) => {
     if (familiaFiltro && p.familia_omie !== familiaFiltro) return false;
@@ -103,17 +127,19 @@ function ProdutoCombobox({
       (p.familia_omie?.toLowerCase().includes(q) ?? false) ||
       p.categoria.toLowerCase().includes(q)
     );
-  }).slice(0, 25);
+  }).slice(0, 30);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => { setOpen(!open); setQuery(""); }}
+        onClick={openDropdown}
         className={cn(
           "w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors",
           "border border-transparent hover:border-border",
           value ? "text-foreground" : "text-muted-foreground",
+          open && "border-border bg-muted/30",
         )}
       >
         {value ? (
@@ -129,11 +155,13 @@ function ProdutoCombobox({
         )}
       </button>
 
-      {open && (
-        <div className={cn(
-          "absolute z-50 top-full left-0 mt-1 w-96 rounded-lg border border-border bg-card shadow-2xl",
-          "overflow-hidden",
-        )}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+          className="rounded-lg border border-border bg-card shadow-2xl overflow-hidden"
+        >
+          {/* Busca */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
             <Search size={12} className="text-muted-foreground shrink-0" />
             <input
@@ -145,14 +173,16 @@ function ProdutoCombobox({
               className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/50 outline-none"
             />
             {familiaFiltro && (
-              <span className="text-[10px] bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/40 rounded px-1.5 py-0.5 shrink-0 truncate max-w-[100px]">
+              <span className="text-[10px] bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/40 rounded px-1.5 py-0.5 shrink-0 truncate max-w-[110px]">
                 {familiaFiltro}
               </span>
             )}
           </div>
-          <ul className="max-h-56 overflow-y-auto py-1">
+
+          {/* Lista */}
+          <ul className="max-h-64 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-3 text-[12px] text-muted-foreground/50 text-center">
+              <li className="px-3 py-4 text-[12px] text-muted-foreground/50 text-center">
                 Nenhum produto encontrado
               </li>
             ) : (
@@ -160,6 +190,10 @@ function ProdutoCombobox({
                 <li key={p.id}>
                   <button
                     type="button"
+                    onMouseDown={(e) => {
+                      // Previne o blur do input de busca antes do clique
+                      e.preventDefault();
+                    }}
                     onClick={() => { onChange(p); setOpen(false); }}
                     className={cn(
                       "w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors",
@@ -171,7 +205,9 @@ function ProdutoCombobox({
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px] text-muted-foreground/70 font-mono">{p.codigo}</span>
                         {p.familia_omie && (
-                          <span className="text-[10px] text-muted-foreground/50 truncate">{p.familia_omie}</span>
+                          <span className="text-[10px] text-muted-foreground/50 truncate max-w-[140px]">
+                            {p.familia_omie}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -188,7 +224,16 @@ function ProdutoCombobox({
               ))
             )}
           </ul>
-        </div>
+
+          {/* Rodapé com contagem */}
+          <div className="px-3 py-1.5 border-t border-border/60 bg-muted/20">
+            <span className="text-[10px] text-muted-foreground/60">
+              {filtered.length} produto{filtered.length !== 1 ? "s" : ""}
+              {filtered.length === 30 ? " (mostrando 30)" : ""}
+            </span>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
