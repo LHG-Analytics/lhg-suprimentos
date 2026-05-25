@@ -107,8 +107,8 @@ export function OrcamentoWidget({ orcamento, gastosPorCategoria }: OrcamentoWidg
       const pct    = orcado > 0 ? (gasto / orcado) * 100 : 0;
       return { ...c, orcado, gasto, pct };
     })
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 6);
+    // Ordena: primeiro quem mais gastou (%), depois quem tem maior orçamento
+    .sort((a, b) => b.pct - a.pct || b.orcado - a.orcado);
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
@@ -155,30 +155,38 @@ export function OrcamentoWidget({ orcamento, gastosPorCategoria }: OrcamentoWidg
       {/* Por categoria */}
       {catRows.length > 0 && (
         <div className="border-t border-border pt-2 space-y-2.5">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
-            Por categoria
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+              Por categoria
+            </div>
+            <span className="text-[10px] text-muted-foreground/50 font-mono">
+              {catRows.length} categorias
+            </span>
           </div>
 
-          {catRows.map((c) => (
-            <div key={c.categoria} className="space-y-1">
-              <div className="flex justify-between items-center gap-2">
-                <span className="text-xs text-foreground/70 truncate flex-1" title={c.categoria}>
-                  {c.categoria}
-                </span>
-                <span
-                  className={cn(
-                    "text-[10px] font-mono shrink-0",
-                    c.pct >= 100 ? "text-red-600 dark:text-red-400"
-                    : c.pct >= 80 ? "text-amber-600 dark:text-amber-400"
-                    :               "text-muted-foreground",
-                  )}
-                >
-                  {fBRL(c.gasto)}/{fBRL(c.orcado)}
-                </span>
+          {/* Lista scrollável — permite ver todas as categorias */}
+          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-0.5">
+            {catRows.map((c) => (
+              <div key={c.categoria} className="space-y-1">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-xs text-foreground/70 truncate flex-1" title={c.categoria}>
+                    {c.categoria}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono shrink-0",
+                      c.pct >= 100 ? "text-red-600 dark:text-red-400"
+                      : c.pct >= 80 ? "text-amber-600 dark:text-amber-400"
+                      :               "text-muted-foreground",
+                    )}
+                  >
+                    {fBRL(c.gasto)}/{fBRL(c.orcado)}
+                  </span>
+                </div>
+                <ProgressBar pct={c.pct} warn={c.pct >= 80} />
               </div>
-              <ProgressBar pct={c.pct} warn={c.pct >= 80} />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
