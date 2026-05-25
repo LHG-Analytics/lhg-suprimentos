@@ -32,7 +32,8 @@ export default async function PedidosPage() {
   }
 
   // Query de omie_pedidos filtrada pela unidade ativa
-  const omieQuery = supabase
+  // ⚠️ Supabase builder é imutável — cada .eq() retorna nova instância; reatribuição obrigatória
+  let omieQuery = supabase
     .from("omie_pedidos_compra")
     .select(`
       id, omie_codigo, numero, data_pedido, data_previsao,
@@ -42,7 +43,7 @@ export default async function PedidosPage() {
     `)
     .order("numero", { ascending: false });
 
-  if (unidadeId) omieQuery.eq("unidade_id", unidadeId);
+  if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
   const [{ data: pedidos }, { data: omie_pedidos }] = await Promise.all([
     supabase

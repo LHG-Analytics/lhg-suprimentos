@@ -603,6 +603,27 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const [busca, setBusca]           = useState("");
   const [selectedLhgId, setSelectedLhgId] = useState<string | null>(pedidosIniciais[0]?.id ?? null);
   const [selectedOmie, setSelectedOmie]   = useState<OmiePedido | null>(null);
+  const [syncing, setSyncing]             = useState(false);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/omie/sync-pedidos", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        const total = (data.results as { total?: number }[] | undefined)
+          ?.reduce((acc: number, r) => acc + (r.total ?? 0), 0) ?? 0;
+        toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""} do Omie`);
+        router.refresh();
+      } else {
+        toast.error("Erro ao sincronizar pedidos Omie");
+      }
+    } catch {
+      toast.error("Erro ao sincronizar pedidos Omie");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   // Lista unificada: LHG + Omie misturados, ordenados por data desc
   const listaUnificada = useMemo<ListItem[]>(() => {
@@ -659,6 +680,17 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
               Pedidos
               <span className="text-[12px] font-normal text-muted-foreground/60">({filtrados.length})</span>
             </h1>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sincronizar pedidos do Omie ERP"
+              className="group inline-flex items-center gap-1 rounded-lg border border-amber-700/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+            >
+              {syncing
+                ? <Loader2 size={11} className="animate-spin" />
+                : <RefreshCw size={11} className="group-hover:rotate-180 transition-transform duration-500" />}
+              {syncing ? "Sync…" : "Sync Omie"}
+            </button>
           </div>
 
           {/* Busca */}
