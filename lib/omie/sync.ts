@@ -79,7 +79,7 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
   };
 }
 
-function mapProduto(item: OmieProdutoItem) {
+function mapProduto(item: OmieProdutoItem, unidadeId: string) {
   // A API Omie retorna o nome da família em "descricao_familia".
   // "familia_produto" não existe na resposta real — mantido como fallback por segurança.
   const familiaOmie: string | null =
@@ -99,6 +99,7 @@ function mapProduto(item: OmieProdutoItem) {
     categoria:            categoriaParaFamilia(familiaOmie),
     familia_omie:         familiaOmie,
     omie_codigo:          String(item.codigo_produto),
+    omie_unidade_id:      unidadeId,
     omie_descricao:       descDetalhada,
     ncm:                  item.ncm ?? null,
     ean:                  item.ean ?? null,
@@ -178,10 +179,14 @@ export async function syncFornecedores(
 
 // ── Sync: Produtos ─────────────────────────────────────────────────────────────
 
+/**
+ * Sincroniza produtos de UMA unidade específica via Omie.
+ * Cada unidade tem seu próprio catálogo de produtos (onConflict por omie_codigo + omie_unidade_id).
+ */
 export async function syncProdutos(
   supabase: SupabaseClient,
   creds: OmieCredentials,
-  unidadeId: string | null = null, // produtos são globais (não por unidade)
+  unidadeId: string,
 ): Promise<SyncResult> {
   const inicio = Date.now();
   let total = 0;
@@ -191,7 +196,7 @@ export async function syncProdutos(
   try {
     const items = await listAllProdutos(creds, (page, totalPages) => {
       console.log(
-        `[omie/sync] Produtos página ${page}/${totalPages}`,
+        `[omie/sync] Produtos unidade=${unidadeId} página ${page}/${totalPages}`,
       );
     });
 
@@ -199,15 +204,18 @@ export async function syncProdutos(
     const BATCH = 50;
 
     for (let i = 0; i < items.length; i += BATCH) {
-      const batch = items.slice(i, i + BATCH).map(mapProduto);
+      const batch = items.slice(i, i + BATCH).map((item) => mapProduto(item, unidadeId));
 
       // ── Estratégia de upsert em 2 passos ─────────────────────────────────────
       //
-      // Passo 1 — INSERT novos produtos (ignorando conflito de omie_codigo).
-      //           Produtos novos recebem categoria = familia_omie derivada do mapa.
+      // Passo 1 — INSERT novos produtos para esta unidade (ignora duplicatas
+      //           por omie_codigo + omie_unidade_id).
       const { error: insertErr } = await supabase
         .from("produtos")
-        .upsert(batch, { onConflict: "omie_codigo", ignoreDuplicates: true });
+        .upsert(batch, {
+          onConflict: "omie_codigo,omie_unidade_id",
+          ignoreDuplicates: true,
+        });
 
       if (insertErr) {
         console.error("[omie/sync] Erro insert produtos:", insertErr.message);
@@ -215,13 +223,11 @@ export async function syncProdutos(
         continue;
       }
 
-      // Passo 2 — UPDATE dos campos de metadados do Omie em produtos EXISTENTES.
+      // Passo 2 — UPDATE dos campos de metadados Omie em produtos EXISTENTES desta unidade.
       //
       // Política de categoria no re-sync:
       //   - sempre atualiza categoria derivada de familia_omie.
       //   - se familia_omie for null, categoria fica "Outros" (fallback).
-      //   - edições manuais de categoria serão sobrescritas (aceitável agora;
-      //     implementar categoria_manual: boolean quando necessário).
       for (const p of batch) {
         const { error: updateErr } = await supabase
           .from("produtos")
@@ -237,7 +243,8 @@ export async function syncProdutos(
             omie_sincronizado_em: p.omie_sincronizado_em,
             ativo:                p.ativo,
           })
-          .eq("omie_codigo", p.omie_codigo);
+          .eq("omie_codigo", p.omie_codigo)
+          .eq("omie_unidade_id", unidadeId);
 
         if (updateErr) {
           console.error("[omie/sync] Erro update produto:", updateErr.message);
@@ -286,7 +293,8 @@ export interface UnidadeComCreds {
 }
 
 /**
- * Sincroniza fornecedores de todas as unidades + produtos (via primeira unidade).
+ * Sincroniza fornecedores e produtos de TODAS as unidades ativas.
+ * Cada unidade tem seu próprio catálogo de fornecedores e produtos.
  * Retorna um relatório por unidade/entidade.
  */
 export async function syncTodasUnidades(
@@ -306,7 +314,6 @@ export async function syncTodasUnidades(
   }
 
   const results: SyncResult[] = [];
-  let produtosSincronizados = false;
 
   for (const unidade of unidades as UnidadeComCreds[]) {
     const creds: OmieCredentials = {
@@ -320,12 +327,9 @@ export async function syncTodasUnidades(
     const resForn = await syncFornecedores(supabase, creds, unidade.id);
     results.push(resForn);
 
-    // Produtos são sincronizados apenas uma vez (são globais entre unidades)
-    if (!produtosSincronizados) {
-      const resProd = await syncProdutos(supabase, creds, unidade.id);
-      results.push(resProd);
-      produtosSincronizados = true;
-    }
+    // Sincroniza produtos por unidade (cada unidade tem seu catálogo no Omie)
+    const resProd = await syncProdutos(supabase, creds, unidade.id);
+    results.push(resProd);
   }
 
   return {

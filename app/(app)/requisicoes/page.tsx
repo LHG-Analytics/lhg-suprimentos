@@ -2,8 +2,13 @@
  * app/(app)/requisicoes/page.tsx — LHG-209
  * Lista de requisições com filtros por status e wizard de criação.
  * Server Component: busca dados no Supabase e passa ao client.
+ *
+ * LHG-228: produtos filtrados pela unidade ativa (cookie).
+ * "Todas as unidades" retorna catálogo completo.
+ * Ao criar requisição, somente produtos da unidade selecionada estão disponíveis.
  */
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { RequisicoesClient } from "./_components/requisicoes-client";
 
@@ -16,6 +21,21 @@ export default async function RequisicoesPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Lê a unidade ativa do cookie definido pelo UnidadeContext client-side
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+  // Resolve UUID da unidade quando não é "todas"
+  let unidadeId: string | null = null;
+  if (slug && slug !== "todas") {
+    const { data: unidade } = await supabase
+      .from("unidades")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+    unidadeId = unidade?.id ?? null;
+  }
 
   const [
     { data: requisicoes },
@@ -38,11 +58,19 @@ export default async function RequisicoesPage() {
       .eq("ativa", true)
       .order("nome"),
 
-    supabase
-      .from("produtos")
-      .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
-      .eq("ativo", true)
-      .order("nome"),
+    // Produtos filtrados pela unidade ativa (para o wizard de Nova Requisição)
+    unidadeId
+      ? supabase
+          .from("produtos")
+          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
+          .eq("ativo", true)
+          .eq("omie_unidade_id", unidadeId)
+          .order("nome")
+      : supabase
+          .from("produtos")
+          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
+          .eq("ativo", true)
+          .order("nome"),
   ]);
 
   return (
