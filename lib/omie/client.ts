@@ -578,65 +578,83 @@ export async function criarPedidoCompra(
   );
 }
 
-// ── Tipos: Listagem de Pedidos de Compra ──────────────────────────────────────
+// ── Tipos: Pesquisa de Pedidos de Compra (PesquisarPedCompra) ─────────────────
+//
+// ⚠️ PesquisarPedCompra usa nomes de parâmetros DIFERENTES de outros endpoints Omie:
+//   - nPagina (não "pagina")
+//   - nRegsPorPagina (não "registros_por_pagina"), máximo 100
+//   - lApenasImportadoApi: "N" → inclui TODOS (não só importados via API)
 
-export interface OmieListarPedidosParam extends OmiePaginacaoParam {
-  filtrar_apenas_ativo?: "S" | "N";
+export interface OmiePesquisarPedCompraParam {
+  nPagina: number;
+  nRegsPorPagina: number;
+  lApenasImportadoApi?: "S" | "N" | "T"; // "N"=todos, "S"=só API, "T"=todos (= "N")
 }
 
 export interface OmiePedidoCompraListItem {
   cabecalho: {
-    nCodPedido:      number;   // ID interno Omie
-    nNumPedido:      number;   // número sequencial
-    dDtPedido?:      string;   // DD/MM/YYYY
-    dDtPrevisao?:    string;   // DD/MM/YYYY
-    nCodFornecedor?: number;
-    cEtapa?:         string;   // "10"=digitação, "20"=ag. confirmação, etc.
+    nCodPedido:       number;   // ID interno Omie
+    nNumPedido:       number;   // número sequencial
+    dDtPedido?:       string;   // DD/MM/YYYY
+    dDtPrevisao?:     string;   // DD/MM/YYYY
+    nCodFornecedor?:  number;
+    cEtapa?:          string;   // "10"=digitação, "20"=ag. confirmação, etc.
     nValTotalPedido?: number;
-    // Alguns endpoints retornam com nomes levemente diferentes
-    nValorTotal?:    number;
+    nValorTotal?:     number;   // variação de nome em alguns registros
   };
   informacoes_adicionais?: {
-    cSitPedido?:      string;  // "Aguardando entrega", "Previsão de entrega atrasada"...
-    cSitAprovacao?:   string;  // "Aprovado", ""
-    cNumPedFornec?:   string;  // N° do pedido no fornecedor
-    cRazaoSocial?:    string;  // razão social do fornecedor
-    cNomeFantasia?:   string;  // nome fantasia do fornecedor
+    cSitPedido?:    string;  // "Aguardando entrega", "Previsão de entrega atrasada"...
+    cSitAprovacao?: string;  // "Aprovado", ""
+    cNumPedFornec?: string;  // N° do pedido no fornecedor
+    cRazaoSocial?:  string;
+    cNomeFantasia?: string;
   };
   faturamento?: {
     nValTotalPedido?: number;
   };
 }
 
-export interface OmieListarPedidosResponse extends OmiePaginacaoResponse {
-  pedidos?: OmiePedidoCompraListItem[];
-  lista_pedidos?: OmiePedidoCompraListItem[];
-  pedido?: OmiePedidoCompraListItem[];
-  // PesquisarPedCompra retorna em "pedidos_compra"
-  pedidos_compra?: OmiePedidoCompraListItem[];
+// Resposta de PesquisarPedCompra — usa nTotPaginas/nTotRegistros (não total_de_paginas)
+export interface OmieListarPedidosResponse {
+  // Paginação — formato PesquisarPedCompra
+  nPagina?:       number;
+  nTotPaginas?:   number;
+  nTotRegistros?: number;
+  // Paginação — formato legado (outros endpoints)
+  pagina?:              number;
+  total_de_paginas?:    number;
+  total_de_registros?:  number;
+  registros?:           number;
+  // Campos possíveis para os itens (Omie usa nomes diferentes por versão)
+  pedidos_compra?:       OmiePedidoCompraListItem[];
   lista_pedidos_compra?: OmiePedidoCompraListItem[];
-  pedido_compra?: OmiePedidoCompraListItem[];
+  pedido_compra?:        OmiePedidoCompraListItem[];
+  pedidos?:              OmiePedidoCompraListItem[];
+  lista_pedidos?:        OmiePedidoCompraListItem[];
+  pedido?:               OmiePedidoCompraListItem[];
 }
 
 /**
  * Busca uma página de pedidos de compra no Omie.
- * Endpoint correto: /produtos/pedidocompra/ — call: PesquisarPedCompra
  *
- * ⚠️ Atenção: o endpoint é /produtos/pedidocompra/ (singular, módulo produtos),
- * NÃO /compras/pedidocompras/ (módulo compras — requer plano separado).
+ * Endpoint: /produtos/pedidocompra/ — call: PesquisarPedCompra
+ * Parâmetros corretos: nPagina, nRegsPorPagina (máx 100), lApenasImportadoApi: "N"
+ *
+ * ⚠️ NÃO usar /compras/pedidocompras/ — requer módulo Compras (plano pago separado).
  */
 export async function listPedidosCompraPage(
   creds: OmieCredentials,
   pagina: number,
-  registrosPorPagina = 50,
+  registrosPorPagina = 100,
 ): Promise<OmieListarPedidosResponse> {
-  return omiePost<OmieListarPedidosParam, OmieListarPedidosResponse>(
+  return omiePost<OmiePesquisarPedCompraParam, OmieListarPedidosResponse>(
     "/produtos/pedidocompra/",
     "PesquisarPedCompra",
     creds,
     {
-      pagina,
-      registros_por_pagina: registrosPorPagina,
+      nPagina:           pagina,
+      nRegsPorPagina:    Math.min(registrosPorPagina, 100), // máx 100 por página
+      lApenasImportadoApi: "N",                             // incluir TODOS os pedidos
     },
   );
 }
@@ -660,7 +678,10 @@ export async function listAllPedidosCompra(
       if (isOmieEmptyError(err)) break;
       throw err;
     }
-    totalPaginas = res.total_de_paginas;
+
+    // PesquisarPedCompra usa nTotPaginas; fallback para total_de_paginas (legado)
+    totalPaginas = res.nTotPaginas ?? res.total_de_paginas ?? 1;
+    const totalRegistros = res.nTotRegistros ?? res.total_de_registros ?? 0;
 
     // Tenta campos conhecidos primeiro
     let items: OmiePedidoCompraListItem[] =
@@ -672,10 +693,10 @@ export async function listAllPedidosCompra(
       res.pedido ??
       [];
 
-    // Fallback dinâmico: varre TODOS os campos buscando o primeiro array
-    // de objetos (independente do nome do campo que o Omie usar)
+    // Fallback dinâmico: varre TODOS os campos buscando o primeiro array de objetos
+    // (resistente a mudanças de nome de campo no Omie)
     const resRaw = res as unknown as Record<string, unknown>;
-    if (items.length === 0 && res.total_de_registros && Number(res.total_de_registros) > 0) {
+    if (items.length === 0 && totalRegistros > 0) {
       for (const [key, val] of Object.entries(resRaw)) {
         if (
           Array.isArray(val) &&
@@ -683,17 +704,19 @@ export async function listAllPedidosCompra(
           typeof val[0] === "object" &&
           val[0] !== null
         ) {
-          console.log(`[omie/client] PesquisarPedCompra: itens encontrados no campo "${key}" (${val.length} itens)`);
+          console.log(`[omie/client] PesquisarPedCompra: itens em campo "${key}" (${val.length})`);
           items = val as OmiePedidoCompraListItem[];
           break;
         }
       }
       if (items.length === 0) {
-        // Loga chaves para diagnóstico nos logs do Vercel
-        const allKeys = Object.keys(resRaw);
-        console.warn(`[omie/client] PesquisarPedCompra: ${res.total_de_registros} registros no Omie mas nenhum array encontrado. Chaves: ${allKeys.join(", ")}`);
+        console.warn(
+          `[omie/client] PesquisarPedCompra: ${totalRegistros} registros no Omie mas nenhum array encontrado.` +
+          ` Chaves: ${Object.keys(resRaw).join(", ")}`,
+        );
       }
     }
+
     all.push(...items);
     onPage?.(pagina, totalPaginas);
     pagina++;

@@ -50,8 +50,9 @@ export async function GET(_req: NextRequest) {
       "/produtos/pedidocompra/",
       "PesquisarPedCompra",
       creds,
-      // Usar página 2 com 2 registros para evitar REDUNDANT com o sync (que usa página 1, 50 registros)
-      { pagina: 2, registros_por_pagina: 2 } as Record<string, unknown>,
+      // Parâmetros corretos do PesquisarPedCompra: nPagina, nRegsPorPagina, lApenasImportadoApi
+      // Usa página 2 (max 2 registros) para evitar REDUNDANT com o sync (que usa página 1, 100 registros)
+      { nPagina: 2, nRegsPorPagina: 2, lApenasImportadoApi: "N" } as Record<string, unknown>,
     );
 
     // Mapeia todas as chaves da resposta
