@@ -4,6 +4,10 @@
     {
       "path": "/api/omie/sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/omie/sync-pedidos",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

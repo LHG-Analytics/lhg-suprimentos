@@ -10,6 +10,7 @@ import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ChevronRight, ShoppingCart,
   ExternalLink, Star, ReceiptText, Sparkles, ArrowUpRight,
+  RefreshCw, Database, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -55,8 +56,27 @@ interface Pedido {
   pedido_eventos: PedidoEvento[];
 }
 
+interface OmiePedido {
+  id: string;
+  omie_codigo: number;
+  numero: number | null;
+  data_pedido: string | null;
+  data_previsao: string | null;
+  fornecedor_nome: string | null;
+  valor_total: number | null;
+  situacao: string | null;
+  situacao_aprovacao: string | null;
+  etapa: string | null;
+  numero_pedido_forn: string | null;
+  omie_sincronizado_em: string;
+  unidade_id: string;
+  unidades: { nome: string; slug: string } | null;
+}
+
 interface Props {
   pedidos: Pedido[];
+  omie_pedidos: OmiePedido[];
+  unidades: { id: string; nome: string; slug: string }[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -595,10 +615,238 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
   );
 }
 
+// ── Aba Pedidos Omie ──────────────────────────────────────────────────────────
+
+function OmiePedidosTab({
+  omie_pedidos,
+  unidades,
+}: {
+  omie_pedidos: OmiePedido[];
+  unidades: { id: string; nome: string; slug: string }[];
+}) {
+  const [busca, setBusca]               = useState("");
+  const [unidadeFiltro, setUnidadeFiltro] = useState("todas");
+  const [syncing, setSyncing]           = useState(false);
+
+  // Horário do sync mais recente dentre todos os registros
+  const lastSync = useMemo(() => {
+    if (!omie_pedidos.length) return null;
+    return omie_pedidos.reduce((latest, p) => {
+      const t = new Date(p.omie_sincronizado_em).getTime();
+      return t > latest ? t : latest;
+    }, 0);
+  }, [omie_pedidos]);
+
+  const filtrados = useMemo(() => {
+    const q = busca.toLowerCase().trim();
+    return omie_pedidos.filter(p => {
+      const matchUnidade = unidadeFiltro === "todas" || p.unidade_id === unidadeFiltro;
+      const matchBusca   = !q ||
+        (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
+        (p.numero?.toString().includes(q) ?? false) ||
+        (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false);
+      return matchUnidade && matchBusca;
+    });
+  }, [omie_pedidos, busca, unidadeFiltro]);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/omie/sync-pedidos", { method: "POST" });
+      if (res.ok) {
+        toast.success("Sincronização concluída — recarregue a página para ver os dados atualizados");
+      } else {
+        toast.error("Erro ao sincronizar com o Omie");
+      }
+    } catch {
+      toast.error("Erro ao sincronizar com o Omie");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function getSituacaoColor(s: string | null) {
+    if (!s) return "text-muted-foreground bg-muted ring-border/40";
+    const l = s.toLowerCase();
+    if (l.includes("cancel"))                      return "text-red-400 bg-red-500/10 ring-red-500/20";
+    if (l.includes("faturad"))                     return "text-violet-400 bg-violet-500/10 ring-violet-500/20";
+    if (l.includes("aprovad") && !l.includes("ção")) return "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20";
+    if (l.includes("aprovação") || l.includes("aprovacao")) return "text-amber-400 bg-amber-500/10 ring-amber-500/20";
+    if (l.includes("pedido"))                      return "text-sky-400 bg-sky-500/10 ring-sky-500/20";
+    return "text-muted-foreground bg-muted ring-border/40";
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+
+      {/* Barra de filtros */}
+      <div className="px-5 py-3 border-b border-border/60 bg-card shrink-0">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            {/* Busca */}
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+              <input
+                type="text"
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar fornecedor, nº pedido…"
+                className={cn(
+                  "rounded-lg border border-border bg-muted/40",
+                  "pl-7 pr-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50",
+                  "focus:outline-none focus:ring-1 focus:ring-border transition-all w-60",
+                )}
+              />
+            </div>
+
+            {/* Filtro de unidade (só aparece se houver mais de 1) */}
+            {unidades.length > 1 && (
+              <div className="relative">
+                <Building2 size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+                <select
+                  value={unidadeFiltro}
+                  onChange={e => setUnidadeFiltro(e.target.value)}
+                  className={cn(
+                    "rounded-lg border border-border bg-muted/40",
+                    "pl-7 pr-3 py-1.5 text-sm text-foreground appearance-none",
+                    "focus:outline-none focus:ring-1 focus:ring-border transition-all",
+                  )}
+                >
+                  <option value="todas">Todas as unidades</option>
+                  {unidades.map(u => (
+                    <option key={u.id} value={u.id}>{u.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <span className="text-[11px] text-muted-foreground/60">
+              {filtrados.length} pedido{filtrados.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {lastSync !== null && (
+              <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
+                <Clock size={10} />
+                Sync: {formatDateTime(new Date(lastSync).toISOString())}
+              </span>
+            )}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border",
+                "border-amber-700/60 bg-amber-500/10 px-3 py-1.5",
+                "text-sm font-medium text-amber-400",
+                "hover:bg-amber-500/20 transition-colors disabled:opacity-50",
+              )}
+            >
+              {syncing
+                ? <Loader2 size={12} className="animate-spin" />
+                : <RefreshCw size={12} />}
+              {syncing ? "Sincronizando…" : "Sincronizar agora"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div className="flex-1 overflow-auto">
+        {filtrados.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground/40">
+            <Database size={36} strokeWidth={1.2} />
+            <p className="text-sm">
+              {omie_pedidos.length === 0
+                ? "Nenhum pedido sincronizado — clique em \"Sincronizar agora\""
+                : "Nenhum pedido encontrado"}
+            </p>
+          </div>
+        ) : (
+          <table className="w-full text-left">
+            <thead className="sticky top-0 bg-card z-10 border-b border-border/60">
+              <tr>
+                {[
+                  { label: "Nº Omie",        align: "left" },
+                  { label: "Fornecedor",      align: "left" },
+                  { label: "Valor",           align: "right" },
+                  { label: "Situação",        align: "left" },
+                  { label: "Sit. Aprovação",  align: "left" },
+                  { label: "Etapa",           align: "left" },
+                  { label: "Previsão",        align: "left" },
+                  { label: "Unidade",         align: "left" },
+                  { label: "Nº Fornecedor",   align: "left" },
+                ].map(col => (
+                  <th
+                    key={col.label}
+                    className={cn(
+                      "px-4 py-2.5 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium whitespace-nowrap",
+                      col.align === "right" && "text-right",
+                    )}
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((p, i) => (
+                <tr
+                  key={p.id}
+                  className={cn(
+                    "border-b border-border/40 transition-colors hover:bg-muted/30",
+                    i % 2 === 0 ? "bg-transparent" : "bg-muted/10",
+                  )}
+                >
+                  <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground whitespace-nowrap">
+                    {p.numero ?? p.omie_codigo}
+                  </td>
+                  <td className="px-4 py-2.5 text-sm text-foreground max-w-[220px]">
+                    <span className="block truncate">{p.fornecedor_nome ?? "—"}</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm text-foreground whitespace-nowrap">
+                    {p.valor_total !== null ? formatBRL(p.valor_total) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {p.situacao ? (
+                      <span className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 whitespace-nowrap",
+                        getSituacaoColor(p.situacao),
+                      )}>
+                        {p.situacao}
+                      </span>
+                    ) : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                    {p.situacao_aprovacao ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                    {p.etapa ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                    {p.data_previsao ? formatDate(p.data_previsao) : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
+                    {p.unidades?.nome ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px] text-muted-foreground font-mono">
+                    {p.numero_pedido_forn ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
+export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, unidades }: Props) {
   const [pedidos, setPedidos]   = useState(pedidosIniciais);
+  const [aba, setAba]           = useState<"lhg" | "omie">("lhg");
   const [filtro, setFiltro]     = useState("todos");
   const [busca, setBusca]       = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(pedidosIniciais[0]?.id ?? null);
@@ -636,7 +884,46 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-56px)]">
+    <div className="flex flex-col h-[calc(100vh-56px)]">
+
+      {/* ── Seletor de abas ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-border/60 bg-card shrink-0">
+        <button
+          onClick={() => setAba("lhg")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+            aba === "lhg"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
+          )}
+        >
+          <ShoppingCart size={13} />
+          Pedidos LHG
+          <span className="ml-0.5 text-[11px] text-muted-foreground/60">{pedidos.length}</span>
+        </button>
+        <button
+          onClick={() => setAba("omie")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+            aba === "omie"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
+          )}
+        >
+          <Sparkles size={13} />
+          Pedidos Omie
+          <span className="ml-0.5 text-[11px] text-muted-foreground/60">{omie_pedidos.length}</span>
+        </button>
+      </div>
+
+      {/* ── Aba Omie ────────────────────────────────────────────────────────── */}
+      {aba === "omie" && (
+        <OmiePedidosTab omie_pedidos={omie_pedidos} unidades={unidades} />
+      )}
+
+      {/* ── Aba LHG (2-col) ─────────────────────────────────────────────────── */}
+      {aba === "lhg" && (
+      <div className="flex flex-1 overflow-hidden">
 
       {/* ── Painel esquerdo: lista ──────────────────────────────────────────── */}
       <div className="w-[340px] border-r border-border/60 flex flex-col shrink-0 bg-card">
@@ -759,6 +1046,10 @@ export function PedidosClient({ pedidos: pedidosIniciais }: Props) {
           </div>
         )}
       </div>
+
+      </div>
+      )}
+
     </div>
   );
 }

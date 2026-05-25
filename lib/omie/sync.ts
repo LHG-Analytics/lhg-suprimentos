@@ -12,10 +12,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   listAllFornecedores,
   listAllProdutos,
+  listAllPedidosCompra,
   OmieError,
   type OmieCredentials,
   type OmieClienteItem,
   type OmieProdutoItem,
+  type OmiePedidoCompraListItem,
 } from "./client";
 import { categoriaParaFamilia } from "./familia-map";
 
@@ -282,6 +284,132 @@ export async function syncProdutos(
   }
 }
 
+// ── Sync: Pedidos de Compra (Omie → omie_pedidos_compra) ──────────────────────
+
+/**
+ * Converte DD/MM/YYYY (formato Omie) para YYYY-MM-DD (ISO, para o Supabase).
+ * Retorna null se a string for inválida ou ausente.
+ */
+function omieDataParaISO(dData?: string): string | null {
+  if (!dData) return null;
+  const parts = dData.split("/");
+  if (parts.length !== 3) return null;
+  const [d, m, a] = parts;
+  if (!d || !m || !a) return null;
+  return `${a}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
+  const cab  = item.cabecalho;
+  const info = item.informacoes_adicionais ?? {};
+
+  // Valor: alguns endpoints retornam em nValTotalPedido, outros em nValorTotal ou faturamento
+  const valorTotal =
+    cab.nValTotalPedido ??
+    cab.nValorTotal ??
+    item.faturamento?.nValTotalPedido ??
+    0;
+
+  // Nome do fornecedor: prioriza nome fantasia
+  const fornecedorNome =
+    info.cNomeFantasia?.trim() ||
+    info.cRazaoSocial?.trim() ||
+    null;
+
+  // Etapa: converte código numérico para label legível
+  const ETAPAS: Record<string, string> = {
+    "10": "Digitação",
+    "20": "Pedido de Compra",
+    "30": "Aprovação",
+    "40": "Em Separação",
+    "50": "Em Transporte",
+    "60": "Entregue",
+    "70": "Cancelado",
+  };
+  const etapa = cab.cEtapa
+    ? (ETAPAS[cab.cEtapa] ?? cab.cEtapa)
+    : null;
+
+  return {
+    unidade_id:           unidadeId,
+    omie_codigo:          cab.nCodPedido,
+    numero:               cab.nNumPedido ?? null,
+    data_pedido:          omieDataParaISO(cab.dDtPedido),
+    data_previsao:        omieDataParaISO(cab.dDtPrevisao),
+    fornecedor_codigo:    cab.nCodFornecedor ?? null,
+    fornecedor_nome:      fornecedorNome,
+    valor_total:          valorTotal,
+    situacao:             info.cSitPedido?.trim() || null,
+    situacao_aprovacao:   info.cSitAprovacao?.trim() || null,
+    etapa,
+    numero_pedido_forn:   info.cNumPedFornec?.trim() || null,
+    omie_sincronizado_em: new Date().toISOString(),
+  };
+}
+
+export async function syncPedidosCompra(
+  supabase: SupabaseClient,
+  creds: OmieCredentials,
+  unidadeId: string,
+): Promise<SyncResult> {
+  const inicio = Date.now();
+  let total = 0;
+  let novos = 0;
+  let erros = 0;
+
+  try {
+    const items = await listAllPedidosCompra(creds, (page, totalPages) => {
+      console.log(`[omie/sync] Pedidos unidade=${unidadeId} página ${page}/${totalPages}`);
+    });
+
+    total = items.length;
+    const BATCH = 50;
+
+    for (let i = 0; i < items.length; i += BATCH) {
+      const batch = items.slice(i, i + BATCH).map((item) => mapPedidoCompra(item, unidadeId));
+
+      const { error } = await supabase
+        .from("omie_pedidos_compra")
+        .upsert(batch, {
+          onConflict: "omie_codigo,unidade_id",
+          ignoreDuplicates: false, // atualiza campos ao re-sync
+        });
+
+      if (error) {
+        console.error("[omie/sync] Erro upsert pedidos:", error.message);
+        erros += batch.length;
+      } else {
+        novos += batch.length;
+      }
+    }
+
+    const result: SyncResult = {
+      entidade: "pedidos_compra",
+      status: erros === 0 ? "ok" : erros < total ? "parcial" : "erro",
+      total,
+      novos,
+      erros,
+      duracaoMs: Date.now() - inicio,
+    };
+
+    await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_pedidos" });
+    return result;
+  } catch (err) {
+    const msg = err instanceof OmieError ? err.message : String(err);
+    const result: SyncResult = {
+      entidade: "pedidos_compra",
+      status: "erro",
+      total,
+      novos,
+      erros: 1,
+      duracaoMs: Date.now() - inicio,
+      detalhe: { erro: msg },
+    };
+    await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_pedidos" });
+    return result;
+  }
+}
+
 // ── Sync: Todas as unidades ────────────────────────────────────────────────────
 
 export interface UnidadeComCreds {
@@ -330,6 +458,10 @@ export async function syncTodasUnidades(
     // Sincroniza produtos por unidade (cada unidade tem seu catálogo no Omie)
     const resProd = await syncProdutos(supabase, creds, unidade.id);
     results.push(resProd);
+
+    // Sincroniza pedidos de compra por unidade
+    const resPed = await syncPedidosCompra(supabase, creds, unidade.id);
+    results.push(resPed);
   }
 
   return {

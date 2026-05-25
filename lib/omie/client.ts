@@ -578,6 +578,92 @@ export async function criarPedidoCompra(
   );
 }
 
+// ── Tipos: Listagem de Pedidos de Compra ──────────────────────────────────────
+
+export interface OmieListarPedidosParam extends OmiePaginacaoParam {
+  filtrar_apenas_ativo?: "S" | "N";
+}
+
+export interface OmiePedidoCompraListItem {
+  cabecalho: {
+    nCodPedido:      number;   // ID interno Omie
+    nNumPedido:      number;   // número sequencial
+    dDtPedido?:      string;   // DD/MM/YYYY
+    dDtPrevisao?:    string;   // DD/MM/YYYY
+    nCodFornecedor?: number;
+    cEtapa?:         string;   // "10"=digitação, "20"=ag. confirmação, etc.
+    nValTotalPedido?: number;
+    // Alguns endpoints retornam com nomes levemente diferentes
+    nValorTotal?:    number;
+  };
+  informacoes_adicionais?: {
+    cSitPedido?:      string;  // "Aguardando entrega", "Previsão de entrega atrasada"...
+    cSitAprovacao?:   string;  // "Aprovado", ""
+    cNumPedFornec?:   string;  // N° do pedido no fornecedor
+    cRazaoSocial?:    string;  // razão social do fornecedor
+    cNomeFantasia?:   string;  // nome fantasia do fornecedor
+  };
+  faturamento?: {
+    nValTotalPedido?: number;
+  };
+}
+
+export interface OmieListarPedidosResponse extends OmiePaginacaoResponse {
+  pedidos?: OmiePedidoCompraListItem[];
+  // alguns endpoints retornam em "lista_pedidos"
+  lista_pedidos?: OmiePedidoCompraListItem[];
+}
+
+/**
+ * Busca uma página de pedidos de compra no Omie.
+ * Endpoint: /compras/pedidocompras/ — call: ListarPedidoCompras
+ */
+export async function listPedidosCompraPage(
+  creds: OmieCredentials,
+  pagina: number,
+  registrosPorPagina = 50,
+): Promise<OmieListarPedidosResponse> {
+  return omiePost<OmieListarPedidosParam, OmieListarPedidosResponse>(
+    "/compras/pedidocompras/",
+    "ListarPedidoCompras",
+    creds,
+    {
+      pagina,
+      registros_por_pagina: registrosPorPagina,
+    },
+  );
+}
+
+/**
+ * Itera todas as páginas de pedidos de compra do Omie.
+ */
+export async function listAllPedidosCompra(
+  creds: OmieCredentials,
+  onPage?: (page: number, total: number) => void,
+): Promise<OmiePedidoCompraListItem[]> {
+  const all: OmiePedidoCompraListItem[] = [];
+  let pagina = 1;
+  let totalPaginas = 1;
+
+  do {
+    let res: OmieListarPedidosResponse;
+    try {
+      res = await listPedidosCompraPage(creds, pagina);
+    } catch (err) {
+      if (isOmieEmptyError(err)) break;
+      throw err;
+    }
+    totalPaginas = res.total_de_paginas;
+    // Normaliza: alguns endpoints usam "pedidos", outros "lista_pedidos"
+    const items = res.pedidos ?? res.lista_pedidos ?? [];
+    all.push(...items);
+    onPage?.(pagina, totalPaginas);
+    pagina++;
+  } while (pagina <= totalPaginas);
+
+  return all;
+}
+
 // ── AlterarProduto ─────────────────────────────────────────────────────────────
 
 interface AlterarProdutoParam {

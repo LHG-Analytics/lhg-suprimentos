@@ -109,6 +109,68 @@ export type Database = {
           },
         ]
       }
+      omie_pedidos_compra: {
+        Row: {
+          id:                   string
+          unidade_id:           string
+          omie_codigo:          number
+          numero:               number | null
+          data_pedido:          string | null
+          data_previsao:        string | null
+          fornecedor_codigo:    number | null
+          fornecedor_nome:      string | null
+          valor_total:          number | null
+          situacao:             string | null
+          situacao_aprovacao:   string | null
+          etapa:                string | null
+          numero_pedido_forn:   string | null
+          omie_sincronizado_em: string
+          created_at:           string
+        }
+        Insert: {
+          id?:                  string
+          unidade_id:           string
+          omie_codigo:          number
+          numero?:              number | null
+          data_pedido?:         string | null
+          data_previsao?:       string | null
+          fornecedor_codigo?:   number | null
+          fornecedor_nome?:     string | null
+          valor_total?:         number | null
+          situacao?:            string | null
+          situacao_aprovacao?:  string | null
+          etapa?:               string | null
+          numero_pedido_forn?:  string | null
+          omie_sincronizado_em?: string
+          created_at?:          string
+        }
+        Update: {
+          id?:                  string
+          unidade_id?:          string
+          omie_codigo?:         number
+          numero?:              number | null
+          data_pedido?:         string | null
+          data_previsao?:       string | null
+          fornecedor_codigo?:   number | null
+          fornecedor_nome?:     string | null
+          valor_total?:         number | null
+          situacao?:            string | null
+          situacao_aprovacao?:  string | null
+          etapa?:               string | null
+          numero_pedido_forn?:  string | null
+          omie_sincronizado_em?: string
+          created_at?:          string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_pedidos_compra_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_chat_sessions: {
         Row: {
           id: string

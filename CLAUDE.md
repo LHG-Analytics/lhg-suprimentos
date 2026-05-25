@@ -494,3 +494,5 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
   - Migration 0015: tabelas `invites`, `ai_chat_sessions`, `ai_chat_messages` + bucket `avatars` (RLS por uid)
   - `lib/supabase/types.ts` atualizado com as 3 novas tabelas
   - ✅ Fix `aprovador` = mesmo acesso que `comprador`: textos descritivos em `admin-client.tsx`, `invite-dialog.tsx` e `admin/usuarios/page.tsx` atualizados; funcionalmente já não havia guards separando os dois papéis
+  - ✅ LHG-231: Sync pedidos de compra Omie — migration 0016 (`omie_pedidos_compra`); `lib/omie/client.ts` com `listAllPedidosCompra`; `lib/omie/sync.ts` com `syncPedidosCompra`; cron dedicado `*/5 * * * *` em `/api/omie/sync-pedidos`; aba "Pedidos Omie" em `/pedidos` com tabela completa (situação, etapa, aprovação, nº fornecedor), filtro por unidade, busca e botão "Sincronizar agora"
+  - ⚠️ Migration 0016 pendente de execução manual no SQL Editor do Supabase (ver SQL abaixo)
