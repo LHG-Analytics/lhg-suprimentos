@@ -610,10 +610,12 @@ export interface OmiePedidoCompraListItem {
 
 export interface OmieListarPedidosResponse extends OmiePaginacaoResponse {
   pedidos?: OmiePedidoCompraListItem[];
-  // alguns endpoints retornam em "lista_pedidos"
   lista_pedidos?: OmiePedidoCompraListItem[];
-  // Omie frequentemente usa singular "pedido" neste endpoint
   pedido?: OmiePedidoCompraListItem[];
+  // PesquisarPedCompra retorna em "pedidos_compra"
+  pedidos_compra?: OmiePedidoCompraListItem[];
+  lista_pedidos_compra?: OmiePedidoCompraListItem[];
+  pedido_compra?: OmiePedidoCompraListItem[];
 }
 
 /**
@@ -659,8 +661,16 @@ export async function listAllPedidosCompra(
       throw err;
     }
     totalPaginas = res.total_de_paginas;
-    // Normaliza: Omie usa "pedidos", "lista_pedidos" ou "pedido" (singular)
-    const items = res.pedidos ?? res.lista_pedidos ?? res.pedido ?? [];
+    // Normaliza: PesquisarPedCompra usa "pedidos_compra"; outros endpoints
+    // usam "pedidos", "lista_pedidos" ou "pedido" (singular)
+    const items =
+      res.pedidos_compra ??
+      res.lista_pedidos_compra ??
+      res.pedido_compra ??
+      res.pedidos ??
+      res.lista_pedidos ??
+      res.pedido ??
+      [];
     all.push(...items);
     onPage?.(pagina, totalPaginas);
     pagina++;
