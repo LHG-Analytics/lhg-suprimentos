@@ -6,6 +6,7 @@
  * Inclui timeline de eventos, ações (aprovar/rejeitar/email) e modal de email.
  */
 import { useState, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ChevronRight, ShoppingCart,
@@ -624,6 +625,7 @@ function OmiePedidosTab({
   omie_pedidos: OmiePedido[];
   unidades: { id: string; nome: string; slug: string }[];
 }) {
+  const router                          = useRouter();
   const [busca, setBusca]               = useState("");
   const [unidadeFiltro, setUnidadeFiltro] = useState("todas");
   const [syncing, setSyncing]           = useState(false);
@@ -654,7 +656,11 @@ function OmiePedidosTab({
     try {
       const res = await fetch("/api/omie/sync-pedidos", { method: "POST" });
       if (res.ok) {
-        toast.success("Sincronização concluída — recarregue a página para ver os dados atualizados");
+        const data = await res.json();
+        const total = (data.results as { total?: number }[] | undefined)
+          ?.reduce((acc: number, r) => acc + (r.total ?? 0), 0) ?? 0;
+        toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""} com sucesso`);
+        router.refresh();
       } else {
         toast.error("Erro ao sincronizar com o Omie");
       }
@@ -736,7 +742,7 @@ function OmiePedidosTab({
               onClick={handleSync}
               disabled={syncing}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border",
+                "group inline-flex items-center gap-1.5 rounded-lg border",
                 "border-amber-700/60 bg-amber-500/10 px-3 py-1.5",
                 "text-sm font-medium text-amber-400",
                 "hover:bg-amber-500/20 transition-colors disabled:opacity-50",
@@ -744,7 +750,7 @@ function OmiePedidosTab({
             >
               {syncing
                 ? <Loader2 size={12} className="animate-spin" />
-                : <RefreshCw size={12} />}
+                : <RefreshCw size={12} className={syncing ? "" : "group-hover:rotate-180 transition-transform duration-500"} />}
               {syncing ? "Sincronizando…" : "Sincronizar agora"}
             </button>
           </div>
