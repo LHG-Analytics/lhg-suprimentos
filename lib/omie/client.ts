@@ -661,9 +661,9 @@ export async function listAllPedidosCompra(
       throw err;
     }
     totalPaginas = res.total_de_paginas;
-    // Normaliza: PesquisarPedCompra usa "pedidos_compra"; outros endpoints
-    // usam "pedidos", "lista_pedidos" ou "pedido" (singular)
-    const items =
+
+    // Tenta campos conhecidos primeiro
+    let items: OmiePedidoCompraListItem[] =
       res.pedidos_compra ??
       res.lista_pedidos_compra ??
       res.pedido_compra ??
@@ -671,6 +671,29 @@ export async function listAllPedidosCompra(
       res.lista_pedidos ??
       res.pedido ??
       [];
+
+    // Fallback dinâmico: varre TODOS os campos buscando o primeiro array
+    // de objetos (independente do nome do campo que o Omie usar)
+    const resRaw = res as unknown as Record<string, unknown>;
+    if (items.length === 0 && res.total_de_registros && Number(res.total_de_registros) > 0) {
+      for (const [key, val] of Object.entries(resRaw)) {
+        if (
+          Array.isArray(val) &&
+          val.length > 0 &&
+          typeof val[0] === "object" &&
+          val[0] !== null
+        ) {
+          console.log(`[omie/client] PesquisarPedCompra: itens encontrados no campo "${key}" (${val.length} itens)`);
+          items = val as OmiePedidoCompraListItem[];
+          break;
+        }
+      }
+      if (items.length === 0) {
+        // Loga chaves para diagnóstico nos logs do Vercel
+        const allKeys = Object.keys(resRaw);
+        console.warn(`[omie/client] PesquisarPedCompra: ${res.total_de_registros} registros no Omie mas nenhum array encontrado. Chaves: ${allKeys.join(", ")}`);
+      }
+    }
     all.push(...items);
     onPage?.(pagina, totalPaginas);
     pagina++;

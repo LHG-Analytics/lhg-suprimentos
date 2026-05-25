@@ -2,6 +2,9 @@
  * app/api/debug-omie-pedidos/route.ts — TEMPORÁRIO
  * Inspeciona a resposta BRUTA do Omie para pedidos de compra (primeira página).
  * Usa a unidade ativa do cookie lhg-unidade-slug (mesma da sidebar).
+ *
+ * ⚠️ REDUNDANT: Omie bloqueia chamadas repetidas em < 60s.
+ * Aguarde 60s após qualquer sync antes de visitar este endpoint.
  * REMOVER após diagnóstico confirmado.
  */
 
@@ -13,18 +16,15 @@ import { omiePost } from "@/lib/omie/client";
 import type { OmieCredentials } from "@/lib/omie/client";
 
 export async function GET(_req: NextRequest) {
-  // Auth: precisa estar logado
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  // Lê o cookie da unidade ativa (mesma lógica da sidebar)
   const cookieStore = await cookies();
   const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
 
   const svcClient = createServiceClient();
 
-  // Busca a unidade correspondente ao slug do cookie
   let query = svcClient
     .from("unidades")
     .select("id, slug, nome, omie_app_key, omie_app_secret")
@@ -32,18 +32,11 @@ export async function GET(_req: NextRequest) {
     .not("omie_app_key", "is", null)
     .not("omie_app_secret", "is", null);
 
-  if (slug && slug !== "todas") {
-    query = query.eq("slug", slug);
-  }
+  if (slug && slug !== "todas") query = query.eq("slug", slug);
 
   const { data: unidades, error } = await query.limit(1);
-
   if (error || !unidades?.length) {
-    return NextResponse.json({
-      ok: false,
-      slug_cookie: slug,
-      error: "Nenhuma unidade com credenciais Omie para este slug.",
-    }, { status: 400 });
+    return NextResponse.json({ ok: false, slug_cookie: slug, error: "Nenhuma unidade com credenciais Omie." }, { status: 400 });
   }
 
   const unidade = unidades[0];
@@ -52,57 +45,56 @@ export async function GET(_req: NextRequest) {
     appSecret: unidade.omie_app_secret as string,
   };
 
-  // Testa o endpoint correto com 3 registros apenas (diagnóstico rápido)
   try {
     const raw = await omiePost<Record<string, unknown>, Record<string, unknown>>(
       "/produtos/pedidocompra/",
       "PesquisarPedCompra",
       creds,
-      { pagina: 1, registros_por_pagina: 3 } as Record<string, unknown>,
+      // Usar página 2 com 2 registros para evitar REDUNDANT com o sync (que usa página 1, 50 registros)
+      { pagina: 2, registros_por_pagina: 2 } as Record<string, unknown>,
     );
 
-    // Mapeia todas as chaves da resposta para diagnóstico
+    // Mapeia todas as chaves da resposta
     const keysInfo = Object.entries(raw).reduce<Record<string, unknown>>((acc, [k, v]) => {
-      acc[k] = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : typeof v === "object" ? "object" : v;
+      acc[k] = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : v;
       return acc;
     }, {});
 
-    // Detecta qual campo contém os pedidos
-    const camposCandidatos: Record<string, unknown[] | undefined> = {
-      pedidos_compra:       raw.pedidos_compra       as unknown[] | undefined,
-      lista_pedidos_compra: raw.lista_pedidos_compra as unknown[] | undefined,
-      pedido_compra:        raw.pedido_compra        as unknown[] | undefined,
-      pedidos:              raw.pedidos              as unknown[] | undefined,
-      lista_pedidos:        raw.lista_pedidos        as unknown[] | undefined,
-      pedido:               raw.pedido               as unknown[] | undefined,
-    };
-
-    const campoEncontrado = Object.entries(camposCandidatos).find(([, v]) => Array.isArray(v) && v.length > 0);
-    const itens = campoEncontrado?.[1];
+    // Detecta o campo que contém os pedidos (qualquer array de objetos)
+    let campoDetectado = "NENHUM";
+    let primeiroPedido: unknown = null;
+    for (const [k, v] of Object.entries(raw)) {
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === "object") {
+        campoDetectado = k;
+        primeiroPedido = v[0];
+        break;
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      unidade: { id: unidade.id, nome: unidade.nome, slug: unidade.slug },
+      unidade: { nome: unidade.nome, slug: unidade.slug },
       slug_cookie: slug,
       paginacao: {
         total_de_paginas:   raw.total_de_paginas,
         total_de_registros: raw.total_de_registros,
         registros:          raw.registros,
       },
-      campo_detectado: campoEncontrado?.[0] ?? "NENHUM — veja todas_as_chaves",
+      campo_detectado: campoDetectado,
       todas_as_chaves: keysInfo,
-      todos_campos_candidatos: Object.fromEntries(
-        Object.entries(camposCandidatos).map(([k, v]) => [k, v !== undefined ? `Array(${v.length})` : "ausente"]),
-      ),
-      primeiro_item: itens?.[0] ?? null,
+      primeiro_item: primeiroPedido,
     });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isRedundant = msg.toUpperCase().includes("REDUNDANT");
     return NextResponse.json({
       ok: false,
       unidade: { nome: unidade.nome, slug: unidade.slug },
       slug_cookie: slug,
-      erro: err instanceof Error ? err.message : String(err),
-      dica: "Se for REDUNDANT, aguarde 60s e tente novamente. Se for outro erro, verifique as credenciais Omie.",
+      erro: msg,
+      dica: isRedundant
+        ? "REDUNDANT: Omie detectou chamada duplicada. Aguarde 60s SEM clicar em Sync e tente novamente."
+        : "Verifique as credenciais Omie da unidade.",
     });
   }
 }
