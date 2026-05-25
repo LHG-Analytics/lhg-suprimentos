@@ -1,9 +1,13 @@
 /**
  * app/(app)/fornecedores/page.tsx — LHG-207
  * Lista de fornecedores sincronizados do Omie.
- * Server Component: busca dados + passa para o client.
+ * Server Component: busca dados filtrados pela unidade ativa (cookie) + passa para o client.
+ *
+ * LHG-227: filtra por omie_unidade_id quando uma unidade específica está selecionada.
+ * "Todas as unidades" retorna o cadastro completo.
  */
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { FornecedoresClient } from "./_components/fornecedores-client";
 
@@ -17,13 +21,35 @@ export default async function FornecedoresPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Lê a unidade ativa do cookie definido pelo UnidadeContext client-side
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+  // Resolve UUID da unidade quando não é "todas"
+  let unidadeId: string | null = null;
+  if (slug && slug !== "todas") {
+    const { data: unidade } = await supabase
+      .from("unidades")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+    unidadeId = unidade?.id ?? null;
+  }
+
+  const selectFields =
+    "id, razao_social, nome_fantasia, cnpj, email, telefone, contato, cidade, uf, ativo, omie_codigo, omie_sincronizado_em";
+
   const [{ data: fornecedores }, { data: lastLog }] = await Promise.all([
-    supabase
-      .from("fornecedores")
-      .select(
-        "id, razao_social, nome_fantasia, cnpj, email, telefone, contato, cidade, uf, ativo, omie_codigo, omie_sincronizado_em",
-      )
-      .order("razao_social"),
+    unidadeId
+      ? supabase
+          .from("fornecedores")
+          .select(selectFields)
+          .eq("omie_unidade_id", unidadeId)
+          .order("razao_social")
+      : supabase
+          .from("fornecedores")
+          .select(selectFields)
+          .order("razao_social"),
 
     supabase
       .from("integracao_logs")

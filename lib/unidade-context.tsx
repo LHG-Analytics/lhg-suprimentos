@@ -13,6 +13,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 export type UnidadeId =
@@ -89,6 +90,7 @@ const UnidadeContext = createContext<UnidadeContextType>({
 // ── Provider ──────────────────────────────────────────────────────────────────
 export function UnidadeProvider({ children }: { children: ReactNode }) {
   const [unidade, setUnidadeState] = useState<Unidade>(UNIDADES[0]);
+  const router = useRouter();
 
   // Restaura do localStorage na montagem (client-only) e sincroniza o cookie.
   useEffect(() => {
@@ -115,7 +117,7 @@ export function UnidadeProvider({ children }: { children: ReactNode }) {
     } catch {
       // ok
     }
-    // Cookie lido server-side (dashboard, chat, pedidos).
+    // Cookie lido server-side (dashboard, fornecedores, pedidos, etc.).
     // SameSite=Lax; sem HttpOnly para o JS poder ler também.
     try {
       const maxAge = 60 * 60 * 24 * 30; // 30 dias
@@ -123,6 +125,9 @@ export function UnidadeProvider({ children }: { children: ReactNode }) {
     } catch {
       // ok
     }
+    // Re-executa o Server Component atual com o novo cookie,
+    // fazendo as queries de dados (fornecedores, orçamento, etc.) atualizarem.
+    router.refresh();
   }
 
   return (
