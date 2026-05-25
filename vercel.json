@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/omie/sync-pedidos",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 7 * * *"
     }
   ]
 }
