@@ -10,6 +10,7 @@ import { useState, useMemo } from "react";
 import { Search, Building2, MapPin, Phone, Mail, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieButton } from "./sync-omie-button";
+import { EditarFornecedorModal } from "./editar-fornecedor-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,8 @@ interface Fornecedor {
   email: string | null;
   telefone: string | null;
   contato: string | null;
+  endereco: string | null;
+  cep: string | null;
   cidade: string | null;
   uf: string | null;
   ativo: boolean;
@@ -65,7 +68,8 @@ function relativeTime(iso: string) {
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClientProps) {
-  const [query, setQuery] = useState("");
+  const [query,               setQuery]               = useState("");
+  const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -201,7 +205,8 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             {filtered.map((f) => (
               <li
                 key={f.id}
-                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
+                onClick={() => setFornecedorEditando(f)}
+                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer"
               >
                 {/* Empresa */}
                 <div className="min-w-0">
@@ -268,9 +273,18 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
                 ? `${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`
                 : `${filtered.length} de ${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`}
             </span>
+            <span className="text-[11px] text-muted-foreground/40">
+              Clique em uma linha para editar
+            </span>
           </div>
         )}
       </div>
+
+      {/* Modal de edição */}
+      <EditarFornecedorModal
+        fornecedor={fornecedorEditando}
+        onClose={() => setFornecedorEditando(null)}
+      />
     </div>
   );
 }

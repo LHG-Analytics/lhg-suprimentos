@@ -8,6 +8,7 @@ import { useState, useMemo } from "react";
 import { Search, Package, RefreshCw, Tag, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieProdutosButton } from "./sync-omie-produtos-button";
+import { EditarProdutoModal } from "./editar-produto-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -74,9 +75,10 @@ function categoriaCor(cat: string) {
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
-  const [query,       setQuery]       = useState("");
-  const [categoria,   setCategoria]   = useState<string>("todas");
-  const [familia,     setFamilia]     = useState<string>("todas");
+  const [query,            setQuery]            = useState("");
+  const [categoria,        setCategoria]        = useState<string>("todas");
+  const [familia,          setFamilia]          = useState<string>("todas");
+  const [produtoEditando,  setProdutoEditando]  = useState<Produto | null>(null);
 
   // Listas únicas para os filtros
   const categorias = useMemo(() => {
@@ -281,7 +283,8 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             {filtered.map((p) => (
               <li
                 key={p.id}
-                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors"
+                onClick={() => setProdutoEditando(p)}
+                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer"
               >
                 {/* Produto */}
                 <div className="min-w-0">
@@ -370,9 +373,18 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
                 ? `${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`
                 : `${filtered.length} de ${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`}
             </span>
+            <span className="text-[11px] text-muted-foreground/40">
+              Clique em uma linha para editar
+            </span>
           </div>
         )}
       </div>
+
+      {/* Modal de edição */}
+      <EditarProdutoModal
+        produto={produtoEditando}
+        onClose={() => setProdutoEditando(null)}
+      />
     </div>
   );
 }

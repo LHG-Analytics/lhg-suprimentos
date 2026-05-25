@@ -577,3 +577,100 @@ export async function criarPedidoCompra(
     param,
   );
 }
+
+// ── AlterarProduto ─────────────────────────────────────────────────────────────
+
+interface AlterarProdutoParam {
+  codigo_produto:    number;
+  descricao:         string;
+  valor_unitario:    number;
+  descricao_familia: string;
+}
+
+/**
+ * Atualiza descrição, preço e família de um produto no Omie.
+ * Endpoint: POST /geral/produtos/ — call: AlterarProduto
+ */
+export async function alterarProduto(
+  creds: OmieCredentials,
+  params: {
+    omie_codigo:  string;
+    nome:         string;
+    preco_custo:  number;
+    familia_omie: string;
+  },
+): Promise<void> {
+  await omiePost<AlterarProdutoParam, Record<string, unknown>>(
+    "/geral/produtos/",
+    "AlterarProduto",
+    creds,
+    {
+      codigo_produto:    Number(params.omie_codigo),
+      descricao:         params.nome,
+      valor_unitario:    params.preco_custo,
+      descricao_familia: params.familia_omie,
+    },
+  );
+}
+
+// ── AlterarFornecedor ──────────────────────────────────────────────────────────
+
+interface AlterarClienteParam {
+  codigo_cliente_omie: number;
+  razao_social:        string;
+  nome_fantasia:       string;
+  email:               string;
+  telefone1_ddd:       string;
+  telefone1_numero:    string;
+  contato:             string;
+  endereco:            string;
+  cep:                 string;
+  cidade:              string;
+  estado:              string;
+}
+
+/**
+ * Atualiza dados cadastrais de um fornecedor (cliente) no Omie.
+ * Endpoint: POST /geral/clientes/ — call: AlterarCliente
+ *
+ * O campo local `telefone` é desmembrado: DDD = 2 primeiros dígitos quando
+ * o número (sem máscara) tiver 10 ou 11 dígitos; caso contrário DDD fica vazio.
+ */
+export async function alterarFornecedor(
+  creds: OmieCredentials,
+  params: {
+    omie_codigo:  string;
+    razao_social:  string;
+    nome_fantasia: string;
+    email:         string;
+    telefone:      string;
+    contato:       string;
+    endereco:      string;
+    cep:           string;
+    cidade:        string;
+    uf:            string;
+  },
+): Promise<void> {
+  const digits = params.telefone.replace(/\D/g, "");
+  const ddd    = digits.length >= 10 ? digits.slice(0, 2) : "";
+  const numero = digits.length >= 10 ? digits.slice(2)    : digits;
+
+  await omiePost<AlterarClienteParam, Record<string, unknown>>(
+    "/geral/clientes/",
+    "AlterarCliente",
+    creds,
+    {
+      codigo_cliente_omie: Number(params.omie_codigo),
+      razao_social:        params.razao_social,
+      nome_fantasia:       params.nome_fantasia,
+      email:               params.email,
+      telefone1_ddd:       ddd,
+      telefone1_numero:    numero,
+      contato:             params.contato,
+      endereco:            params.endereco,
+      cep:                 params.cep,
+      cidade:              params.cidade,
+      estado:              params.uf,
+    },
+  );
+}

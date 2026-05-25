@@ -37,7 +37,7 @@ export default async function FornecedoresPage() {
   }
 
   const selectFields =
-    "id, razao_social, nome_fantasia, cnpj, email, telefone, contato, cidade, uf, ativo, omie_codigo, omie_sincronizado_em";
+    "id, razao_social, nome_fantasia, cnpj, email, telefone, contato, endereco, cep, cidade, uf, ativo, omie_codigo, omie_sincronizado_em";
 
   const [{ data: fornecedores }, { data: lastLog }] = await Promise.all([
     unidadeId
