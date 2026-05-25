@@ -4,11 +4,9 @@
  * gastos-chart.tsx — LHG-220
  * Gráfico de linha "Gastos por unidade" — últimos 6 meses.
  * Client Component (recharts exige window).
- *
- * Recebe `series` e `labels` do Server Component (page.tsx).
- * Filtro por unidade via UnidadeContext.
+ * Tokens semânticos + useTheme para cores do chart em light/dark.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -18,25 +16,23 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/utils";
 import { useUnidade } from "@/lib/unidade-context";
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
-
 export interface ChartSerie {
-  id:   string;   // slug da unidade, ex: "lush-ipiranga"
+  id:   string;
   name: string;
-  data: number[]; // valor por mês — mesmo comprimento que labels
+  data: number[];
   cor:  string;
 }
 
 interface Props {
   series: ChartSerie[];
-  labels: string[];   // ex: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"]
+  labels: string[];
 }
 
-// ── Transforma para o formato do recharts ──────────────────────────────────────
 function buildChartData(activeSeries: ChartSerie[], labels: string[]) {
   return labels.map((label, i) => {
     const point: Record<string, number | string> = { mes: label };
@@ -47,7 +43,6 @@ function buildChartData(activeSeries: ChartSerie[], labels: string[]) {
   });
 }
 
-// ── Tooltip customizado ────────────────────────────────────────────────────────
 function CustomTooltip({
   active,
   payload,
@@ -59,18 +54,18 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950 shadow-xl p-3 min-w-[180px]">
-      <div className="text-xs text-zinc-500 mb-2 font-medium">{label}</div>
+    <div className="rounded-lg border border-border bg-card shadow-xl p-3 min-w-[180px]">
+      <div className="text-xs text-muted-foreground mb-2 font-medium">{label}</div>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center justify-between gap-4 text-xs">
-          <span className="flex items-center gap-1.5 text-zinc-400">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
             <span
               className="w-2 h-2 rounded-full shrink-0"
               style={{ background: p.color }}
             />
             {p.name}
           </span>
-          <span className="font-mono text-zinc-100 tabular-nums">
+          <span className="font-mono text-foreground tabular-nums">
             {formatBRL(p.value)}
           </span>
         </div>
@@ -79,17 +74,23 @@ function CustomTooltip({
   );
 }
 
-// ── Componente ─────────────────────────────────────────────────────────────────
 export function GastosChart({ series, labels }: Props) {
   const { unidade } = useUnidade();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  // Filtra séries de acordo com a unidade selecionada no contexto
+  const isDark = !mounted || resolvedTheme !== "light";
+
+  // Cores adaptadas ao tema
+  const gridColor  = isDark ? "rgba(63,63,70,0.5)"   : "rgba(0,0,0,0.07)";
+  const tickColor  = isDark ? "#71717a"               : "#9ca3af";
+
   const filteredSeries =
     unidade.id === "todas"
       ? series
       : series.filter((s) => s.id === unidade.id);
 
-  // Toggle local de séries (apenas quando "todas" está ativo)
   const [toggledOff, setToggledOff] = useState<string[]>([]);
   const activeSeries =
     unidade.id === "todas"
@@ -107,19 +108,19 @@ export function GastosChart({ series, labels }: Props) {
   const semDados = series.every((s) => s.data.every((v) => v === 0));
 
   return (
-    <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 h-full flex flex-col">
+    <div className="rounded-xl border border-border bg-card p-5 h-full flex flex-col">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5 shrink-0">
         <div>
-          <div className="text-sm font-medium text-zinc-100">
+          <div className="text-sm font-medium text-foreground">
             {unidade.id === "todas" ? "Gastos por unidade" : `Evolução de gastos · ${unidade.nome}`}
           </div>
-          <div className="text-xs text-zinc-500 mt-0.5">
+          <div className="text-xs text-muted-foreground mt-0.5">
             Últimos 6 meses · pedidos enviados e recebidos
           </div>
         </div>
 
-        {/* Legenda toggleável — só quando "todas" */}
+        {/* Legenda toggleável */}
         {unidade.id === "todas" && !semDados && (
           <div className="flex flex-wrap gap-1.5 sm:justify-end">
             {series.map((s) => {
@@ -131,13 +132,13 @@ export function GastosChart({ series, labels }: Props) {
                   className={cn(
                     "flex items-center gap-1.5 px-2 py-1 rounded text-[11px] border transition-colors",
                     on
-                      ? "border-zinc-700 bg-zinc-800/60 text-zinc-200"
-                      : "border-zinc-800/60 text-zinc-600 hover:text-zinc-400",
+                      ? "border-border bg-muted text-foreground"
+                      : "border-border/50 text-muted-foreground/50 hover:text-muted-foreground",
                   )}
                 >
                   <span
                     className="w-2 h-2 rounded-full shrink-0"
-                    style={{ background: on ? s.cor : "#3f3f46" }}
+                    style={{ background: on ? s.cor : (isDark ? "#3f3f46" : "#d1d5db") }}
                   />
                   {s.name}
                 </button>
@@ -150,7 +151,7 @@ export function GastosChart({ series, labels }: Props) {
       {/* Chart */}
       {semDados ? (
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-xs text-zinc-600">
+          <p className="text-xs text-muted-foreground/50">
             Nenhum pedido aprovado nos últimos 6 meses
           </p>
         </div>
@@ -160,19 +161,19 @@ export function GastosChart({ series, labels }: Props) {
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgb(39 39 42 / 0.6)"
+                stroke={gridColor}
                 vertical={false}
               />
               <XAxis
                 dataKey="mes"
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: tickColor, fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 dy={8}
               />
               <YAxis
                 tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-                tick={{ fill: "#71717a", fontSize: 11 }}
+                tick={{ fill: tickColor, fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 width={42}
@@ -186,7 +187,7 @@ export function GastosChart({ series, labels }: Props) {
                   stroke={s.cor}
                   strokeWidth={unidade.id === s.id ? 2.5 : 2}
                   dot={false}
-                  activeDot={{ r: 4, fill: s.cor, stroke: "#09090b", strokeWidth: 2 }}
+                  activeDot={{ r: 4, fill: s.cor, stroke: isDark ? "#09090b" : "#ffffff", strokeWidth: 2 }}
                 />
               ))}
             </LineChart>

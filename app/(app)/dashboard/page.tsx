@@ -2,7 +2,11 @@
  * app/(app)/dashboard/page.tsx — LHG-220
  * Dashboard do Comprador — Server Component.
  * Busca KPIs, dados de gráfico e ações reais do Supabase.
+ *
+ * Performance: OrcamentoSection (Google Sheets) é wrapped em <Suspense>
+ * para não bloquear o render dos KPIs/gráfico (~300ms vs ~2s antes).
  */
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/utils";
@@ -11,10 +15,11 @@ import { GastosChart, type ChartSerie } from "./_components/gastos-chart";
 import { AcoesFeed, type AcaoItem } from "./_components/acoes-feed";
 import { CotacoesTable, type CotacaoRow } from "./_components/cotacoes-table";
 import { DashboardHeader } from "./_components/dashboard-header";
-import { OrcamentoWidget } from "./_components/orcamento-widget";
-import { fetchOrcamento, type OrcamentoSheet } from "@/lib/sheets/client";
-import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
+import { OrcamentoWidgetSkeleton } from "./_components/orcamento-widget";
+import { OrcamentoSection } from "./_components/orcamento-section";
+import { type OrcamentoSheet } from "@/lib/sheets/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
+// getUnidadeSheetConfig foi movido para OrcamentoSection (carregado via Suspense)
 // ── Metadados ─────────────────────────────────────────────────────────────────
 export const metadata = { title: "Dashboard" };
 
@@ -422,31 +427,26 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Busca config do Google Sheets da unidade ativa (via cookie)
-  const sheetConfig = await getUnidadeSheetConfig();
-
   // Período: mês corrente e mês anterior (para delta CMV)
   const now        = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0);    // último dia do mês ant.
+  const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  // Busca tudo em paralelo (incluindo orçamento da planilha e gastos do mês anterior)
-  const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, orcamento, gastosCat, gastosCatPrev] =
+  // Busca dados do Supabase em paralelo (rápido ~300ms)
+  // O Google Sheets (OrcamentoSection) é carregado via Suspense, sem bloquear esta query.
+  const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, gastosCat, gastosCatPrev] =
     await Promise.all([
       fetchKpis(supabase),
       fetchChartData(supabase),
       fetchAcoes(supabase),
       fetchCotacoes(supabase),
-      sheetConfig
-        ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
-        : Promise.resolve(null),
       fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
       fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString()),
     ]);
 
-  // CMV — Custo das Mercadorias Vendidas (calculado a partir do orçamento Google Sheets)
-  const cmv = computeCmvMetrics(gastosCat, gastosCatPrev, orcamento);
+  // CMV sem orçamento (sheets carrega via Suspense separadamente)
+  const cmv = computeCmvMetrics(gastosCat, gastosCatPrev, null);
 
   const periodoLabel = `${datePtBr(monthStart)} – ${datePtBr(now)}`;
 
@@ -522,11 +522,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Orçamento vs Realizado ────────────────────────────────────── */}
-      <OrcamentoWidget
-        orcamento={orcamento}
-        gastosPorCategoria={gastosCat}
-      />
+      {/* ── Orçamento vs Realizado — carrega via Suspense (Google Sheets) ── */}
+      <Suspense fallback={<OrcamentoWidgetSkeleton />}>
+        <OrcamentoSection />
+      </Suspense>
 
       {/* ── Tabela cotações ───────────────────────────────────────────── */}
       <CotacoesTable rows={cotacoes} total={totalCots} />

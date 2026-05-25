@@ -2,6 +2,8 @@
  * kpi-card.tsx — LHG-204
  * Card de KPI no estilo "Revenue Manager":
  * valor principal · delta % vs período anterior · meta opcional.
+ * Usa tokens semânticos (bg-card, border-border, text-foreground) para
+ * suportar light e dark mode corretamente.
  */
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,12 +11,12 @@ import { cn } from "@/lib/utils";
 interface KpiCardProps {
   label: string;
   value: string;
-  delta?: number;        // % variação (positivo = alta, negativo = queda)
-  deltaKind?: "normal" | "inverse"; // inverse: queda é boa (ex: pedidos pendentes)
-  prev?: string;         // valor do período anterior (ex: "R$ 158.420")
-  meta?: string;         // meta ou benchmark
-  metaLabel?: string;    // rótulo da meta (default: "META")
-  metaDelta?: number;    // % vs meta
+  delta?: number;
+  deltaKind?: "normal" | "inverse";
+  prev?: string;
+  meta?: string;
+  metaLabel?: string;
+  metaDelta?: number;
   accent?: "positive" | "negative" | "neutral";
   mono?: boolean;
 }
@@ -30,7 +32,6 @@ export function KpiCard({
   accent = "neutral",
   mono = false,
 }: KpiCardProps) {
-  // Determina se o delta é "bom" levando em conta a inversão
   const deltaGood =
     delta === undefined
       ? null
@@ -40,10 +41,10 @@ export function KpiCard({
 
   const deltaColor =
     deltaGood === null
-      ? "text-zinc-500"
+      ? "text-muted-foreground"
       : deltaGood
-      ? "text-lhg-400"
-      : "text-red-400";
+      ? "text-lhg-500 dark:text-lhg-400"
+      : "text-red-500 dark:text-red-400";
 
   const DeltaIcon =
     delta === undefined || delta === 0
@@ -55,21 +56,21 @@ export function KpiCard({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-zinc-900/40 p-5 flex flex-col gap-3",
-        "border-zinc-800/80",
-        accent === "positive" && "border-lhg-500/20",
-        accent === "negative" && "border-red-500/20",
+        "rounded-xl border bg-card p-5 flex flex-col gap-3",
+        "border-border",
+        accent === "positive" && "border-lhg-500/30",
+        accent === "negative" && "border-red-500/30",
       )}
     >
       {/* Label */}
-      <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-zinc-500">
+      <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
         {label}
       </div>
 
       {/* Valor principal */}
       <div
         className={cn(
-          "text-[28px] leading-none font-semibold tracking-tight text-zinc-50",
+          "text-[28px] leading-none font-semibold tracking-tight text-foreground",
           mono && "font-mono",
         )}
       >
@@ -89,7 +90,7 @@ export function KpiCard({
             </>
           )}
           {prev && (
-            <span className="text-[11px] text-zinc-600 ml-0.5">
+            <span className="text-[11px] text-muted-foreground/60 ml-0.5">
               vs {prev}
             </span>
           )}
@@ -98,10 +99,10 @@ export function KpiCard({
         {/* Meta */}
         {meta && (
           <div className="text-right">
-            <div className="text-[10px] text-zinc-600 uppercase tracking-wider">
+            <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">
               {metaLabel}
             </div>
-            <div className="text-xs font-mono text-zinc-400 mt-0.5">{meta}</div>
+            <div className="text-xs font-mono text-muted-foreground mt-0.5">{meta}</div>
           </div>
         )}
       </div>
