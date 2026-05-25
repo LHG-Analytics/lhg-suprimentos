@@ -4,13 +4,16 @@
  * nova-requisicao-modal.tsx — LHG-209
  * Wizard 3 passos para criar uma nova requisição.
  * Passo 1: Título + Unidades + Urgência
- * Passo 2: Itens (tabela com autocomplete de produtos)
+ * Passo 2: Itens (filtro por família via <select> + tabela com autocomplete)
  * Passo 3: Revisão + Confirmar
+ *
+ * Redesign: filtro de família virou <select> compacto (era flex-wrap de 30+ chips).
+ * Tokens semânticos para suporte light/dark mode.
  */
 import { useState, useTransition, useRef, useEffect } from "react";
 import {
   X, ChevronLeft, ChevronRight, Plus, Trash2, Search,
-  AlertTriangle, Check, Loader2, ClipboardList,
+  AlertTriangle, Check, Loader2, ClipboardList, SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -25,32 +28,30 @@ interface Produto  {
   familia_omie: string | null; preco_custo: number | null;
 }
 interface ItemRow {
-  _key:        string; // local uuid para key React
+  _key:        string;
   produto_id:  string;
   produto:     Produto | null;
   quantidade:  number;
   observacao:  string;
 }
 interface FormState {
-  titulo:       string;
-  urgencia:     "normal" | "urgente";
+  titulo:        string;
+  urgencia:      "normal" | "urgente";
   justificativa: string;
-  unidade_ids:  string[];
-  itens:        ItemRow[];
+  unidade_ids:   string[];
+  itens:         ItemRow[];
 }
 
 interface Props {
-  open:      boolean;
-  onClose:   () => void;
-  unidades:  Unidade[];
-  produtos:  Produto[];
+  open:     boolean;
+  onClose:  () => void;
+  unidades: Unidade[];
+  produtos: Produto[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function nanoId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+function nanoId() { return Math.random().toString(36).slice(2, 10); }
 
 function emptyItem(): ItemRow {
   return { _key: nanoId(), produto_id: "", produto: null, quantidade: 1, observacao: "" };
@@ -75,9 +76,9 @@ const STEP_LABELS = ["Unidades & urgência", "Itens", "Revisão"];
 function ProdutoCombobox({
   value, onChange, produtos, familiaFiltro,
 }: {
-  value: Produto | null;
-  onChange: (p: Produto) => void;
-  produtos: Produto[];
+  value:         Produto | null;
+  onChange:      (p: Produto) => void;
+  produtos:      Produto[];
   familiaFiltro: string;
 }) {
   const [open,  setOpen]  = useState(false);
@@ -93,7 +94,6 @@ function ProdutoCombobox({
   }, []);
 
   const filtered = produtos.filter((p) => {
-    // Filtro por família (se ativo)
     if (familiaFiltro && p.familia_omie !== familiaFiltro) return false;
     const q = query.toLowerCase();
     if (!q) return true;
@@ -112,17 +112,17 @@ function ProdutoCombobox({
         onClick={() => { setOpen(!open); setQuery(""); }}
         className={cn(
           "w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors",
-          "border border-transparent hover:border-zinc-700",
-          value ? "text-zinc-200" : "text-zinc-600",
+          "border border-transparent hover:border-border",
+          value ? "text-foreground" : "text-muted-foreground",
         )}
       >
         {value ? (
           <span className="truncate block">
-            <span className="font-mono text-zinc-500 mr-1.5">{value.codigo}</span>
+            <span className="font-mono text-muted-foreground/70 mr-1.5">{value.codigo}</span>
             {value.nome}
           </span>
         ) : (
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
             <Search size={11} />
             Selecionar produto…
           </span>
@@ -131,28 +131,28 @@ function ProdutoCombobox({
 
       {open && (
         <div className={cn(
-          "absolute z-50 top-full left-0 mt-1 w-96 rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl",
+          "absolute z-50 top-full left-0 mt-1 w-96 rounded-lg border border-border bg-card shadow-2xl",
           "overflow-hidden",
         )}>
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800">
-            <Search size={12} className="text-zinc-500 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+            <Search size={12} className="text-muted-foreground shrink-0" />
             <input
               autoFocus
               type="text"
               placeholder="Buscar por nome, código ou família…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 bg-transparent text-[12px] text-zinc-200 placeholder:text-zinc-600 outline-none"
+              className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/50 outline-none"
             />
             {familiaFiltro && (
-              <span className="text-[10px] bg-sky-500/15 text-sky-400 border border-sky-600/40 rounded px-1.5 py-0.5 shrink-0 truncate max-w-[100px]">
+              <span className="text-[10px] bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/40 rounded px-1.5 py-0.5 shrink-0 truncate max-w-[100px]">
                 {familiaFiltro}
               </span>
             )}
           </div>
           <ul className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-3 text-[12px] text-zinc-600 text-center">
+              <li className="px-3 py-3 text-[12px] text-muted-foreground/50 text-center">
                 Nenhum produto encontrado
               </li>
             ) : (
@@ -162,23 +162,23 @@ function ProdutoCombobox({
                     type="button"
                     onClick={() => { onChange(p); setOpen(false); }}
                     className={cn(
-                      "w-full text-left px-3 py-2 hover:bg-zinc-800/60 transition-colors",
+                      "w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors",
                       "flex items-center justify-between gap-2",
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-[12px] text-zinc-200 truncate">{p.nome}</div>
+                      <div className="text-[12px] text-foreground truncate">{p.nome}</div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] text-zinc-600 font-mono">{p.codigo}</span>
+                        <span className="text-[10px] text-muted-foreground/70 font-mono">{p.codigo}</span>
                         {p.familia_omie && (
-                          <span className="text-[10px] text-zinc-500 truncate">{p.familia_omie}</span>
+                          <span className="text-[10px] text-muted-foreground/50 truncate">{p.familia_omie}</span>
                         )}
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className="text-[10px] text-zinc-500 font-mono">{p.unidade_med}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{p.unidade_med}</div>
                       {p.preco_custo && (
-                        <div className="text-[10px] text-emerald-500 font-mono">
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
                           {formatBRL(p.preco_custo)}
                         </div>
                       )}
@@ -197,12 +197,11 @@ function ProdutoCombobox({
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props) {
-  const [step, setStep] = useState(1);
+  const [step, setStep]       = useState(1);
   const [pending, startTransition] = useTransition();
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors,  setErrors]  = useState<Record<string, string>>({});
   const [familiaFiltro, setFamiliaFiltro] = useState("");
 
-  // Lista de famílias disponíveis (apenas as que têm produtos ativos)
   const familiasDisponiveis = Array.from(
     new Set(produtos.map(p => p.familia_omie).filter(Boolean))
   ).sort() as string[];
@@ -218,6 +217,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
   function reset() {
     setStep(1);
     setErrors({});
+    setFamiliaFiltro("");
     setForm({
       titulo:        "",
       urgencia:      "normal",
@@ -227,12 +227,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     });
   }
 
-  function handleClose() {
-    reset();
-    onClose();
-  }
-
-  // ── Validação por step ──────────────────────────────────────────────────────
+  function handleClose() { reset(); onClose(); }
 
   function validateStep1() {
     const e: Record<string, string> = {};
@@ -261,24 +256,16 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     setStep((s) => s + 1);
   }
 
-  // ── Itens helpers ───────────────────────────────────────────────────────────
-
-  function addItem() {
-    setForm(f => ({ ...f, itens: [...f.itens, emptyItem()] }));
-  }
-
+  function addItem()    { setForm(f => ({ ...f, itens: [...f.itens, emptyItem()] })); }
   function removeItem(key: string) {
     setForm(f => ({ ...f, itens: f.itens.filter(i => i._key !== key) }));
   }
-
   function updateItem(key: string, patch: Partial<ItemRow>) {
     setForm(f => ({
       ...f,
       itens: f.itens.map(i => i._key === key ? { ...i, ...patch } : i),
     }));
   }
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
 
   function handleSubmit() {
     const itensValidos = form.itens.filter(i => i.produto_id);
@@ -305,75 +292,70 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     });
   }
 
-  // ── Dados derivados ─────────────────────────────────────────────────────────
-
   const itensValidos  = form.itens.filter(i => i.produto_id);
   const totalEstimado = estimarTotal(itensValidos);
   const unidadesSel   = unidades.filter(u => form.unidade_ids.includes(u.id));
 
+  // Contagem de produtos na família selecionada
+  const produtosFiltrados = familiaFiltro
+    ? produtos.filter(p => p.familia_omie === familiaFiltro)
+    : produtos;
+
   if (!open) return null;
 
   return (
-    /* Overlay */
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center pt-[8vh] px-4"
-      aria-modal="true"
-      role="dialog"
-    >
+    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[8vh] px-4" aria-modal="true" role="dialog">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={handleClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Dialog */}
       <div className={cn(
-        "relative w-full max-w-[760px] rounded-xl border border-zinc-800",
-        "bg-zinc-950 shadow-2xl overflow-hidden",
+        "relative w-full max-w-[780px] rounded-xl border border-border",
+        "bg-card shadow-2xl overflow-hidden",
         "flex flex-col max-h-[88vh]",
       )}>
 
         {/* ── Cabeçalho ─────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-zinc-50">Nova requisição</h2>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
+            <h2 className="text-base font-semibold text-foreground">Nova requisição</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               Passo {step} de 3 · {STEP_LABELS[step - 1]}
             </p>
           </div>
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
           >
             <X size={16} />
           </button>
         </div>
 
         {/* ── Indicador de step ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-0 px-6 py-3 border-b border-zinc-800/60 shrink-0">
+        <div className="flex items-center gap-0 px-6 py-3 border-b border-border/60 shrink-0">
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-0">
               <div className={cn(
                 "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors",
                 s < step
-                  ? "bg-emerald-500 text-zinc-950"
+                  ? "bg-lhg-500 text-white"
                   : s === step
-                    ? "bg-zinc-700 text-zinc-100 ring-1 ring-zinc-500"
-                    : "bg-zinc-800/60 text-zinc-600",
+                    ? "bg-muted text-foreground ring-1 ring-border"
+                    : "bg-muted/60 text-muted-foreground/50",
               )}>
                 {s < step ? <Check size={11} /> : s}
               </div>
               {s < 3 && (
                 <div className={cn(
                   "w-16 h-px mx-1",
-                  s < step ? "bg-emerald-500/40" : "bg-zinc-800",
+                  s < step ? "bg-lhg-500/40" : "bg-border",
                 )} />
               )}
             </div>
           ))}
         </div>
 
-        {/* ── Conteúdo (scroll) + Sidebar ───────────────────────────────────── */}
+        {/* ── Conteúdo + Sidebar ────────────────────────────────────────────── */}
         <div className="flex flex-1 overflow-hidden">
 
           {/* Conteúdo principal */}
@@ -385,7 +367,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                 {/* Título */}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
+                  <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
                     Título da requisição *
                   </label>
                   <input
@@ -395,22 +377,22 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                     value={form.titulo}
                     onChange={(e) => setForm(f => ({ ...f, titulo: e.target.value }))}
                     className={cn(
-                      "w-full rounded-lg border bg-zinc-900/60 px-4 py-2.5",
-                      "text-sm text-zinc-200 placeholder:text-zinc-600",
-                      "focus:outline-none transition-colors",
+                      "w-full rounded-lg border bg-background px-4 py-2.5",
+                      "text-sm text-foreground placeholder:text-muted-foreground/50",
+                      "focus:outline-none focus:ring-1 focus:ring-ring transition-colors",
                       errors.titulo
                         ? "border-red-500/50 focus:border-red-500"
-                        : "border-zinc-800 focus:border-zinc-600",
+                        : "border-border",
                     )}
                   />
                   {errors.titulo && (
-                    <p className="mt-1 text-[11px] text-red-400">{errors.titulo}</p>
+                    <p className="mt-1 text-[11px] text-red-500">{errors.titulo}</p>
                   )}
                 </div>
 
                 {/* Unidades */}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
+                  <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
                     Unidades *
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -420,21 +402,16 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         onClick={() => {
                           const all = unidades.map(u => u.id);
                           const isAllSelected = all.every(id => form.unidade_ids.includes(id));
-                          setForm(f => ({
-                            ...f,
-                            unidade_ids: isAllSelected ? [] : all,
-                          }));
+                          setForm(f => ({ ...f, unidade_ids: isAllSelected ? [] : all }));
                         }}
                         className={cn(
                           "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
                           unidades.every(u => form.unidade_ids.includes(u.id))
-                            ? "border-emerald-600/60 bg-emerald-500/15 text-emerald-400"
-                            : "border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600",
+                            ? "border-lhg-500/60 bg-lhg-500/10 text-lhg-600 dark:text-lhg-400"
+                            : "border-border bg-muted/40 text-muted-foreground hover:border-border/80",
                         )}
                       >
-                        {unidades.every(u => form.unidade_ids.includes(u.id)) && (
-                          <Check size={10} />
-                        )}
+                        {unidades.every(u => form.unidade_ids.includes(u.id)) && <Check size={10} />}
                         Todas as unidades
                       </button>
                     )}
@@ -455,8 +432,8 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                           className={cn(
                             "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
                             sel
-                              ? "border-emerald-600/60 bg-emerald-500/15 text-emerald-400"
-                              : "border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600",
+                              ? "border-lhg-500/60 bg-lhg-500/10 text-lhg-600 dark:text-lhg-400"
+                              : "border-border bg-muted/40 text-muted-foreground hover:border-border/80",
                           )}
                         >
                           {sel && <Check size={10} />}
@@ -466,13 +443,13 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                     })}
                   </div>
                   {errors.unidades && (
-                    <p className="mt-1 text-[11px] text-red-400">{errors.unidades}</p>
+                    <p className="mt-1 text-[11px] text-red-500">{errors.unidades}</p>
                   )}
                 </div>
 
                 {/* Urgência */}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
+                  <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
                     Urgência
                   </label>
                   <div className="grid grid-cols-2 gap-3">
@@ -485,28 +462,28 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                           "rounded-xl border p-4 text-left transition-colors",
                           form.urgencia === u
                             ? u === "urgente"
-                              ? "border-red-500/40 bg-red-500/10"
-                              : "border-zinc-600 bg-zinc-800/60"
-                            : "border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700",
+                              ? "border-red-500/40 bg-red-500/8"
+                              : "border-lhg-500/40 bg-lhg-500/8"
+                            : "border-border bg-muted/30 hover:border-border/80",
                         )}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           {u === "urgente" && (
-                            <AlertTriangle size={13} className="text-red-400" />
+                            <AlertTriangle size={13} className="text-red-500" />
                           )}
                           <span className={cn(
                             "text-sm font-semibold",
                             form.urgencia === u
-                              ? u === "urgente" ? "text-red-300" : "text-zinc-100"
-                              : "text-zinc-400",
+                              ? u === "urgente" ? "text-red-600 dark:text-red-400" : "text-lhg-600 dark:text-lhg-400"
+                              : "text-muted-foreground",
                           )}>
                             {u === "normal" ? "Normal" : "Urgente"}
                           </span>
                           {form.urgencia === u && (
-                            <Check size={12} className={u === "urgente" ? "text-red-400 ml-auto" : "text-emerald-400 ml-auto"} />
+                            <Check size={12} className={cn("ml-auto", u === "urgente" ? "text-red-500" : "text-lhg-500")} />
                           )}
                         </div>
-                        <p className="text-[11px] text-zinc-500">
+                        <p className="text-[11px] text-muted-foreground">
                           {u === "normal"
                             ? "Cotação em até 48h"
                             : "Cotação em até 6h · notifica gerência"}
@@ -518,8 +495,8 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                 {/* Justificativa */}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-[0.1em] text-zinc-500 mb-1.5 font-medium">
-                    Justificativa <span className="normal-case text-zinc-600">(opcional)</span>
+                  <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
+                    Justificativa <span className="normal-case text-muted-foreground/60">(opcional)</span>
                   </label>
                   <textarea
                     rows={3}
@@ -527,9 +504,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                     value={form.justificativa}
                     onChange={(e) => setForm(f => ({ ...f, justificativa: e.target.value }))}
                     className={cn(
-                      "w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-2.5",
-                      "text-sm text-zinc-200 placeholder:text-zinc-600 resize-none",
-                      "focus:outline-none focus:border-zinc-600 transition-colors",
+                      "w-full rounded-lg border border-border bg-background px-4 py-2.5",
+                      "text-sm text-foreground placeholder:text-muted-foreground/50 resize-none",
+                      "focus:outline-none focus:ring-1 focus:ring-ring transition-colors",
                     )}
                   />
                 </div>
@@ -539,49 +516,52 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
             {/* ── PASSO 2 ─────────────────────────────────────────────────── */}
             {step === 2 && (
               <div className="space-y-3">
-                <p className="text-[12px] text-zinc-500">
-                  Filtre por família para encontrar produtos mais rápido. O último custo é exibido para referência.
-                </p>
 
-                {/* ── Chips de família ─────────────────────────────────────── */}
-                {familiasDisponiveis.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
+                {/* Barra de filtro compacta */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal size={13} className="text-muted-foreground shrink-0" />
+                    <span className="text-[11px] font-medium text-muted-foreground">Família</span>
+                    <select
+                      value={familiaFiltro}
+                      onChange={(e) => setFamiliaFiltro(e.target.value)}
+                      className={cn(
+                        "h-7 rounded-md border border-border bg-background",
+                        "text-[12px] text-foreground px-2 pr-6",
+                        "focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer",
+                        "max-w-[200px]",
+                      )}
+                    >
+                      <option value="">Todas as famílias ({produtos.length})</option>
+                      {familiasDisponiveis.map(f => {
+                        const count = produtos.filter(p => p.familia_omie === f).length;
+                        return <option key={f} value={f}>{f} ({count})</option>;
+                      })}
+                    </select>
+                  </div>
+
+                  {familiaFiltro && (
                     <button
                       type="button"
                       onClick={() => setFamiliaFiltro("")}
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                        familiaFiltro === ""
-                          ? "border-zinc-500 bg-zinc-700 text-zinc-100"
-                          : "border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300",
-                      )}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      Todos
+                      <X size={10} />
+                      Limpar filtro
                     </button>
-                    {familiasDisponiveis.map(f => (
-                      <button
-                        key={f}
-                        type="button"
-                        onClick={() => setFamiliaFiltro(familiaFiltro === f ? "" : f)}
-                        className={cn(
-                          "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                          familiaFiltro === f
-                            ? "border-sky-600/60 bg-sky-500/15 text-sky-300"
-                            : "border-zinc-800 text-zinc-600 hover:border-zinc-600 hover:text-zinc-400",
-                        )}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  )}
+
+                  <span className="ml-auto text-[11px] text-muted-foreground/60">
+                    {produtosFiltrados.length} produto{produtosFiltrados.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
 
                 {/* Tabela de itens */}
-                <div className="rounded-lg border border-zinc-800/80 overflow-hidden">
+                <div className="rounded-lg border border-border overflow-hidden">
                   {/* Header */}
-                  <div className="grid grid-cols-[1fr_72px_60px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-zinc-800/80 bg-zinc-900/60">
+                  <div className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-border bg-muted/40">
                     {["PRODUTO", "QTD", "UNID.", "ÚLT. CUSTO", "OBSERVAÇÃO", ""].map(h => (
-                      <div key={h} className="text-[10px] uppercase tracking-[0.1em] text-zinc-500 font-medium">
+                      <div key={h} className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium">
                         {h}
                       </div>
                     ))}
@@ -591,7 +571,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                   {form.itens.map((item) => (
                     <div
                       key={item._key}
-                      className="grid grid-cols-[1fr_72px_60px_80px_1fr_32px] gap-2 px-3 py-1.5 border-b border-zinc-800/40 hover:bg-zinc-800/10 transition-colors"
+                      className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5 border-b border-border/40 hover:bg-muted/20 transition-colors"
                     >
                       {/* Produto */}
                       <ProdutoCombobox
@@ -610,15 +590,15 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
                         className={cn(
                           "w-full rounded border border-transparent bg-transparent",
-                          "px-2 py-1.5 text-[12px] text-zinc-200 font-mono text-center",
-                          "focus:outline-none focus:border-zinc-700 hover:border-zinc-700 transition-colors",
+                          "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
+                          "focus:outline-none focus:border-border hover:border-border transition-colors",
                           "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
                         )}
                       />
 
                       {/* Unidade de medida */}
                       <div className="flex items-center justify-center">
-                        <span className="text-[11px] font-mono text-zinc-500 uppercase">
+                        <span className="text-[11px] font-mono text-muted-foreground uppercase">
                           {item.produto?.unidade_med ?? "—"}
                         </span>
                       </div>
@@ -626,11 +606,11 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                       {/* Último custo */}
                       <div className="flex items-center justify-end">
                         {item.produto?.preco_custo ? (
-                          <span className="text-[11px] font-mono text-emerald-500">
+                          <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
                             {formatBRL(item.produto.preco_custo)}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-zinc-700">—</span>
+                          <span className="text-[11px] text-muted-foreground/30">—</span>
                         )}
                       </div>
 
@@ -642,8 +622,8 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
                         className={cn(
                           "w-full rounded border border-transparent bg-transparent",
-                          "px-2 py-1.5 text-[12px] text-zinc-300 placeholder:text-zinc-700",
-                          "focus:outline-none focus:border-zinc-700 hover:border-zinc-700 transition-colors",
+                          "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
+                          "focus:outline-none focus:border-border hover:border-border transition-colors",
                         )}
                       />
 
@@ -655,8 +635,8 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                         className={cn(
                           "flex items-center justify-center rounded p-1 transition-colors",
                           form.itens.length === 1
-                            ? "text-zinc-800 cursor-not-allowed"
-                            : "text-zinc-600 hover:text-red-400 hover:bg-red-500/10",
+                            ? "text-muted-foreground/20 cursor-not-allowed"
+                            : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
                         )}
                       >
                         <Trash2 size={13} />
@@ -664,12 +644,12 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                     </div>
                   ))}
 
-                  {/* Botão adicionar */}
+                  {/* Botão adicionar item */}
                   <div className="px-3 py-2">
                     <button
                       type="button"
                       onClick={addItem}
-                      className="inline-flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-emerald-400 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-lhg-600 dark:hover:text-lhg-400 transition-colors"
                     >
                       <Plus size={12} />
                       Adicionar item
@@ -678,7 +658,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                 </div>
 
                 {errors.itens && (
-                  <p className="text-[11px] text-red-400">{errors.itens}</p>
+                  <p className="text-[11px] text-red-500">{errors.itens}</p>
                 )}
               </div>
             )}
@@ -686,37 +666,37 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
             {/* ── PASSO 3 ─────────────────────────────────────────────────── */}
             {step === 3 && (
               <div className="space-y-4">
-                <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 divide-y divide-zinc-800/60">
+                <div className="rounded-xl border border-border bg-muted/20 divide-y divide-border/60">
 
                   {/* Informações gerais */}
                   <div className="px-4 py-3 space-y-2">
-                    <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-500 font-medium mb-2">
+                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-2">
                       Informações gerais
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                       <div>
-                        <div className="text-[10px] text-zinc-600">TÍTULO</div>
-                        <div className="text-sm text-zinc-200 mt-0.5">{form.titulo}</div>
+                        <div className="text-[10px] text-muted-foreground/70">TÍTULO</div>
+                        <div className="text-sm text-foreground mt-0.5">{form.titulo}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-zinc-600">URGÊNCIA</div>
+                        <div className="text-[10px] text-muted-foreground/70">URGÊNCIA</div>
                         <div className={cn(
                           "text-sm mt-0.5 font-medium",
-                          form.urgencia === "urgente" ? "text-red-400" : "text-zinc-400",
+                          form.urgencia === "urgente" ? "text-red-500" : "text-muted-foreground",
                         )}>
                           {form.urgencia === "urgente" ? "⚠ Urgente" : "Normal"}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-zinc-600">UNIDADES</div>
-                        <div className="text-sm text-zinc-200 mt-0.5">
+                        <div className="text-[10px] text-muted-foreground/70">UNIDADES</div>
+                        <div className="text-sm text-foreground mt-0.5">
                           {unidadesSel.map(u => u.nome).join(", ") || "—"}
                         </div>
                       </div>
                       {form.justificativa && (
                         <div className="col-span-2">
-                          <div className="text-[10px] text-zinc-600">JUSTIFICATIVA</div>
-                          <div className="text-sm text-zinc-300 mt-0.5">{form.justificativa}</div>
+                          <div className="text-[10px] text-muted-foreground/70">JUSTIFICATIVA</div>
+                          <div className="text-sm text-foreground/80 mt-0.5">{form.justificativa}</div>
                         </div>
                       )}
                     </div>
@@ -724,29 +704,29 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                   {/* Itens */}
                   <div className="px-4 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-500 font-medium mb-3">
+                    <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium mb-3">
                       Itens ({itensValidos.length})
                     </div>
                     <div className="space-y-2">
                       {itensValidos.map((item, idx) => (
                         <div key={item._key} className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-500 text-[10px] font-mono flex items-center justify-center shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-muted text-muted-foreground text-[10px] font-mono flex items-center justify-center shrink-0">
                               {idx + 1}
                             </span>
                             <div>
-                              <div className="text-sm text-zinc-200">{item.produto?.nome}</div>
+                              <div className="text-sm text-foreground">{item.produto?.nome}</div>
                               {item.observacao && (
-                                <div className="text-[11px] text-zinc-500">{item.observacao}</div>
+                                <div className="text-[11px] text-muted-foreground">{item.observacao}</div>
                               )}
                             </div>
                           </div>
                           <div className="text-right shrink-0 ml-4">
-                            <div className="font-mono text-sm text-zinc-300">
+                            <div className="font-mono text-sm text-foreground">
                               {item.quantidade} {item.produto?.unidade_med}
                             </div>
                             {item.produto?.preco_custo && (
-                              <div className="text-[10px] text-zinc-600">
+                              <div className="text-[10px] text-muted-foreground/70">
                                 est. {formatBRL(item.produto.preco_custo * item.quantidade)}
                               </div>
                             )}
@@ -761,50 +741,50 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
           </div>
 
           {/* ── Sidebar resumo ────────────────────────────────────────────────── */}
-          <div className="w-52 border-l border-zinc-800/80 px-4 py-5 shrink-0 flex flex-col gap-4">
-            <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-600 font-medium">
+          <div className="w-52 border-l border-border px-4 py-5 shrink-0 flex flex-col gap-4 bg-muted/20">
+            <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium">
               Resumo
             </div>
 
             <div className="space-y-3">
               <div>
-                <div className="text-[10px] text-zinc-600">UNIDADES</div>
-                <div className="text-sm font-semibold text-zinc-200 mt-0.5">
+                <div className="text-[10px] text-muted-foreground/70">UNIDADES</div>
+                <div className="text-sm font-semibold text-foreground mt-0.5">
                   {form.unidade_ids.length}
                 </div>
                 {unidadesSel.length > 0 && (
-                  <div className="text-[11px] text-zinc-500 mt-0.5 leading-tight">
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
                     {unidadesSel.map(u => u.nome).join(", ")}
                   </div>
                 )}
               </div>
 
               <div>
-                <div className="text-[10px] text-zinc-600">ITENS</div>
-                <div className="text-sm font-semibold text-zinc-200 mt-0.5">
+                <div className="text-[10px] text-muted-foreground/70">ITENS</div>
+                <div className="text-sm font-semibold text-foreground mt-0.5">
                   {itensValidos.length}
                 </div>
               </div>
 
               {totalEstimado > 0 && (
                 <div>
-                  <div className="text-[10px] text-zinc-600">EST. TOTAL</div>
-                  <div className="text-sm font-semibold text-emerald-400 mt-0.5 font-mono">
+                  <div className="text-[10px] text-muted-foreground/70">EST. TOTAL</div>
+                  <div className="text-sm font-semibold text-lhg-600 dark:text-lhg-400 mt-0.5 font-mono">
                     {formatBRL(totalEstimado)}
                   </div>
-                  <div className="text-[10px] text-zinc-600 mt-0.5">
+                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">
                     baseado no preço de custo
                   </div>
                 </div>
               )}
 
               {form.urgencia === "urgente" && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5">
-                  <div className="flex items-center gap-1.5 text-red-400 text-[11px] font-medium">
+                <div className="rounded-lg border border-red-500/20 bg-red-500/8 p-2.5">
+                  <div className="flex items-center gap-1.5 text-red-500 text-[11px] font-medium">
                     <AlertTriangle size={11} />
                     Urgente
                   </div>
-                  <p className="text-[10px] text-red-400/70 mt-0.5">
+                  <p className="text-[10px] text-red-500/70 mt-0.5">
                     Cotação em até 6h
                   </p>
                 </div>
@@ -814,11 +794,11 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
         </div>
 
         {/* ── Rodapé ────────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800/80 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
           <button
             type="button"
             onClick={handleClose}
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancelar
           </button>
@@ -829,9 +809,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                 type="button"
                 onClick={() => setStep(s => s - 1)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border border-zinc-700",
-                  "bg-zinc-800/60 px-3.5 py-2 text-sm font-medium text-zinc-300",
-                  "hover:bg-zinc-700/60 transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-lg border border-border",
+                  "bg-muted/40 px-3.5 py-2 text-sm font-medium text-foreground",
+                  "hover:bg-muted/60 transition-colors",
                 )}
               >
                 <ChevronLeft size={14} />
@@ -844,10 +824,10 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                 type="button"
                 onClick={handleNext}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border",
-                  "border-emerald-700/60 bg-emerald-500/10 px-3.5 py-2",
-                  "text-sm font-medium text-emerald-400",
-                  "hover:bg-emerald-500/20 transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-lg",
+                  "bg-lhg-500 hover:bg-lhg-600 px-3.5 py-2",
+                  "text-sm font-medium text-white",
+                  "transition-colors",
                 )}
               >
                 Continuar
@@ -859,10 +839,10 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                 onClick={handleSubmit}
                 disabled={pending}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-lg border",
-                  "border-emerald-700/60 bg-emerald-500/15 px-4 py-2",
-                  "text-sm font-semibold text-emerald-400",
-                  "hover:bg-emerald-500/25 transition-colors",
+                  "inline-flex items-center gap-2 rounded-lg",
+                  "bg-lhg-500 hover:bg-lhg-600 px-4 py-2",
+                  "text-sm font-semibold text-white",
+                  "transition-colors",
                   "disabled:opacity-50 disabled:cursor-not-allowed",
                 )}
               >
