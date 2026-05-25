@@ -3,6 +3,8 @@
 /**
  * fornecedores-client.tsx — LHG-207
  * Tabela interativa de fornecedores com busca e botão de sync Omie.
+ * LHG-224: removidas colunas STATUS (ativo/inativo — não vem do Omie)
+ *           e OMIE (redundante); email destacado na coluna CONTATO.
  */
 import { useState, useMemo } from "react";
 import { Search, Building2, MapPin, Phone, Mail, RefreshCw } from "lucide-react";
@@ -78,9 +80,8 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
     );
   }, [fornecedores, query]);
 
-  const totalAtivos   = fornecedores.filter((f) => f.ativo).length;
-  const totalInativos = fornecedores.length - totalAtivos;
-  const totalOmie     = fornecedores.filter((f) => f.omie_codigo).length;
+  const totalOmie      = fornecedores.filter((f) => f.omie_codigo).length;
+  const totalComEmail  = fornecedores.filter((f) => f.email).length;
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -118,10 +119,10 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       {/* ── Stats ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "TOTAL",    value: fornecedores.length, color: "text-zinc-50" },
-          { label: "ATIVOS",   value: totalAtivos,         color: "text-emerald-400" },
-          { label: "OMIE",     value: totalOmie,           color: "text-sky-400" },
-        ].map(({ label, value, color }) => (
+          { label: "TOTAL",      value: fornecedores.length, color: "text-zinc-50",     sub: null },
+          { label: "COM E-MAIL", value: totalComEmail,       color: "text-amber-400",   sub: `${fornecedores.length - totalComEmail} sem e-mail` },
+          { label: "OMIE",       value: totalOmie,           color: "text-sky-400",     sub: null },
+        ].map(({ label, value, color, sub }) => (
           <div
             key={label}
             className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-5 py-4"
@@ -132,10 +133,8 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
               {value}
             </div>
-            {label === "ATIVOS" && totalInativos > 0 && (
-              <div className="text-[11px] text-zinc-600 mt-0.5">
-                {totalInativos} inativo{totalInativos !== 1 ? "s" : ""}
-              </div>
+            {sub && (
+              <div className="text-[11px] text-zinc-600 mt-0.5">{sub}</div>
             )}
           </div>
         ))}
@@ -171,8 +170,8 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_80px_80px] gap-4 px-5 py-3 border-b border-zinc-800/80">
-          {["EMPRESA", "CNPJ", "CONTATO", "LOCALIZAÇÃO", "STATUS", "OMIE"].map(
+        <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-zinc-800/80">
+          {["EMPRESA", "CNPJ", "CONTATO", "LOCALIZAÇÃO"].map(
             (h) => (
               <div
                 key={h}
@@ -202,7 +201,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             {filtered.map((f) => (
               <li
                 key={f.id}
-                className="grid grid-cols-[2fr_1fr_1.5fr_1fr_80px_80px] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
+                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-zinc-800/20 transition-colors"
               >
                 {/* Empresa */}
                 <div className="min-w-0">
@@ -221,22 +220,24 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
                   {formatCnpj(f.cnpj)}
                 </div>
 
-                {/* Contato */}
+                {/* Contato — e-mail em destaque, telefone abaixo */}
                 <div className="min-w-0 self-center space-y-0.5">
-                  {f.email && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-400 truncate">
-                      <Mail size={10} className="text-zinc-600 shrink-0" />
+                  {f.email ? (
+                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-300 truncate">
+                      <Mail size={10} className="text-zinc-500 shrink-0" />
                       <span className="truncate">{f.email}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-600">
+                      <Mail size={10} className="text-zinc-700 shrink-0" />
+                      <span>sem e-mail</span>
                     </div>
                   )}
                   {f.telefone && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-400">
+                    <div className="flex items-center gap-1.5 text-[12px] text-zinc-500">
                       <Phone size={10} className="text-zinc-600 shrink-0" />
                       {f.telefone}
                     </div>
-                  )}
-                  {!f.email && !f.telefone && (
-                    <span className="text-[12px] text-zinc-600">—</span>
                   )}
                 </div>
 
@@ -252,38 +253,6 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
                     </div>
                   ) : (
                     <span className="text-[12px] text-zinc-600">—</span>
-                  )}
-                </div>
-
-                {/* Status */}
-                <div className="self-center">
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      f.ativo
-                        ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
-                        : "bg-zinc-800 text-zinc-500 ring-1 ring-zinc-700/50",
-                    )}
-                  >
-                    {f.ativo ? "Ativo" : "Inativo"}
-                  </span>
-                </div>
-
-                {/* Omie */}
-                <div className="self-center">
-                  {f.omie_codigo ? (
-                    <div className="text-center">
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20">
-                        ✓ Omie
-                      </span>
-                      {f.omie_sincronizado_em && (
-                        <div className="text-[10px] text-zinc-600 mt-0.5 font-mono text-center">
-                          {relativeTime(f.omie_sincronizado_em)}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-[11px] text-zinc-600">—</span>
                   )}
                 </div>
               </li>

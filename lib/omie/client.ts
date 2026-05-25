@@ -107,14 +107,21 @@ export interface OmieProdutoItem {
   codigo_produto: number;
   codigo_produto_integracao?: string;
   descricao: string;
-  codigo?: string;            // código interno
-  unidade?: string;           // 'UN', 'KG', etc.
+  codigo?: string;              // código interno (ex: "INS00002")
+  unidade?: string;             // 'UN', 'KG', etc.
   ncm?: string;
   ean?: string;
   valor_unitario?: number;
-  descricao_detalhada?: string;
+  // ATENÇÃO: na API real o campo é "descr_detalhada", não "descricao_detalhada"
+  descr_detalhada?: string;
+  descricao_detalhada?: string; // alias mantido para compatibilidade
   inativo?: "S" | "N";
-  familia_produto?: string;
+  // Família do produto: a API Omie retorna "descricao_familia" (nome da família)
+  // e "codigo_familia" (ID numérico). "familia_produto" não existe na resposta.
+  descricao_familia?: string;   // nome da família — campo correto da API
+  codigo_familia?: number;      // ID numérico da família
+  familia_produto?: string;     // campo legado (não retornado pela API real)
+  [key: string]: unknown;       // permite inspecionar campos não mapeados
 }
 
 export interface OmieListaProdutosResponse extends OmiePaginacaoResponse {

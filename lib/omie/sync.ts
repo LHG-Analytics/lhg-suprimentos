@@ -80,24 +80,31 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
 }
 
 function mapProduto(item: OmieProdutoItem) {
-  const familiaOmie = item.familia_produto ?? null;
+  // A API Omie retorna o nome da família em "descricao_familia".
+  // "familia_produto" não existe na resposta real — mantido como fallback por segurança.
+  const familiaOmie: string | null =
+    (typeof item.descricao_familia === "string" && item.descricao_familia.trim())
+      ? item.descricao_familia.trim().toUpperCase()
+    : (typeof item.familia_produto === "string" && item.familia_produto.trim())
+      ? item.familia_produto.trim().toUpperCase()
+    : null;
+
+  // A API retorna "descr_detalhada" (não "descricao_detalhada")
+  const descDetalhada = item.descr_detalhada ?? item.descricao_detalhada ?? null;
+
   return {
-    nome:         item.descricao,
-    codigo:       item.codigo ?? `OMIE-${item.codigo_produto}`,
-    unidade_med:  item.unidade ?? "un",
-    // categoria = categoria de orçamento mapeada automaticamente.
-    // Produtos novos recebem a categoria do mapa familia → orçamento.
-    // O upsert preserva edições manuais (estratégia INSERT-first + UPDATE seletivo).
-    categoria:     categoriaParaFamilia(familiaOmie),
-    // familia_omie = família bruta do Omie, sempre sobrescrita pelo sync.
-    familia_omie:  familiaOmie,
-    omie_codigo:   String(item.codigo_produto),
-    omie_descricao: item.descricao_detalhada ?? null,
-    ncm:           item.ncm ?? null,
-    ean:           item.ean ?? null,
-    preco_custo:   item.valor_unitario ?? null,
+    nome:                 item.descricao,
+    codigo:               item.codigo ?? `OMIE-${item.codigo_produto}`,
+    unidade_med:          item.unidade ?? "un",
+    categoria:            categoriaParaFamilia(familiaOmie),
+    familia_omie:         familiaOmie,
+    omie_codigo:          String(item.codigo_produto),
+    omie_descricao:       descDetalhada,
+    ncm:                  item.ncm ?? null,
+    ean:                  item.ean ?? null,
+    preco_custo:          item.valor_unitario ?? null,
     omie_sincronizado_em: new Date().toISOString(),
-    ativo:         item.inativo !== "S",
+    ativo:                item.inativo !== "S",
   };
 }
 
@@ -194,10 +201,10 @@ export async function syncProdutos(
     for (let i = 0; i < items.length; i += BATCH) {
       const batch = items.slice(i, i + BATCH).map(mapProduto);
 
-      // ── Estratégia de upsert em 2 passos para preservar categoria manual ────
+      // ── Estratégia de upsert em 2 passos ─────────────────────────────────────
       //
       // Passo 1 — INSERT novos produtos (ignorando conflito de omie_codigo).
-      //           Produtos novos recebem categoria = familia_omie como ponto de partida.
+      //           Produtos novos recebem categoria = familia_omie derivada do mapa.
       const { error: insertErr } = await supabase
         .from("produtos")
         .upsert(batch, { onConflict: "omie_codigo", ignoreDuplicates: true });
@@ -208,10 +215,13 @@ export async function syncProdutos(
         continue;
       }
 
-      // Passo 2 — UPDATE dos campos de metadados do Omie em produtos EXISTENTES,
-      //           preservando "categoria" (que pode ter sido editada pelo usuário).
-      //           Nota: Supabase não expõe "ON CONFLICT DO UPDATE SET ..." parcial,
-      //           então usamos um único UPDATE baseado em omie_codigo.
+      // Passo 2 — UPDATE dos campos de metadados do Omie em produtos EXISTENTES.
+      //
+      // Política de categoria no re-sync:
+      //   - sempre atualiza categoria derivada de familia_omie.
+      //   - se familia_omie for null, categoria fica "Outros" (fallback).
+      //   - edições manuais de categoria serão sobrescritas (aceitável agora;
+      //     implementar categoria_manual: boolean quando necessário).
       for (const p of batch) {
         const { error: updateErr } = await supabase
           .from("produtos")
@@ -219,13 +229,13 @@ export async function syncProdutos(
             nome:                 p.nome,
             unidade_med:          p.unidade_med,
             familia_omie:         p.familia_omie,
+            categoria:            categoriaParaFamilia(p.familia_omie),
             ncm:                  p.ncm,
             ean:                  p.ean,
             preco_custo:          p.preco_custo,
             omie_descricao:       p.omie_descricao,
             omie_sincronizado_em: p.omie_sincronizado_em,
             ativo:                p.ativo,
-            // NÃO atualiza "categoria" para preservar edições manuais.
           })
           .eq("omie_codigo", p.omie_codigo);
 
