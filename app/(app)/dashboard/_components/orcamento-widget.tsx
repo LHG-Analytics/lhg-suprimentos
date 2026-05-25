@@ -4,9 +4,18 @@
  * orcamento-widget.tsx — LHG-222
  * Widget de Orçamento vs Realizado no dashboard.
  * Exibe barra de progresso geral + categorias com maior utilização.
+ *
+ * LHG-226: filtra apenas categorias rastreáveis pelo sistema de compras
+ * (definidas em CATEGORIAS_ORCAMENTO). Categorias fixas da planilha como
+ * "Dedetização", "Ecad", "Locação de Equipamentos" são ignoradas pois
+ * não passam pelo Omie e nunca terão "Realizado" calculado.
  */
 import { type OrcamentoSheet } from "@/lib/sheets/client";
+import { CATEGORIAS_ORCAMENTO } from "@/lib/omie/familia-map";
 import { cn } from "@/lib/utils";
+
+// Conjunto para lookup O(1)
+const CATS_VALIDAS = new Set<string>(CATEGORIAS_ORCAMENTO);
 
 const MESES_PT_LABEL: Record<string, string> = {
   jan: "Janeiro", fev: "Fevereiro", mar: "Março",    abr: "Abril",
@@ -54,15 +63,25 @@ export function OrcamentoWidget({ orcamento, gastosPorCategoria }: OrcamentoWidg
   const mes = MESES_PT[new Date().getMonth()] as MesKey;
   const mesLabel = MESES_PT_LABEL[mes] ?? mes;
 
-  // Total do mês (orçado e realizado)
-  const totalOrcado = orcamento.categorias.reduce((s, c) => s + (c.mensal[mes] ?? 0), 0);
-  const totalGasto  = Object.values(gastosPorCategoria).reduce((s, v) => s + v, 0);
+  // Filtra apenas categorias rastreáveis pelo sistema (produtos + serviços via Omie)
+  // Exclui custo fixos da planilha que não passam pelo sistema de compras
+  // (ex: Dedetização, Ecad, Locação de Equipamentos)
+  const catsRastreaveis = orcamento.categorias.filter(
+    (c) => CATS_VALIDAS.has(c.categoria),
+  );
+
+  // Total do mês — apenas categorias rastreáveis
+  const totalOrcado = catsRastreaveis.reduce((s, c) => s + (c.mensal[mes] ?? 0), 0);
+  // Gasto real: filtra apenas as categorias rastreáveis
+  const totalGasto  = Object.entries(gastosPorCategoria)
+    .filter(([cat]) => CATS_VALIDAS.has(cat))
+    .reduce((s, [, v]) => s + v, 0);
   const totalPct    = totalOrcado > 0 ? (totalGasto / totalOrcado) * 100 : 0;
   const totalWarn   = totalPct >= 80;
   const totalOver   = totalPct >= 100;
 
   // Categorias com orçamento > 0 no mês, ordenadas por % de uso
-  const catRows = orcamento.categorias
+  const catRows = catsRastreaveis
     .filter((c) => (c.mensal[mes] ?? 0) > 0)
     .map((c) => {
       const orcado = c.mensal[mes] ?? 0;
