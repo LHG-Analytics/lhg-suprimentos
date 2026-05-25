@@ -280,8 +280,9 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         )}
       </div>
 
-      {/* Modal de edição */}
+      {/* Modal de edição — key garante remount com dados frescos ao trocar de fornecedor */}
       <EditarFornecedorModal
+        key={fornecedorEditando?.id ?? "closed"}
         fornecedor={fornecedorEditando}
         onClose={() => setFornecedorEditando(null)}
       />

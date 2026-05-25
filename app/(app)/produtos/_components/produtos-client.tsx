@@ -380,8 +380,9 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         )}
       </div>
 
-      {/* Modal de edição */}
+      {/* Modal de edição — key garante remount com dados frescos ao trocar de produto */}
       <EditarProdutoModal
+        key={produtoEditando?.id ?? "closed"}
         produto={produtoEditando}
         onClose={() => setProdutoEditando(null)}
       />
