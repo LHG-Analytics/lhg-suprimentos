@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
-  Star, ReceiptText, Sparkles, RefreshCw, Calendar, DollarSign,
+  Star, ReceiptText, Sparkles, RefreshCw,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -853,9 +853,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
             <ShoppingCart size={18} className="text-muted-foreground" />
             Pedidos de Compra
           </h1>
-          <p className="text-[13px] text-muted-foreground mt-0.5">
-            Pedidos LHG + sincronizados do Omie ERP
-          </p>
         </div>
 
         <button
@@ -962,9 +959,9 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         <div className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3 border-b border-border/80">
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PEDIDO</div>
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FORNECEDOR / ITENS</div>
-          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA</div>
-          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO</div>
-          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">VALOR</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA DA COMPRA</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO ENTREGA</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">CUSTO</div>
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">STATUS / ETAPA</div>
           <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FONTE</div>
         </div>
@@ -1021,17 +1018,12 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                       {formatDate(p.created_at)}
                     </div>
 
-                    {/* Previsão */}
+                    {/* Previsão Entrega */}
                     <div className="hidden md:block text-[12px] text-muted-foreground">
-                      {p.entrega_prev ? (
-                        <span className="flex items-center gap-1">
-                          <Calendar size={9} className="text-muted-foreground/50" />
-                          {formatDate(p.entrega_prev)}
-                        </span>
-                      ) : "—"}
+                      {p.entrega_prev ? formatDate(p.entrega_prev) : "—"}
                     </div>
 
-                    {/* Valor */}
+                    {/* Custo */}
                     <div className="font-mono text-sm font-semibold text-foreground">
                       {formatBRL(p.valor_total)}
                     </div>
@@ -1087,14 +1079,9 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                       {p.data_pedido ? formatDate(p.data_pedido) : "—"}
                     </div>
 
-                    {/* Previsão */}
+                    {/* Previsão Entrega */}
                     <div className="hidden md:block text-[12px] text-muted-foreground">
-                      {p.data_previsao ? (
-                        <span className="flex items-center gap-1">
-                          <Calendar size={9} className="text-muted-foreground/50" />
-                          {formatDate(p.data_previsao)}
-                        </span>
-                      ) : "—"}
+                      {p.data_previsao ? formatDate(p.data_previsao) : "—"}
                     </div>
 
                     {/* Valor */}
