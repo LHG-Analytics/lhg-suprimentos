@@ -1,14 +1,41 @@
 /**
  * app/(app)/pedidos/page.tsx — LHG-214/215
  * Página de Pedidos de Compra.
- * Layout 2-col: lista à esquerda, detalhe + timeline à direita.
  * Inclui aba "Pedidos Omie" com pedidos sincronizados do ERP (migration 0016).
  * Pedidos Omie filtrados pela unidade ativa (cookie lhg-unidade-slug).
+ *
+ * Enriquecimento de fornecedor_nome:
+ *   PesquisarPedCompra só retorna nCodFor (código numérico, sem nome).
+ *   Server-side, buscamos os nomes na tabela local "fornecedores" por omie_codigo.
+ *
+ * ⚠️ itens (produtos_consulta) requer migration: ALTER TABLE omie_pedidos_compra
+ *    ADD COLUMN IF NOT EXISTS itens jsonb;
+ *    Após rodar a migration, o select inclui "itens" e os dados ficam disponíveis.
  */
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosClient } from "./_components/pedidos-client";
+
+// Tipo explícito para o row de omie_pedidos_compra após a migration de `itens`
+interface OmieRow {
+  id: string;
+  omie_codigo: number;
+  numero: number | null;
+  data_pedido: string | null;
+  data_previsao: string | null;
+  fornecedor_codigo: number | null;
+  fornecedor_nome: string | null;
+  itens: Array<{ descricao: string; valor_total: number }> | null;
+  valor_total: number | null;
+  situacao: string | null;
+  situacao_aprovacao: string | null;
+  etapa: string | null;
+  numero_pedido_forn: string | null;
+  omie_sincronizado_em: string;
+  unidade_id: string;
+  unidades: { nome: string; slug: string } | null;
+}
 
 export default async function PedidosPage() {
   const supabase = await createClient();
@@ -33,11 +60,14 @@ export default async function PedidosPage() {
 
   // Query de omie_pedidos filtrada pela unidade ativa
   // ⚠️ Supabase builder é imutável — cada .eq() retorna nova instância; reatribuição obrigatória
-  let omieQuery = supabase
+  // ⚠️ Cast para OmieRow[] porque a coluna "itens" pode não estar nos tipos gerados
+  //    se a migration ainda não tiver sido aplicada.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let omieQuery: any = supabase
     .from("omie_pedidos_compra")
     .select(`
       id, omie_codigo, numero, data_pedido, data_previsao,
-      fornecedor_nome, valor_total, situacao, situacao_aprovacao,
+      fornecedor_codigo, fornecedor_nome, itens, valor_total, situacao, situacao_aprovacao,
       etapa, numero_pedido_forn, omie_sincronizado_em, unidade_id,
       unidades(nome, slug)
     `)
@@ -45,7 +75,7 @@ export default async function PedidosPage() {
 
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
-  const [{ data: pedidos }, { data: omie_pedidos }] = await Promise.all([
+  const [{ data: pedidos }, omieResult] = await Promise.all([
     supabase
       .from("pedidos")
       .select(`
@@ -69,10 +99,42 @@ export default async function PedidosPage() {
     omieQuery,
   ]);
 
+  // ── Enriquecer fornecedor_nome ────────────────────────────────────────────────
+  // PesquisarPedCompra devolve apenas nCodFor (número inteiro) — o nome fica null.
+  // Buscamos os nomes na tabela local por omie_codigo, deduplizando os códigos.
+  const omie_raw: OmieRow[] = (omieResult.data ?? []) as OmieRow[];
+
+  const codigoSet = new Set<string>();
+  for (const p of omie_raw) {
+    if (!p.fornecedor_nome && p.fornecedor_codigo) {
+      codigoSet.add(String(p.fornecedor_codigo));
+    }
+  }
+
+  const fornMap = new Map<string, string>();
+  if (codigoSet.size > 0) {
+    const { data: fornLookup } = await supabase
+      .from("fornecedores")
+      .select("omie_codigo, razao_social, nome_fantasia")
+      .in("omie_codigo", [...codigoSet]);
+
+    for (const f of fornLookup ?? []) {
+      if (f.omie_codigo) {
+        fornMap.set(f.omie_codigo, f.nome_fantasia || f.razao_social);
+      }
+    }
+  }
+
+  const omie_pedidos = omie_raw.map(p => ({
+    ...p,
+    fornecedor_nome: p.fornecedor_nome ??
+      (p.fornecedor_codigo ? (fornMap.get(String(p.fornecedor_codigo)) ?? null) : null),
+  }));
+
   return (
     <PedidosClient
       pedidos={pedidos ?? []}
-      omie_pedidos={omie_pedidos ?? []}
+      omie_pedidos={omie_pedidos}
     />
   );
 }

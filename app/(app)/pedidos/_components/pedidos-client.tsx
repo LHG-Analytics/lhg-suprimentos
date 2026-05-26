@@ -58,6 +58,11 @@ interface Pedido {
   pedido_eventos: PedidoEvento[];
 }
 
+interface OmieItem {
+  descricao: string;
+  valor_total: number;
+}
+
 interface OmiePedido {
   id: string;
   omie_codigo: number;
@@ -65,6 +70,7 @@ interface OmiePedido {
   data_pedido: string | null;
   data_previsao: string | null;
   fornecedor_nome: string | null;
+  itens: OmieItem[] | null;
   valor_total: number | null;
   situacao: string | null;
   situacao_aprovacao: string | null;
@@ -900,12 +906,14 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
 
         {/* Header da tabela */}
-        <div className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3 border-b border-border/80">
-          {["PEDIDO", "FORNECEDOR", "DATA", "PREVISÃO", "VALOR", "STATUS / ETAPA", "FONTE"].map(h => (
-            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-              {h}
-            </div>
-          ))}
+        <div className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3 border-b border-border/80">
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PEDIDO</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FORNECEDOR / ITENS</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">VALOR</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">STATUS / ETAPA</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FONTE</div>
         </div>
 
         {/* Linhas */}
@@ -929,17 +937,26 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                   <li
                     key={`lhg-${p.id}`}
                     onClick={() => setSelectedLhg(p)}
-                    className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                    className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
                   >
                     {/* Pedido # */}
                     <div className="font-mono text-[11px] text-muted-foreground truncate">{p.numero}</div>
 
-                    {/* Fornecedor */}
+                    {/* Fornecedor + itens */}
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-foreground truncate leading-tight">
                         {forn ? getFornNome(forn) : "Fornecedor desconhecido"}
                       </div>
-                      {p.cotacoes && (
+                      {/* Itens do pedido LHG */}
+                      {p.pedido_itens.length > 0 && (
+                        <div className="text-[11px] text-muted-foreground/60 mt-0.5 truncate">
+                          {p.pedido_itens.slice(0, 2).map(i =>
+                            `${i.quantidade}× ${i.produtos?.nome ?? "Produto"}`
+                          ).join(" · ")}
+                          {p.pedido_itens.length > 2 && ` +${p.pedido_itens.length - 2}`}
+                        </div>
+                      )}
+                      {p.cotacoes && !p.pedido_itens.length && (
                         <div className="text-[11px] text-muted-foreground/60 mt-0.5 flex items-center gap-1">
                           <ReceiptText size={9} />Cotação {p.cotacoes.numero}
                         </div>
@@ -947,12 +964,12 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                     </div>
 
                     {/* Data */}
-                    <div className="text-[12px] text-muted-foreground">
+                    <div className="hidden md:block text-[12px] text-muted-foreground">
                       {formatDate(p.created_at)}
                     </div>
 
                     {/* Previsão */}
-                    <div className="text-[12px] text-muted-foreground">
+                    <div className="hidden md:block text-[12px] text-muted-foreground">
                       {p.entrega_prev ? (
                         <span className="flex items-center gap-1">
                           <Calendar size={9} className="text-muted-foreground/50" />
@@ -974,7 +991,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                     </div>
 
                     {/* Fonte */}
-                    <div>
+                    <div className="hidden md:block">
                       <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">
                         LHG
                       </span>
@@ -989,30 +1006,36 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                   <li
                     key={`omie-${p.id}`}
                     onClick={() => setSelectedOmie(p)}
-                    className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                    className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
                   >
                     {/* Pedido # */}
                     <div className="font-mono text-[11px] text-muted-foreground truncate">
                       {p.numero ? `#${p.numero}` : `c.${p.omie_codigo}`}
                     </div>
 
-                    {/* Fornecedor */}
+                    {/* Fornecedor + itens */}
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-foreground truncate leading-tight">
                         {p.fornecedor_nome ?? "Fornecedor desconhecido"}
                       </div>
-                      {p.numero_pedido_forn && (
+                      {/* Itens do pedido Omie (produtos_consulta) */}
+                      {p.itens && p.itens.length > 0 ? (
+                        <div className="text-[11px] text-muted-foreground/60 mt-0.5 truncate">
+                          {p.itens.slice(0, 2).map(i => i.descricao).filter(Boolean).join(" · ")}
+                          {p.itens.length > 2 && ` +${p.itens.length - 2}`}
+                        </div>
+                      ) : p.numero_pedido_forn ? (
                         <div className="text-[11px] text-muted-foreground/60 mt-0.5">Nº forn: {p.numero_pedido_forn}</div>
-                      )}
+                      ) : null}
                     </div>
 
                     {/* Data */}
-                    <div className="text-[12px] text-muted-foreground">
+                    <div className="hidden md:block text-[12px] text-muted-foreground">
                       {p.data_pedido ? formatDate(p.data_pedido) : "—"}
                     </div>
 
                     {/* Previsão */}
-                    <div className="text-[12px] text-muted-foreground">
+                    <div className="hidden md:block text-[12px] text-muted-foreground">
                       {p.data_previsao ? (
                         <span className="flex items-center gap-1">
                           <Calendar size={9} className="text-muted-foreground/50" />
@@ -1038,7 +1061,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                     </div>
 
                     {/* Fonte */}
-                    <div>
+                    <div className="hidden md:block">
                       <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">
                         <Sparkles size={7} />Omie
                       </span>

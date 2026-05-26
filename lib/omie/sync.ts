@@ -77,7 +77,9 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
     omie_codigo: String(item.codigo_cliente),
     omie_unidade_id: unidadeId,
     omie_sincronizado_em: new Date().toISOString(),
-    ativo: item.ativo === "S",
+    // Omie usa "inativo" como campo de status real no ListarClientes.
+    // "ativo" não é retornado pela API — ativo = inativo !== "S"
+    ativo: (item.inativo ?? "N") !== "S",
   };
 }
 
@@ -338,6 +340,15 @@ function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
   };
   const etapa = cEtapa ? (ETAPAS[cEtapa] ?? cEtapa) : null;
 
+  // produtos_consulta: array de itens do pedido com descrição e valor total por item.
+  // PesquisarPedCompra não retorna quantidade — apenas cDescricao e nValTot.
+  const itens = item.produtos_consulta?.length
+    ? item.produtos_consulta.map(p => ({
+        descricao:   p.cDescricao?.trim() ?? "",
+        valor_total: p.nValTot ?? 0,
+      }))
+    : null;
+
   return {
     unidade_id:           unidadeId,
     omie_codigo:          nCodPedido,
@@ -351,6 +362,7 @@ function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
     situacao_aprovacao:   info.cSitAprovacao?.trim() || null,
     etapa,
     numero_pedido_forn:   info.cNumPedFornec?.trim() || null,
+    itens,
     omie_sincronizado_em: new Date().toISOString(),
   };
 }

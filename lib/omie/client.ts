@@ -84,7 +84,14 @@ export interface OmieClienteItem {
   endereco?: string;
   cidade?: string;
   estado?: string;
-  ativo: "S" | "N";
+  /**
+   * Campo de status que o Omie realmente retorna no ListarClientes.
+   * O campo "ativo" (S/N) não é retornado — o status ativo/inativo é
+   * controlado pelo campo "inativo": "N" = ativo, "S" = inativo.
+   */
+  inativo?: "S" | "N";
+  /** @deprecated Omie não retorna este campo no ListarClientes. Use `inativo`. */
+  ativo?: "S" | "N";
   tags?: Array<{ tag: string }>;
 }
 
