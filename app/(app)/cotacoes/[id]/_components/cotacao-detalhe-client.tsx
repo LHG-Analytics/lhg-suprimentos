@@ -57,7 +57,8 @@ function getInitials(nome: string) {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  const str = iso.includes("T") ? iso : `${iso}T12:00:00`;
+  return new Date(str).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 // Cores para avatares de fornecedores

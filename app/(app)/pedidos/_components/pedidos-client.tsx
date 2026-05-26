@@ -154,7 +154,11 @@ function formatBRL(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
+  // Fix timezone: "2026-05-25" é interpretado como UTC meia-noite.
+  // Em UTC-3 isso seria "24/05/2026 21:00" → mostraria "24 mai" (errado).
+  // Adicionar "T12:00:00" garante que qualquer fuso mostre o dia correto.
+  const str = iso.includes("T") ? iso : `${iso}T12:00:00`;
+  return new Date(str).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
 }
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });

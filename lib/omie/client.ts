@@ -303,7 +303,7 @@ export async function buildClienteNomeMap(
         creds,
         {
           pagina,
-          registros_por_pagina: 100, // máximo permitido para menos requisições
+          registros_por_pagina: 50, // 100/pág causa razao_social vazia na resposta Omie
           apenas_importado_api: "N", // inclui cadastros manuais
         },
       );
@@ -736,7 +736,13 @@ export interface OmiePedidoCompraListItem {
     cNomeFornecedor?:  string;   // nome do fornecedor (nem sempre presente)
     cEtapa?:           string;
   };
-  parcelas_consulta?: Array<{ nValor?: number; nParcela?: number }>;
+  parcelas_consulta?: Array<{
+    nValor?:   number;
+    nParcela?: number;
+    dVencto?:  string;   // DD/MM/YYYY — data de vencimento = previsão real de entrega/pagamento
+    nDias?:    number;
+    nPercent?: number;
+  }>;
   produtos_consulta?: Array<{ nValTot?: number; cDescricao?: string }>;
 }
 
