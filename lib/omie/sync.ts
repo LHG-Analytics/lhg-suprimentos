@@ -13,6 +13,7 @@ import {
   listAllFornecedores,
   listAllProdutos,
   listAllPedidosCompra,
+  buildClienteNomeMap,
   OmieError,
   type OmieCredentials,
   type OmieClienteItem,
@@ -301,7 +302,11 @@ function omieDataParaISO(dData?: string): string | null {
   return `${a}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
-function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
+function mapPedidoCompra(
+  item: OmiePedidoCompraListItem,
+  unidadeId: string,
+  clienteNomeMap?: Map<number, string>,
+) {
   // PesquisarPedCompra retorna "cabecalho_consulta"; outros formatos retornam "cabecalho"
   const cab  = item.cabecalho;
   const cab2 = item.cabecalho_consulta;
@@ -322,10 +327,13 @@ function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
     item.faturamento?.nValTotalPedido ??
     (item.parcelas_consulta?.reduce((s, p) => s + (p.nValor ?? 0), 0) ?? 0);
 
-  // Nome do fornecedor: só disponível no formato antigo (informacoes_adicionais)
+  // Nome do fornecedor:
+  //   1. informacoes_adicionais (formato antigo — nem sempre presente no PesquisarPedCompra)
+  //   2. clienteNomeMap: lookup de todos os clientes Omie por codigo_cliente
   const fornecedorNome =
     info.cNomeFantasia?.trim() ||
     info.cRazaoSocial?.trim() ||
+    (nCodFornecedor && clienteNomeMap ? (clienteNomeMap.get(nCodFornecedor) ?? null) : null) ||
     null;
 
   const ETAPAS: Record<string, string> = {
@@ -378,6 +386,18 @@ export async function syncPedidosCompra(
   let erros = 0;
 
   try {
+    // ── Lookup de nomes de clientes ───────────────────────────────────────────
+    // PesquisarPedCompra só retorna nCodFor (código numérico) sem nome.
+    // Buscamos TODOS os clientes Omie (sem filtro de tag) para enriquecer
+    // fornecedor_nome na hora do upsert.
+    let clienteNomeMap: Map<number, string> | undefined;
+    try {
+      clienteNomeMap = await buildClienteNomeMap(creds);
+      console.log(`[omie/sync] clienteNomeMap construído com ${clienteNomeMap.size} entradas para unidade=${unidadeId}`);
+    } catch (err) {
+      console.warn("[omie/sync] Falha ao construir clienteNomeMap — fornecedor_nome ficará null:", err instanceof Error ? err.message : String(err));
+    }
+
     console.log(`[omie/sync] Iniciando listAllPedidosCompra para unidade=${unidadeId}`);
     const items = await listAllPedidosCompra(creds, (page, totalPages) => {
       console.log(`[omie/sync] Pedidos unidade=${unidadeId} página ${page}/${totalPages}`);
@@ -388,7 +408,7 @@ export async function syncPedidosCompra(
     const BATCH = 50;
 
     for (let i = 0; i < items.length; i += BATCH) {
-      const batch = items.slice(i, i + BATCH).map((item) => mapPedidoCompra(item, unidadeId));
+      const batch = items.slice(i, i + BATCH).map((item) => mapPedidoCompra(item, unidadeId, clienteNomeMap));
 
       const { error } = await supabase
         .from("omie_pedidos_compra")

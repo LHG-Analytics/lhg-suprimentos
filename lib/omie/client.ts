@@ -247,6 +247,52 @@ export async function omiePost<TParam, TResponse>(
 // ── Fornecedores ───────────────────────────────────────────────────────────────
 
 /**
+ * Busca todos os clientes Omie (sem filtro de tag) e retorna um Map
+ * codigo_cliente → nome para uso durante sync de pedidos.
+ *
+ * PesquisarPedCompra retorna apenas nCodFor (código numérico) sem nome.
+ * Este lookup resolve os nomes sem depender da tag "Fornecedor".
+ */
+export async function buildClienteNomeMap(
+  creds: OmieCredentials,
+): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  let pagina = 1;
+  let totalPaginas = 1;
+
+  do {
+    let res: OmieListaClientesResponse;
+    try {
+      res = await omiePost<OmieClienteParam, OmieListaClientesResponse>(
+        "/geral/clientes/",
+        "ListarClientes",
+        creds,
+        { pagina, registros_por_pagina: 50 },
+      );
+    } catch (err) {
+      // Sem registros = mapa parcial mas não é erro fatal
+      if (err instanceof OmieError) {
+        const msg = err.message.toLowerCase();
+        const isEmpty =
+          msg.includes("não existem registros") ||
+          msg.includes("nao existem registros") ||
+          msg.includes("nenhum registro");
+        if (isEmpty) break;
+      }
+      throw err;
+    }
+    totalPaginas = res.total_de_paginas;
+    for (const c of res.clientes_cadastro) {
+      const nome = c.nome_fantasia?.trim() || c.razao_social;
+      if (nome) map.set(c.codigo_cliente, nome);
+    }
+    pagina++;
+  } while (pagina <= totalPaginas);
+
+  return map;
+}
+
+/**
  * Busca uma página de fornecedores no Omie.
  * Filtra pela tag "Fornecedor" para excluir registros que são apenas clientes.
  * No Omie o cadastro é unificado (cliente + fornecedor na mesma tabela),
