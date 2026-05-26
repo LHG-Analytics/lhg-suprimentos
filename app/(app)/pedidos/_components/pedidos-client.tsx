@@ -87,34 +87,6 @@ interface Props {
   omie_pedidos: OmiePedido[];
 }
 
-// ── Filtros Omie — campos exatos do endpoint PesquisarPedCompra ───────────────
-
-type OmieFiltroKey =
-  | "todos"
-  | "pendentes"      // lExibirPedidosPendentes
-  | "faturados"      // lExibirPedidosFaturados
-  | "recebidos"      // lExibirPedidosRecebidos
-  | "cancelados"     // lExibirPedidosCancelados
-  | "encerrados"     // lExibirPedidosEncerrados
-  | "rec_parciais"   // lExibirPedidosRecParciais
-  | "fat_parciais";  // lExibirPedidosFatParciais
-
-const OMIE_FILTROS: {
-  key: OmieFiltroKey;
-  label: string;
-  fieldName: string | null;
-  activeClass: string;
-}[] = [
-  { key: "todos",        label: "Todos",         fieldName: null,                          activeClass: "bg-muted text-foreground" },
-  { key: "pendentes",    label: "Pendentes",      fieldName: "lExibirPedidosPendentes",     activeClass: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30" },
-  { key: "faturados",    label: "Faturados",      fieldName: "lExibirPedidosFaturados",     activeClass: "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30" },
-  { key: "recebidos",    label: "Recebidos",      fieldName: "lExibirPedidosRecebidos",     activeClass: "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30" },
-  { key: "cancelados",   label: "Cancelados",     fieldName: "lExibirPedidosCancelados",    activeClass: "bg-red-500/20 text-red-400 ring-1 ring-red-500/30" },
-  { key: "encerrados",   label: "Encerrados",     fieldName: "lExibirPedidosEncerrados",    activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
-  { key: "rec_parciais", label: "Rec. Parciais",  fieldName: "lExibirPedidosRecParciais",   activeClass: "bg-teal-500/20 text-teal-400 ring-1 ring-teal-500/30" },
-  { key: "fat_parciais", label: "Fat. Parciais",  fieldName: "lExibirPedidosFatParciais",   activeClass: "bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/30" },
-];
-
 // ── Filtros LHG ───────────────────────────────────────────────────────────────
 
 const LHG_FILTROS: { key: string; label: string }[] = [
@@ -165,18 +137,6 @@ function formatDateTime(iso: string) {
 }
 function getFornNome(f: NonNullable<Pedido["fornecedores"]>) {
   return f.nome_fantasia || f.razao_social;
-}
-
-/** Classifica etapa/situação Omie nos 7 buckets do endpoint PesquisarPedCompra */
-function classifyOmieStatus(etapa: string | null, situacao: string | null): OmieFiltroKey {
-  const text = (etapa ?? situacao ?? "").toLowerCase();
-  if (text.includes("ag. fat") || text.includes("faturamento"))    return "fat_parciais";
-  if (text.includes("faturad"))                                     return "faturados";
-  if (text.includes("ag. rec") || text.includes("recebimento"))    return "rec_parciais";
-  if (text.includes("recebid"))                                     return "recebidos";
-  if (text.includes("cancel"))                                      return "cancelados";
-  if (text.includes("encerr") || text.includes("finali"))           return "encerrados";
-  return "pendentes"; // Em Análise, Aprovado, Enviado, Pedido de Compra
 }
 
 function omieSituacaoColor(s: string | null) {
@@ -699,9 +659,8 @@ function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onC
 export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
   const router = useRouter();
 
-  const [filtro,           setFiltro]           = useState("todos");
-  const [omieStatusFiltro, setOmieStatusFiltro] = useState<OmieFiltroKey>("todos");
-  const [busca,            setBusca]            = useState("");
+  const [filtro, setFiltro] = useState("todos");
+  const [busca,  setBusca]  = useState("");
   const [selectedLhg,      setSelectedLhg]      = useState<Pedido | null>(null);
   const [selectedOmie,     setSelectedOmie]     = useState<OmiePedido | null>(null);
   const [syncing,          setSyncing]          = useState(false);
@@ -760,19 +719,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     return m;
   }, [pedidosIniciais]);
 
-  const omieCounts = useMemo(() => {
-    const m: Record<OmieFiltroKey, number> = {
-      todos: omie_pedidos.length,
-      pendentes: 0, faturados: 0, recebidos: 0,
-      cancelados: 0, encerrados: 0, rec_parciais: 0, fat_parciais: 0,
-    };
-    for (const p of omie_pedidos) {
-      const k = classifyOmieStatus(p.etapa, p.situacao);
-      m[k] = (m[k] ?? 0) + 1;
-    }
-    return m;
-  }, [omie_pedidos]);
-
   // ── Filtragem ────────────────────────────────────────────────────────────────
   type RowLhg  = { kind: "lhg";  data: Pedido }
   type RowOmie = { kind: "omie"; data: OmiePedido }
@@ -809,9 +755,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
             (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false) ||
             // Busca por descrição de produto nos itens do pedido
             (p.itens?.some(item => item.descricao.toLowerCase().includes(q)) ?? false);
-          const matchStatus = omieStatusFiltro === "todos" ||
-            classifyOmieStatus(p.etapa, p.situacao) === omieStatusFiltro;
-          return matchBusca && matchStatus;
+          return matchBusca;
         })
         .map(p => ({ kind: "omie", data: p }));
 
@@ -825,7 +769,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
       return dateB - dateA;
     });
-  }, [pedidosIniciais, omie_pedidos, filtro, omieStatusFiltro, buscaQ]);
+  }, [pedidosIniciais, omie_pedidos, filtro, buscaQ]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
@@ -833,9 +777,8 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const paginados   = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // Helpers que resetam página no mesmo batch do React 18 (sem render intermediário errado)
-  function handleBusca(v: string)             { setBusca(v);             setPage(0); }
-  function handleFiltro(v: string)            { setFiltro(v);            setPage(0); }
-  function handleOmieStatus(v: OmieFiltroKey) { setOmieStatusFiltro(v);  setPage(0); }
+  function handleBusca(v: string)  { setBusca(v);  setPage(0); }
+  function handleFiltro(v: string) { setFiltro(v); setPage(0); }
 
   function handleAtualizado() {
     router.refresh();
@@ -923,33 +866,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           ))}
         </div>
 
-        {/* Filtros Omie — 7 campos exatos do endpoint PesquisarPedCompra */}
-        {omie_pedidos.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-border/40">
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-400/80 font-semibold mr-1">
-              <Sparkles size={8} />Omie
-            </span>
-            {OMIE_FILTROS.map(f => {
-              const count = omieCounts[f.key] ?? 0;
-              if (f.key !== "todos" && count === 0) return null;
-              const isActive = omieStatusFiltro === f.key;
-              return (
-                <button
-                  key={f.key}
-                  onClick={() => handleOmieStatus(f.key)}
-                  title={f.fieldName ? `API: ${f.fieldName}` : undefined}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                    isActive ? f.activeClass : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
-                  )}
-                >
-                  {f.label}
-                  {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── Tabela ───────────────────────────────────────────────────────────── */}
@@ -971,7 +887,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <ShoppingCart size={28} className="text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              {busca || filtro !== "todos" || omieStatusFiltro !== "todos"
+              {busca || filtro !== "todos"
                 ? "Nenhum pedido encontrado para os filtros selecionados"
                 : "Nenhum pedido cadastrado"}
             </p>
