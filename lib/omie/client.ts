@@ -685,6 +685,38 @@ export async function criarPedidoCompra(
 //   - nRegsPorPagina (não "registros_por_pagina"), máximo 100
 //   - lApenasImportadoApi: "N" → inclui TODOS (não só importados via API)
 
+/** Filtros de status para PesquisarPedCompra. "todos" = todos os lExibir* = "T". */
+export type OmiePedidoFiltro =
+  | "todos"
+  | "pendentes"
+  | "faturados"
+  | "recebidos"
+  | "cancelados"
+  | "encerrados"
+  | "rec_parciais"
+  | "fat_parciais";
+
+export const OMIE_PEDIDO_FILTROS: { key: OmiePedidoFiltro; label: string }[] = [
+  { key: "pendentes",    label: "Pendentes"    },
+  { key: "faturados",    label: "Faturados"    },
+  { key: "recebidos",    label: "Recebidos"    },
+  { key: "cancelados",   label: "Cancelados"   },
+  { key: "encerrados",   label: "Encerrados"   },
+  { key: "rec_parciais", label: "Rec. Parciais" },
+  { key: "fat_parciais", label: "Fat. Parciais" },
+];
+
+// Mapeia chave do filtro → nome do campo lExibir* na API
+const FILTRO_CAMPO: Record<Exclude<OmiePedidoFiltro, "todos">, string> = {
+  pendentes:    "lExibirPedidosPendentes",
+  faturados:    "lExibirPedidosFaturados",
+  recebidos:    "lExibirPedidosRecebidos",
+  cancelados:   "lExibirPedidosCancelados",
+  encerrados:   "lExibirPedidosEncerrados",
+  rec_parciais: "lExibirPedidosRecParciais",
+  fat_parciais: "lExibirPedidosFatParciais",
+};
+
 export interface OmiePesquisarPedCompraParam {
   nPagina: number;
   nRegsPorPagina: number;
@@ -789,33 +821,36 @@ export async function listPedidosCompraPage(
   creds: OmieCredentials,
   pagina: number,
   registrosPorPagina = 50,
+  filtro: OmiePedidoFiltro = "todos",
 ): Promise<OmieListarPedidosResponse> {
-  // Janela de 5 anos: dDataInicial = hoje-1825, dDataFinal = hoje
-  // Garante captura de pedidos históricos anteriores a 2 anos atrás.
   const hoje   = new Date();
   const inicio = new Date(hoje);
   inicio.setFullYear(hoje.getFullYear() - 5);
+
+  // Monta flags lExibir* conforme o filtro:
+  //   "todos"   → todos "T"
+  //   específico → só o campo correspondente "T", demais "F"
+  const ALL_CAMPOS = Object.values(FILTRO_CAMPO);
+  const exibirFlags: Record<string, "T" | "F"> = {};
+  if (filtro === "todos") {
+    for (const campo of ALL_CAMPOS) exibirFlags[campo] = "T";
+  } else {
+    for (const campo of ALL_CAMPOS) exibirFlags[campo] = "F";
+    exibirFlags[FILTRO_CAMPO[filtro]] = "T";
+  }
 
   return omiePost<OmiePesquisarPedCompraParam, OmieListarPedidosResponse>(
     "/produtos/pedidocompra/",
     "PesquisarPedCompra",
     creds,
     {
-      nPagina:                   pagina,
-      nRegsPorPagina:            Math.min(registrosPorPagina, 50),
-      // "N" = não filtrar por origem (inclui criados manualmente e via API)
-      lApenasImportadoApi:       "N",
-      // Exibir todos os status — sem lApenasAlterados (flag extra que pode excluir registros)
-      lExibirPedidosPendentes:   "T",
-      lExibirPedidosFaturados:   "T",
-      lExibirPedidosRecebidos:   "T",
-      lExibirPedidosCancelados:  "T",
-      lExibirPedidosEncerrados:  "T",
-      lExibirPedidosRecParciais: "T",
-      lExibirPedidosFatParciais: "T",
-      dDataInicial:              formatOmieDate(inicio),
-      dDataFinal:                formatOmieDate(hoje),
-    },
+      nPagina:             pagina,
+      nRegsPorPagina:      Math.min(registrosPorPagina, 50),
+      lApenasImportadoApi: "N",
+      ...exibirFlags,
+      dDataInicial:        formatOmieDate(inicio),
+      dDataFinal:          formatOmieDate(hoje),
+    } as OmiePesquisarPedCompraParam,
   );
 }
 
@@ -825,15 +860,17 @@ export async function listPedidosCompraPage(
 export async function listAllPedidosCompra(
   creds: OmieCredentials,
   onPage?: (page: number, total: number) => void,
-): Promise<OmiePedidoCompraListItem[]> {
+  filtro: OmiePedidoFiltro = "todos",
+): Promise<{ items: OmiePedidoCompraListItem[]; totalRegistrosOmie: number }> {
   const all: OmiePedidoCompraListItem[] = [];
   let pagina = 1;
   let totalPaginas = 1;
+  let totalRegistrosOmie = 0;
 
   do {
     let res: OmieListarPedidosResponse;
     try {
-      res = await listPedidosCompraPage(creds, pagina);
+      res = await listPedidosCompraPage(creds, pagina, 50, filtro);
     } catch (err) {
       if (isOmieEmptyError(err)) {
         // Omie devolveu "Não existem registros" — conta não tem pedidos com esses filtros
@@ -845,7 +882,7 @@ export async function listAllPedidosCompra(
         console.warn("[omie/client] REDUNDANT detectado — aguardando 65s antes de tentar de novo…");
         await new Promise(r => setTimeout(r, 65_000));
         try {
-          res = await listPedidosCompraPage(creds, pagina);
+          res = await listPedidosCompraPage(creds, pagina, 50, filtro);
         } catch (err2) {
           console.error("[omie/client] Retry após REDUNDANT também falhou:", err2 instanceof Error ? err2.message : String(err2));
           throw err2;
@@ -868,9 +905,12 @@ export async function listAllPedidosCompra(
       res.total_de_registros ??
       0;
 
+    // Captura o total da API na primeira página (valor canônico do Omie)
+    if (pagina === 1) totalRegistrosOmie = totalRegistros;
+
     const resRaw = res as unknown as Record<string, unknown>;
     console.log(
-      `[omie/client] PesquisarPedCompra página ${pagina}/${totalPaginas}:` +
+      `[omie/client] PesquisarPedCompra[${filtro}] página ${pagina}/${totalPaginas}:` +
       ` totalRegistros=${totalRegistros}` +
       ` chaves=${Object.keys(resRaw).join(",")}`,
     );
@@ -908,7 +948,7 @@ export async function listAllPedidosCompra(
     pagina++;
   } while (pagina <= totalPaginas);
 
-  return all;
+  return { items: all, totalRegistrosOmie };
 }
 
 // ── AlterarProduto ─────────────────────────────────────────────────────────────

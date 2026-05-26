@@ -20,6 +20,7 @@ import {
   type OmieClienteItem,
   type OmieProdutoItem,
   type OmiePedidoCompraListItem,
+  type OmiePedidoFiltro,
 } from "./client";
 import { categoriaParaFamilia } from "./familia-map";
 
@@ -405,6 +406,7 @@ export async function syncPedidosCompra(
   supabase: SupabaseClient,
   creds: OmieCredentials,
   unidadeId: string,
+  filtro: OmiePedidoFiltro = "todos",
 ): Promise<SyncResult> {
   const inicio = Date.now();
   let total = 0;
@@ -413,11 +415,15 @@ export async function syncPedidosCompra(
 
   try {
     // ── Passo 1: Busca todos os pedidos de compra ─────────────────────────────
-    console.log(`[omie/sync] Iniciando listAllPedidosCompra para unidade=${unidadeId}`);
-    const items = await listAllPedidosCompra(creds, (page, totalPages) => {
-      console.log(`[omie/sync] Pedidos unidade=${unidadeId} página ${page}/${totalPages}`);
-    });
-    console.log(`[omie/sync] listAllPedidosCompra retornou ${items.length} itens para unidade=${unidadeId}`);
+    console.log(`[omie/sync] Iniciando listAllPedidosCompra filtro=${filtro} unidade=${unidadeId}`);
+    const { items, totalRegistrosOmie } = await listAllPedidosCompra(
+      creds,
+      (page, totalPages) => {
+        console.log(`[omie/sync] Pedidos[${filtro}] unidade=${unidadeId} página ${page}/${totalPages}`);
+      },
+      filtro,
+    );
+    console.log(`[omie/sync] listAllPedidosCompra[${filtro}] retornou ${items.length} itens (totalOmie=${totalRegistrosOmie}) unidade=${unidadeId}`);
 
     // Log de diagnóstico: campos do primeiro pedido para entender o formato de datas
     if (items.length > 0) {
@@ -500,6 +506,7 @@ export async function syncPedidosCompra(
       novos,
       erros,
       duracaoMs: Date.now() - inicio,
+      detalhe: { filtro, totalRegistrosOmie },
     };
 
     await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_pedidos" });

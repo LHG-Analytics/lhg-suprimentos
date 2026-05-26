@@ -15,8 +15,13 @@ import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { syncPedidosCompra } from "@/lib/omie/sync";
-import type { OmieCredentials } from "@/lib/omie/client";
+import type { OmieCredentials, OmiePedidoFiltro } from "@/lib/omie/client";
 import type { SyncResult } from "@/lib/omie/sync";
+
+const FILTROS_VALIDOS: OmiePedidoFiltro[] = [
+  "todos", "pendentes", "faturados", "recebidos",
+  "cancelados", "encerrados", "rec_parciais", "fat_parciais",
+];
 
 // ── Autenticação ───────────────────────────────────────────────────────────────
 
@@ -57,12 +62,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 
+  // Lê o filtro de status do body (opcional — padrão "todos")
+  let filtro: OmiePedidoFiltro = "todos";
+  try {
+    const body = await req.json().catch(() => ({}));
+    const f = body?.filtro as string | undefined;
+    if (f && FILTROS_VALIDOS.includes(f as OmiePedidoFiltro)) {
+      filtro = f as OmiePedidoFiltro;
+    }
+  } catch { /* body vazio ou não-JSON */ }
+
   // Respeita a unidade ativa na sidebar (cookie lhg-unidade-slug)
   const cookieStore = await cookies();
   const slug = cookieStore.get("lhg-unidade-slug")?.value ?? null;
   const filtroDesc = slug && slug !== "todas" ? `unidade="${slug}"` : "todas as unidades";
-  console.log(`${tag} Sync manual iniciado — ${filtroDesc}`);
-  return runSync(tag, slug && slug !== "todas" ? slug : null);
+  console.log(`${tag} Sync manual iniciado — ${filtroDesc} filtro=${filtro}`);
+  return runSync(tag, slug && slug !== "todas" ? slug : null, filtro);
 }
 
 // ── Lógica de sync ────────────────────────────────────────────────────────────
@@ -71,7 +86,7 @@ export async function POST(req: NextRequest) {
  * @param slug  slug da unidade ativa (cookie lhg-unidade-slug).
  *              null = sincroniza todas as unidades (modo cron).
  */
-async function runSync(tag: string, slug: string | null) {
+async function runSync(tag: string, slug: string | null, filtro: OmiePedidoFiltro = "todos") {
   const inicio = Date.now();
   const supabase = createServiceClient();
 
@@ -108,7 +123,7 @@ async function runSync(tag: string, slug: string | null) {
 
     console.log(`${tag} Sincronizando pedidos de "${unidade.nome}"…`);
     try {
-      const r = await syncPedidosCompra(supabase, creds, unidade.id);
+      const r = await syncPedidosCompra(supabase, creds, unidade.id, filtro);
       results.push(r);
       console.log(`${tag} "${unidade.nome}" — status=${r.status} total=${r.total} erros=${r.erros} (${r.duracaoMs}ms)`);
     } catch (err) {

@@ -87,17 +87,6 @@ interface Props {
   omie_pedidos: OmiePedido[];
 }
 
-// ── Filtros LHG ───────────────────────────────────────────────────────────────
-
-const LHG_FILTROS: { key: string; label: string }[] = [
-  { key: "todos",                label: "Todos" },
-  { key: "aguardando_aprovacao", label: "Ag. Aprovação" },
-  { key: "enviado",              label: "Enviado" },
-  { key: "em_transito",          label: "Em Trânsito" },
-  { key: "recebido",             label: "Recebido" },
-  { key: "cancelado",            label: "Cancelado" },
-];
-
 // ── Configurações de status ───────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<PedStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -659,14 +648,17 @@ function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onC
 export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
   const router = useRouter();
 
-  const [filtro, setFiltro] = useState("todos");
-  const [busca,  setBusca]  = useState("");
-  const [selectedLhg,      setSelectedLhg]      = useState<Pedido | null>(null);
-  const [selectedOmie,     setSelectedOmie]     = useState<OmiePedido | null>(null);
-  const [syncing,          setSyncing]          = useState(false);
-  const [page,             setPage]             = useState(0);
+  const [busca,        setBusca]        = useState("");
+  const [selectedLhg,  setSelectedLhg]  = useState<Pedido | null>(null);
+  const [selectedOmie, setSelectedOmie] = useState<OmiePedido | null>(null);
+  const [syncing,      setSyncing]      = useState(false);
+  const [page,         setPage]         = useState(0);
 
-  // ── Sync Omie ────────────────────────────────────────────────────────────────
+  // counts retornados pelo Omie para cada filtro (após sync individual)
+  const [filtroSyncCounts,  setFiltroSyncCounts]  = useState<Record<string, number>>({});
+  const [filtroSyncing,     setFiltroSyncing]     = useState<Record<string, boolean>>({});
+
+  // ── Sync Omie (todos os status) ──────────────────────────────────────────────
   async function handleSync() {
     setSyncing(true);
     try {
@@ -703,6 +695,34 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     }
   }
 
+  // ── Sync por filtro individual (diagnóstico) ─────────────────────────────────
+  async function handleFiltroSync(filtro: string) {
+    if (syncing || filtroSyncing[filtro]) return;
+    setFiltroSyncing(prev => ({ ...prev, [filtro]: true }));
+    try {
+      const res  = await fetch("/api/omie/sync-pedidos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filtro }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(`Erro ao sincronizar ${filtro}: ${data?.error ?? res.status}`);
+        return;
+      }
+      type SyncRes = { detalhe?: { totalRegistrosOmie?: number } };
+      const r = (data.results as SyncRes[] | undefined)?.[0];
+      const total = r?.detalhe?.totalRegistrosOmie ?? 0;
+      setFiltroSyncCounts(prev => ({ ...prev, [filtro]: total }));
+      toast.success(`${filtro}: ${total} registro${total !== 1 ? "s" : ""} no Omie`);
+      router.refresh();
+    } catch (err) {
+      toast.error(`Erro: ${err instanceof Error ? err.message : "desconhecido"}`);
+    } finally {
+      setFiltroSyncing(prev => ({ ...prev, [filtro]: false }));
+    }
+  }
+
   // ── Stats ────────────────────────────────────────────────────────────────────
   const valorTotalLhg = useMemo(
     () => pedidosIniciais.reduce((s, p) => s + p.valor_total, 0),
@@ -712,12 +732,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     () => omie_pedidos.reduce((s, p) => s + (p.valor_total ?? 0), 0),
     [omie_pedidos],
   );
-
-  const lhgCounts = useMemo(() => {
-    const m: Record<string, number> = { todos: pedidosIniciais.length };
-    for (const p of pedidosIniciais) m[p.status] = (m[p.status] ?? 0) + 1;
-    return m;
-  }, [pedidosIniciais]);
 
   // ── Filtragem ────────────────────────────────────────────────────────────────
   type RowLhg  = { kind: "lhg";  data: Pedido }
@@ -734,30 +748,23 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
 
     const lhgRows: RowLhg[] = pedidosIniciais
       .filter(p => {
-        const matchStatus = filtro === "todos" || p.status === filtro;
-        const matchBusca  = !q ||
+        return !q ||
           p.numero.toLowerCase().includes(q) ||
           (p.fornecedores ? getFornNome(p.fornecedores).toLowerCase().includes(q) : false) ||
           (p.cotacoes?.numero.toLowerCase().includes(q) ?? false) ||
-          // Busca por nome de produto nos itens do pedido LHG
           p.pedido_itens.some(item => item.produtos?.nome?.toLowerCase().includes(q) ?? false);
-        return matchStatus && matchBusca;
       })
       .map(p => ({ kind: "lhg", data: p }));
 
-    // Pedidos Omie só aparecem quando filtro LHG = "todos"
-    const omieRows: RowOmie[] = filtro !== "todos" ? [] :
-      omie_pedidos
-        .filter(p => {
-          const matchBusca = !q ||
-            (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
-            (p.numero?.toString().includes(q) ?? false) ||
-            (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false) ||
-            // Busca por descrição de produto nos itens do pedido
-            (p.itens?.some(item => item.descricao.toLowerCase().includes(q)) ?? false);
-          return matchBusca;
-        })
-        .map(p => ({ kind: "omie", data: p }));
+    const omieRows: RowOmie[] = omie_pedidos
+      .filter(p => {
+        return !q ||
+          (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
+          (p.numero?.toString().includes(q) ?? false) ||
+          (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false) ||
+          (p.itens?.some(item => item.descricao.toLowerCase().includes(q)) ?? false);
+      })
+      .map(p => ({ kind: "omie", data: p }));
 
     // Ordena por data desc
     return [...lhgRows, ...omieRows].sort((a, b) => {
@@ -769,7 +776,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
       return dateB - dateA;
     });
-  }, [pedidosIniciais, omie_pedidos, filtro, buscaQ]);
+  }, [pedidosIniciais, omie_pedidos, buscaQ]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
@@ -777,8 +784,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const paginados   = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // Helpers que resetam página no mesmo batch do React 18 (sem render intermediário errado)
-  function handleBusca(v: string)  { setBusca(v);  setPage(0); }
-  function handleFiltro(v: string) { setFiltro(v); setPage(0); }
+  function handleBusca(v: string) { setBusca(v); setPage(0); }
 
   function handleAtualizado() {
     router.refresh();
@@ -798,17 +804,49 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           </h1>
         </div>
 
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          title="Sincronizar pedidos do Omie ERP"
-          className="group inline-flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
-        >
-          {syncing
-            ? <Loader2 size={13} className="animate-spin" />
-            : <RefreshCw size={13} className="group-hover:rotate-180 transition-transform duration-500" />}
-          {syncing ? "Sincronizando…" : "Sincronizar Omie"}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Botões de sync por status */}
+          {([
+            { key: "pendentes",    label: "Pendentes"    },
+            { key: "faturados",    label: "Faturados"    },
+            { key: "recebidos",    label: "Recebidos"    },
+            { key: "cancelados",   label: "Cancelados"   },
+            { key: "encerrados",   label: "Encerrados"   },
+            { key: "rec_parciais", label: "Rec. Parciais" },
+            { key: "fat_parciais", label: "Fat. Parciais" },
+          ] as const).map(f => (
+            <button
+              key={f.key}
+              onClick={() => handleFiltroSync(f.key)}
+              disabled={syncing || filtroSyncing[f.key]}
+              title={`Sincronizar apenas pedidos "${f.label}" do Omie`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors disabled:opacity-40"
+            >
+              {filtroSyncing[f.key]
+                ? <Loader2 size={10} className="animate-spin" />
+                : <RefreshCw size={10} />}
+              {f.label}
+              {filtroSyncCounts[f.key] != null && (
+                <span className="ml-0.5 font-mono text-[10px] text-amber-400">
+                  {filtroSyncCounts[f.key]}
+                </span>
+              )}
+            </button>
+          ))}
+
+          {/* Sincronizar tudo */}
+          <button
+            onClick={handleSync}
+            disabled={syncing || Object.values(filtroSyncing).some(Boolean)}
+            title="Sincronizar todos os pedidos do Omie ERP"
+            className="group inline-flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
+          >
+            {syncing
+              ? <Loader2 size={13} className="animate-spin" />
+              : <RefreshCw size={13} className="group-hover:rotate-180 transition-transform duration-500" />}
+            {syncing ? "Sincronizando…" : "Sincronizar Omie"}
+          </button>
+        </div>
       </div>
 
       {/* ── Busca ────────────────────────────────────────────────────────────── */}
@@ -847,26 +885,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         )}
       </div>
 
-      {/* ── Filtros ───────────────────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        {/* Filtros LHG */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] uppercase tracking-wider text-emerald-500/80 font-semibold mr-1 flex items-center gap-1">
-            <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">LHG</span>
-          </span>
-          {LHG_FILTROS.filter(f => f.key === "todos" || (lhgCounts[f.key] ?? 0) > 0).map(f => (
-            <button key={f.key} onClick={() => handleFiltro(f.key)}
-              className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                filtro === f.key ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
-              {f.label}
-              {(lhgCounts[f.key] ?? 0) > 0 && (
-                <span className="ml-1 text-muted-foreground/60">{lhgCounts[f.key]}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-      </div>
 
       {/* ── Tabela ───────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
@@ -887,7 +905,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <ShoppingCart size={28} className="text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              {busca || filtro !== "todos"
+              {busca
                 ? "Nenhum pedido encontrado para os filtros selecionados"
                 : "Nenhum pedido cadastrado"}
             </p>
