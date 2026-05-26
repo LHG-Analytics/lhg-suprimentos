@@ -247,6 +247,34 @@ export async function omiePost<TParam, TResponse>(
 // ── Fornecedores ───────────────────────────────────────────────────────────────
 
 /**
+ * Consulta um cliente/fornecedor específico no Omie pelo código interno.
+ * Endpoint: /geral/clientes/ — call: ConsultarCliente
+ *
+ * Usado como fallback quando buildClienteNomeMap não encontra um fornecedor
+ * referenciado em pedidos de compra (ex: fornecedores sem tag "Fornecedor").
+ */
+export async function consultarCliente(
+  creds: OmieCredentials,
+  codigoOmie: number,
+): Promise<{ nome: string | null }> {
+  try {
+    const res = await omiePost<
+      { codigo_cliente_omie: number; codigo_cliente_integracao: string },
+      { razao_social: string; nome_fantasia?: string }
+    >(
+      "/geral/clientes/",
+      "ConsultarCliente",
+      creds,
+      { codigo_cliente_omie: codigoOmie, codigo_cliente_integracao: "" },
+    );
+    const nome = (res.nome_fantasia?.trim()) || res.razao_social || null;
+    return { nome };
+  } catch {
+    return { nome: null };
+  }
+}
+
+/**
  * Busca todos os clientes Omie (sem filtro de tag ou inativo) e retorna um Map
  * codigo_cliente → nome para uso durante sync de pedidos.
  *
@@ -697,12 +725,16 @@ export interface OmiePedidoCompraListItem {
   faturamento?: { nValTotalPedido?: number };
   // ── Formato PesquisarPedCompra (pedidos_pesquisa) ──────────────────────────
   cabecalho_consulta?: {
-    nCodPed?:     number;   // ID interno Omie
-    cNumero?:     string;   // número sequencial como string
-    dIncData?:    string;   // DD/MM/YYYY — data de criação
-    dDtPrevisao?: string;   // DD/MM/YYYY
-    nCodFor?:     number;   // código do fornecedor
-    cEtapa?:      string;
+    nCodPed?:          number;   // ID interno Omie
+    cNumero?:          string;   // número sequencial como string
+    dIncData?:         string;   // DD/MM/YYYY — data de criação
+    dDtPrevisao?:      string;   // DD/MM/YYYY — previsão (pode variar: entrega ou faturamento)
+    dDtPrevEntrega?:   string;   // DD/MM/YYYY — previsão de entrega (campo alternativo Omie)
+    dDtEntrega?:       string;   // DD/MM/YYYY — data real de entrega
+    dDtPrevFaturam?:   string;   // DD/MM/YYYY — previsão de faturamento
+    nCodFor?:          number;   // código do fornecedor
+    cNomeFornecedor?:  string;   // nome do fornecedor (nem sempre presente)
+    cEtapa?:           string;
   };
   parcelas_consulta?: Array<{ nValor?: number; nParcela?: number }>;
   produtos_consulta?: Array<{ nValTot?: number; cDescricao?: string }>;

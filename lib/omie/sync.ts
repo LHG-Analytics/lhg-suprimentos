@@ -14,6 +14,7 @@ import {
   listAllProdutos,
   listAllPedidosCompra,
   buildClienteNomeMap,
+  consultarCliente,
   OmieError,
   type OmieCredentials,
   type OmieClienteItem,
@@ -333,7 +334,14 @@ function mapPedidoCompra(
   const nCodPedido    = cab?.nCodPedido    ?? cab2?.nCodPed    ?? 0;
   const nNumPedido    = cab?.nNumPedido    ?? (cab2?.cNumero ? parseInt(cab2.cNumero, 10) || null : null);
   const dDtPedido     = cab?.dDtPedido     ?? cab2?.dIncData;
-  const dDtPrevisao   = cab?.dDtPrevisao   ?? cab2?.dDtPrevisao;
+  // Previsão de entrega: tenta todos os campos possíveis da API Omie em ordem de preferência.
+  // dDtPrevEntrega e dDtEntrega são mais precisos quando disponíveis.
+  const dDtPrevisao   =
+    cab?.dDtPrevisao ??
+    cab2?.dDtPrevEntrega ??
+    cab2?.dDtEntrega ??
+    cab2?.dDtPrevisao ??
+    cab2?.dDtPrevFaturam;
   const nCodFornecedor = cab?.nCodFornecedor ?? cab2?.nCodFor ?? null;
   const cEtapa        = cab?.cEtapa        ?? cab2?.cEtapa;
 
@@ -344,13 +352,15 @@ function mapPedidoCompra(
     item.faturamento?.nValTotalPedido ??
     (item.parcelas_consulta?.reduce((s, p) => s + (p.nValor ?? 0), 0) ?? 0);
 
-  // Nome do fornecedor:
+  // Nome do fornecedor — tenta todas as fontes em ordem:
   //   1. informacoes_adicionais (formato antigo — nem sempre presente no PesquisarPedCompra)
-  //   2. clienteNomeMap: lookup de todos os clientes Omie por codigo_cliente
+  //   2. cabecalho_consulta.cNomeFornecedor (campo direto do PesquisarPedCompra quando disponível)
+  //   3. clienteNomeMap: lookup previamente construído com bulk + fallback individual
   //   Chave sempre como String() para evitar discrepâncias number vs string em runtime.
   const fornecedorNome =
     info.cNomeFantasia?.trim() ||
     info.cRazaoSocial?.trim() ||
+    cab2?.cNomeFornecedor?.trim() ||
     (nCodFornecedor != null && clienteNomeMap ? (clienteNomeMap.get(String(nCodFornecedor)) ?? null) : null) ||
     null;
 
@@ -404,24 +414,65 @@ export async function syncPedidosCompra(
   let erros = 0;
 
   try {
-    // ── Lookup de nomes de clientes ───────────────────────────────────────────
-    // PesquisarPedCompra só retorna nCodFor (código numérico) sem nome.
-    // Buscamos TODOS os clientes Omie (sem filtro de tag) para enriquecer
-    // fornecedor_nome na hora do upsert.
-    // Chaves como string para evitar discrepâncias de tipo (JS Map é type-strict).
-    let clienteNomeMap: Map<string, string> | undefined;
-    try {
-      clienteNomeMap = await buildClienteNomeMap(creds);
-      console.log(`[omie/sync] clienteNomeMap construído com ${clienteNomeMap.size} entradas para unidade=${unidadeId}`);
-    } catch (err) {
-      console.warn("[omie/sync] Falha ao construir clienteNomeMap — fornecedor_nome ficará null:", err instanceof Error ? err.message : String(err));
-    }
-
+    // ── Passo 1: Busca todos os pedidos de compra ─────────────────────────────
     console.log(`[omie/sync] Iniciando listAllPedidosCompra para unidade=${unidadeId}`);
     const items = await listAllPedidosCompra(creds, (page, totalPages) => {
       console.log(`[omie/sync] Pedidos unidade=${unidadeId} página ${page}/${totalPages}`);
     });
     console.log(`[omie/sync] listAllPedidosCompra retornou ${items.length} itens para unidade=${unidadeId}`);
+
+    // Log de diagnóstico: campos do primeiro pedido para entender o formato de datas
+    if (items.length > 0) {
+      const first = items[0];
+      const cab  = first.cabecalho;
+      const cab2 = first.cabecalho_consulta;
+      console.log(`[omie/sync] DIAGNÓSTICO pedido[0] cab=`, JSON.stringify(cab));
+      console.log(`[omie/sync] DIAGNÓSTICO pedido[0] cab2=`, JSON.stringify(cab2));
+      console.log(`[omie/sync] DIAGNÓSTICO pedido[0] info=`, JSON.stringify(first.informacoes_adicionais));
+      console.log(`[omie/sync] DIAGNÓSTICO pedido[0] parcelas=`, JSON.stringify(first.parcelas_consulta?.slice(0, 2)));
+    }
+
+    // ── Passo 2: Coleta IDs únicos de fornecedores ────────────────────────────
+    // Extrai todos os nCodFor distintos dos pedidos para fazer lookup de nomes.
+    const codigosFornecedor = new Set<number>();
+    for (const item of items) {
+      const cab  = item.cabecalho;
+      const cab2 = item.cabecalho_consulta;
+      const cod  = cab?.nCodFornecedor ?? cab2?.nCodFor;
+      if (cod) codigosFornecedor.add(Number(cod));
+    }
+    console.log(`[omie/sync] ${codigosFornecedor.size} fornecedor(es) único(s) referenciados nos pedidos`);
+
+    // ── Passo 3: Mapa bulk (ListarClientes sem filtro de tag) ─────────────────
+    // Tenta buscar todos os clientes Omie de uma vez; cobre a maioria dos casos.
+    let clienteNomeMap: Map<string, string> = new Map();
+    try {
+      clienteNomeMap = await buildClienteNomeMap(creds);
+      console.log(`[omie/sync] clienteNomeMap bulk: ${clienteNomeMap.size} entradas`);
+    } catch (err) {
+      console.warn("[omie/sync] Falha no buildClienteNomeMap (bulk) — tentando lookup individual:", err instanceof Error ? err.message : String(err));
+    }
+
+    // ── Passo 4: Lookup individual para fornecedores não encontrados no bulk ───
+    // Itera apenas os códigos que ainda estão ausentes no mapa.
+    // Usa ConsultarCliente (um call por código) como fallback garantido.
+    const codigosFaltantes = [...codigosFornecedor].filter(
+      cod => !clienteNomeMap.has(String(cod))
+    );
+    if (codigosFaltantes.length > 0) {
+      console.log(`[omie/sync] Buscando ${codigosFaltantes.length} fornecedor(es) via ConsultarCliente...`);
+      for (const cod of codigosFaltantes) {
+        const { nome } = await consultarCliente(creds, cod);
+        if (nome) {
+          clienteNomeMap.set(String(cod), nome);
+          console.log(`[omie/sync] ConsultarCliente ${cod} → "${nome}"`);
+        } else {
+          console.warn(`[omie/sync] ConsultarCliente ${cod} → não encontrado`);
+        }
+      }
+    }
+
+    console.log(`[omie/sync] mapa final: ${clienteNomeMap.size} fornecedor(es) com nome`);
 
     total = items.length;
     const BATCH = 50;

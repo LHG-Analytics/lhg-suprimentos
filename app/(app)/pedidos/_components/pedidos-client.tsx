@@ -361,13 +361,15 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
 
           {/* Fornecedor + valor */}
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Fornecedor</div>
-              <div className="text-sm font-semibold text-foreground">{pedido.fornecedor_nome ?? "—"}</div>
+              <div className={cn("text-sm font-semibold leading-tight", pedido.fornecedor_nome ? "text-foreground" : "text-muted-foreground/50 italic")}>
+                {pedido.fornecedor_nome ?? "Não identificado"}
+              </div>
               {pedido.numero_pedido_forn && (
                 <div className="text-[11px] text-muted-foreground/60 mt-0.5">Nº fornecedor: {pedido.numero_pedido_forn}</div>
               )}
@@ -406,6 +408,29 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
               </div>
             ))}
           </div>
+
+          {/* Itens do pedido */}
+          {pedido.itens && pedido.itens.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">
+                Itens ({pedido.itens.length})
+              </div>
+              <div className="rounded-lg border border-border/60 overflow-hidden">
+                {pedido.itens.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center justify-between gap-3 px-3 py-2 text-[12px]",
+                      idx > 0 && "border-t border-border/40",
+                    )}
+                  >
+                    <span className="text-foreground/80 truncate">{item.descricao}</span>
+                    <span className="font-mono text-muted-foreground shrink-0">{formatBRL(item.valor_total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Último sync */}
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
@@ -763,7 +788,9 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         const matchBusca  = !q ||
           p.numero.toLowerCase().includes(q) ||
           (p.fornecedores ? getFornNome(p.fornecedores).toLowerCase().includes(q) : false) ||
-          (p.cotacoes?.numero.toLowerCase().includes(q) ?? false);
+          (p.cotacoes?.numero.toLowerCase().includes(q) ?? false) ||
+          // Busca por nome de produto nos itens do pedido LHG
+          p.pedido_itens.some(item => item.produtos?.nome?.toLowerCase().includes(q) ?? false);
         return matchStatus && matchBusca;
       })
       .map(p => ({ kind: "lhg", data: p }));
@@ -775,7 +802,9 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           const matchBusca = !q ||
             (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
             (p.numero?.toString().includes(q) ?? false) ||
-            (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false);
+            (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false) ||
+            // Busca por descrição de produto nos itens do pedido
+            (p.itens?.some(item => item.descricao.toLowerCase().includes(q)) ?? false);
           const matchStatus = omieStatusFiltro === "todos" ||
             classifyOmieStatus(p.etapa, p.situacao) === omieStatusFiltro;
           return matchBusca && matchStatus;
