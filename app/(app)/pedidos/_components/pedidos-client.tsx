@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
-  Star, ReceiptText, Sparkles, RefreshCw,
+  Star, ReceiptText, Sparkles, RefreshCw, Plus,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -82,9 +82,22 @@ interface OmiePedido {
   unidades: { nome: string; slug: string } | null;
 }
 
+type FiltroOmie = "pendentes" | "faturados" | "recebidos" | "cancelados" | "encerrados" | "rec_parciais" | "fat_parciais";
+
+const FILTROS_OMIE: { key: FiltroOmie; label: string }[] = [
+  { key: "pendentes",    label: "Pendentes"    },
+  { key: "faturados",    label: "Faturados"    },
+  { key: "recebidos",    label: "Recebidos"    },
+  { key: "cancelados",   label: "Cancelados"   },
+  { key: "encerrados",   label: "Encerrados"   },
+  { key: "rec_parciais", label: "Rec. Parciais" },
+  { key: "fat_parciais", label: "Fat. Parciais" },
+];
+
 interface Props {
   pedidos: Pedido[];
   omie_pedidos: OmiePedido[];
+  filtroAtivo: FiltroOmie;
 }
 
 // ── Configurações de status ───────────────────────────────────────────────────
@@ -645,90 +658,47 @@ function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onC
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
+export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAtivo }: Props) {
   const router = useRouter();
 
   const [busca,        setBusca]        = useState("");
   const [selectedLhg,  setSelectedLhg]  = useState<Pedido | null>(null);
   const [selectedOmie, setSelectedOmie] = useState<OmiePedido | null>(null);
-  const [syncing,      setSyncing]      = useState(false);
   const [page,         setPage]         = useState(0);
 
   // counts retornados pelo Omie para cada filtro (após sync individual)
   const [filtroSyncCounts,  setFiltroSyncCounts]  = useState<Record<string, number>>({});
   const [filtroSyncing,     setFiltroSyncing]     = useState<Record<string, boolean>>({});
 
-  // ── Sync Omie (todos os status) ──────────────────────────────────────────────
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const res  = await fetch("/api/omie/sync-pedidos", { method: "POST" });
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(`Erro HTTP ${res.status}: ${data?.error ?? "desconhecido"}`);
-        return;
-      }
-
-      type SyncRes = { total?: number; status?: string; detalhe?: Record<string, unknown> };
-      const results = data.results as SyncRes[] | undefined;
-      const comErro = results?.find(r => r.status === "erro");
-      if (comErro) {
-        toast.error(`Erro Omie: ${(comErro.detalhe?.erro as string | undefined) ?? "erro desconhecido"}`);
-        return;
-      }
-
-      const total = results?.reduce((acc, r) => acc + (r.total ?? 0), 0) ?? 0;
-      if (total === 0) {
-        toast.warning(
-          `Sync ok mas 0 pedidos retornados. Unidades: ${(data.unidades as string[] | undefined)?.join(", ") ?? "—"}`,
-          { duration: 8000 },
-        );
-      } else {
-        toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""} do Omie`);
-      }
-      router.refresh();
-    } catch (err) {
-      toast.error(`Erro ao sincronizar: ${err instanceof Error ? err.message : "desconhecido"}`);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  // ── Contagem rápida por filtro (1 chamada API, sem sync no banco) ────────────
-  async function handleFiltroSync(filtro: string) {
-    if (syncing || filtroSyncing[filtro]) return;
+  // ── Sync por filtro: navega imediatamente, sincroniza em background ──────────
+  async function handleFiltroSync(filtro: FiltroOmie) {
+    if (filtroSyncing[filtro]) return;
+    // 1. Navega imediatamente (mostra dados já no banco para esse filtro)
+    router.push(`/pedidos?filtro=${filtro}`);
+    // 2. Sincroniza em background
     setFiltroSyncing(prev => ({ ...prev, [filtro]: true }));
     try {
       const res  = await fetch("/api/omie/sync-pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filtro, contarApenas: true }),
+        body: JSON.stringify({ filtro }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(`Erro ao contar ${filtro}: ${data?.error ?? res.status}`);
+        toast.error(`Erro ao sincronizar ${filtro}: ${data?.error ?? res.status}`);
         return;
       }
-      type CountRes = { total: number };
-      const total = (data.counts as CountRes[] | undefined)?.[0]?.total ?? 0;
-      setFiltroSyncCounts(prev => ({ ...prev, [filtro]: total }));
+      type SyncRes = { total?: number; detalhe?: { totalRegistrosOmie?: number } };
+      const r = (data.results as SyncRes[] | undefined)?.[0];
+      const totalOmie = r?.detalhe?.totalRegistrosOmie ?? r?.total ?? 0;
+      setFiltroSyncCounts(prev => ({ ...prev, [filtro]: totalOmie }));
+      router.refresh(); // 3. Refresh com dados frescos do banco
     } catch (err) {
       toast.error(`Erro: ${err instanceof Error ? err.message : "desconhecido"}`);
     } finally {
       setFiltroSyncing(prev => ({ ...prev, [filtro]: false }));
     }
   }
-
-  // ── Stats ────────────────────────────────────────────────────────────────────
-  const valorTotalLhg = useMemo(
-    () => pedidosIniciais.reduce((s, p) => s + p.valor_total, 0),
-    [pedidosIniciais],
-  );
-  const valorTotalOmie = useMemo(
-    () => omie_pedidos.reduce((s, p) => s + (p.valor_total ?? 0), 0),
-    [omie_pedidos],
-  );
 
   // ── Filtragem ────────────────────────────────────────────────────────────────
   type RowLhg  = { kind: "lhg";  data: Pedido }
@@ -802,46 +772,43 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Botões de sync por status */}
-          {([
-            { key: "pendentes",    label: "Pendentes"    },
-            { key: "faturados",    label: "Faturados"    },
-            { key: "recebidos",    label: "Recebidos"    },
-            { key: "cancelados",   label: "Cancelados"   },
-            { key: "encerrados",   label: "Encerrados"   },
-            { key: "rec_parciais", label: "Rec. Parciais" },
-            { key: "fat_parciais", label: "Fat. Parciais" },
-          ] as const).map(f => (
-            <button
-              key={f.key}
-              onClick={() => handleFiltroSync(f.key)}
-              disabled={syncing || filtroSyncing[f.key]}
-              title={`Sincronizar apenas pedidos "${f.label}" do Omie`}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors disabled:opacity-40"
-            >
-              {filtroSyncing[f.key]
-                ? <Loader2 size={10} className="animate-spin" />
-                : <RefreshCw size={10} />}
-              {f.label}
-              {filtroSyncCounts[f.key] != null && (
-                <span className="ml-0.5 font-mono text-[10px] text-amber-400">
-                  {filtroSyncCounts[f.key]}
-                </span>
-              )}
-            </button>
-          ))}
+          {/* Filtros Omie — cada botão sincroniza e exibe o status correspondente */}
+          {FILTROS_OMIE.map(f => {
+            const isAtivo   = filtroAtivo === f.key;
+            const isSyncing = filtroSyncing[f.key];
+            return (
+              <button
+                key={f.key}
+                onClick={() => handleFiltroSync(f.key)}
+                disabled={isSyncing}
+                title={`Sincronizar e exibir pedidos "${f.label}" do Omie`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40",
+                  isAtivo
+                    ? "border-amber-500/50 bg-amber-500/15 text-amber-400"
+                    : "border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/70",
+                )}
+              >
+                {isSyncing
+                  ? <Loader2 size={10} className="animate-spin" />
+                  : <RefreshCw size={10} className={isAtivo ? "text-amber-400" : ""} />}
+                {f.label}
+                {filtroSyncCounts[f.key] != null && (
+                  <span className={cn("ml-0.5 font-mono text-[10px]", isAtivo ? "text-amber-300" : "text-amber-400")}>
+                    {filtroSyncCounts[f.key]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-          {/* Sincronizar tudo */}
+          {/* Novo Pedido LHG */}
           <button
-            onClick={handleSync}
-            disabled={syncing || Object.values(filtroSyncing).some(Boolean)}
-            title="Sincronizar todos os pedidos do Omie ERP"
-            className="group inline-flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
+            onClick={() => toast.info("Em breve: criar novo pedido de compra")}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors shrink-0"
           >
-            {syncing
-              ? <Loader2 size={13} className="animate-spin" />
-              : <RefreshCw size={13} className="group-hover:rotate-180 transition-transform duration-500" />}
-            {syncing ? "Sincronizando…" : "Sincronizar Omie"}
+            <Plus size={13} />
+            Novo Pedido
           </button>
         </div>
       </div>

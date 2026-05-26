@@ -325,6 +325,7 @@ function mapPedidoCompra(
   item: OmiePedidoCompraListItem,
   unidadeId: string,
   clienteNomeMap?: Map<string, string>,
+  filtro: OmiePedidoFiltro = "pendentes",
 ) {
   // PesquisarPedCompra retorna "cabecalho_consulta"; outros formatos retornam "cabecalho"
   const cab  = item.cabecalho;
@@ -398,6 +399,7 @@ function mapPedidoCompra(
     etapa,
     numero_pedido_forn:   info.cNumPedFornec?.trim() || null,
     itens,
+    filtro_omie:          filtro,
     omie_sincronizado_em: new Date().toISOString(),
   };
 }
@@ -482,7 +484,7 @@ export async function syncPedidosCompra(
     const BATCH = 50;
 
     for (let i = 0; i < items.length; i += BATCH) {
-      const batch = items.slice(i, i + BATCH).map((item) => mapPedidoCompra(item, unidadeId, clienteNomeMap));
+      const batch = items.slice(i, i + BATCH).map((item) => mapPedidoCompra(item, unidadeId, clienteNomeMap, filtro));
 
       const { error } = await supabase
         .from("omie_pedidos_compra")

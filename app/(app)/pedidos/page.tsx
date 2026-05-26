@@ -17,6 +17,9 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosClient } from "./_components/pedidos-client";
 
+const FILTROS_VALIDOS = ["pendentes","faturados","recebidos","cancelados","encerrados","rec_parciais","fat_parciais"] as const;
+type FiltroOmie = typeof FILTROS_VALIDOS[number];
+
 // Tipo explícito para o row de omie_pedidos_compra após a migration de `itens`
 interface OmieRow {
   id: string;
@@ -32,12 +35,22 @@ interface OmieRow {
   situacao_aprovacao: string | null;
   etapa: string | null;
   numero_pedido_forn: string | null;
+  filtro_omie: string | null;
   omie_sincronizado_em: string;
   unidade_id: string;
   unidades: { nome: string; slug: string } | null;
 }
 
-export default async function PedidosPage() {
+export default async function PedidosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string }>;
+}) {
+  const { filtro: filtroParam } = await searchParams;
+  const filtroAtivo: FiltroOmie = FILTROS_VALIDOS.includes(filtroParam as FiltroOmie)
+    ? (filtroParam as FiltroOmie)
+    : "pendentes";
+
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -58,19 +71,17 @@ export default async function PedidosPage() {
     unidadeId = unidade?.id ?? null;
   }
 
-  // Query de omie_pedidos filtrada pela unidade ativa
-  // ⚠️ Supabase builder é imutável — cada .eq() retorna nova instância; reatribuição obrigatória
-  // ⚠️ Cast para OmieRow[] porque a coluna "itens" pode não estar nos tipos gerados
-  //    se a migration ainda não tiver sido aplicada.
+  // Query de omie_pedidos filtrada pela unidade ativa E pelo filtro de status
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let omieQuery: any = supabase
     .from("omie_pedidos_compra")
     .select(`
       id, omie_codigo, numero, data_pedido, data_previsao,
       fornecedor_codigo, fornecedor_nome, itens, valor_total, situacao, situacao_aprovacao,
-      etapa, numero_pedido_forn, omie_sincronizado_em, unidade_id,
+      etapa, numero_pedido_forn, filtro_omie, omie_sincronizado_em, unidade_id,
       unidades(nome, slug)
     `)
+    .eq("filtro_omie", filtroAtivo)
     .order("numero", { ascending: false });
 
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
@@ -135,6 +146,7 @@ export default async function PedidosPage() {
     <PedidosClient
       pedidos={pedidos ?? []}
       omie_pedidos={omie_pedidos}
+      filtroAtivo={filtroAtivo}
     />
   );
 }
