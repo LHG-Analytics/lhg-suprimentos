@@ -247,11 +247,15 @@ export async function omiePost<TParam, TResponse>(
 // ── Fornecedores ───────────────────────────────────────────────────────────────
 
 /**
- * Busca todos os clientes Omie (sem filtro de tag) e retorna um Map
+ * Busca todos os clientes Omie (sem filtro de tag ou inativo) e retorna um Map
  * codigo_cliente → nome para uso durante sync de pedidos.
  *
  * PesquisarPedCompra retorna apenas nCodFor (código numérico) sem nome.
  * Este lookup resolve os nomes sem depender da tag "Fornecedor".
+ *
+ * ⚠️ Conforme suporte Omie: a API não tem filtro direto de ativo/inativo.
+ *    Deve-se buscar todos e filtrar client-side pelo campo "inativo" da resposta.
+ *    apenas_importado_api: "N" inclui cadastros inseridos manualmente.
  */
 export async function buildClienteNomeMap(
   creds: OmieCredentials,
@@ -267,7 +271,11 @@ export async function buildClienteNomeMap(
         "/geral/clientes/",
         "ListarClientes",
         creds,
-        { pagina, registros_por_pagina: 50 },
+        {
+          pagina,
+          registros_por_pagina: 50,
+          apenas_importado_api: "N", // inclui cadastros manuais
+        },
       );
     } catch (err) {
       // Sem registros = mapa parcial mas não é erro fatal
@@ -297,6 +305,11 @@ export async function buildClienteNomeMap(
  * Filtra pela tag "Fornecedor" para excluir registros que são apenas clientes.
  * No Omie o cadastro é unificado (cliente + fornecedor na mesma tabela),
  * então a tag é a forma correta de distinguir fornecedores.
+ *
+ * ⚠️ Conforme suporte Omie: a API NÃO tem filtro direto de ativo/inativo.
+ *    Buscamos TODOS (ativos + inativos) e determinamos o status pelo campo
+ *    "inativo" da resposta ("N" = ativo, "S" = inativo).
+ *    apenas_importado_api: "N" garante inclusão de cadastros manuais.
  */
 export async function listFornecedoresPage(
   creds: OmieCredentials,
@@ -310,8 +323,10 @@ export async function listFornecedoresPage(
     {
       pagina,
       registros_por_pagina: registrosPorPagina,
+      apenas_importado_api: "N", // inclui cadastros manuais (não só via API)
       clientesFiltro: {
-        inativo: "N",
+        // SEM inativo — conforme suporte Omie: não existe filtro de ativo/inativo.
+        // O status é determinado pelo campo "inativo" na resposta.
         tags: [{ tag: "Fornecedor" }], // apenas quem tem a tag Fornecedor
       },
     },
