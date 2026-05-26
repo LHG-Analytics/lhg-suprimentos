@@ -4,11 +4,14 @@
  * requisicoes-client.tsx — LHG-209
  * Lista interativa de requisições com filtro por status, busca e wizard de criação.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Search, ClipboardList, Plus, ChevronRight, AlertTriangle,
+  Search, ClipboardList, Plus, ChevronRight, AlertTriangle, Trash2, Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { deletarRequisicao } from "../actions";
 import { NovaRequisicaoModal } from "./nova-requisicao-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -95,9 +98,29 @@ const FILTER_LABELS: Record<FilterStatus, string> = {
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function RequisicoesClient({ requisicoes, unidades, produtos }: RequisicoesClientProps) {
+  const router = useRouter();
   const [filter, setFilter] = useState<FilterStatus>("todas");
   const [query,  setQuery]  = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [, startDelete] = useTransition();
+
+  function handleDelete(e: React.MouseEvent, req: Requisicao) {
+    e.stopPropagation(); // evita propagar clique para a linha
+    if (!window.confirm(`Excluir a requisição ${req.numero} "${req.titulo}"? Esta ação não pode ser desfeita.`)) return;
+    setDeletingId(req.id);
+    startDelete(async () => {
+      try {
+        await deletarRequisicao(req.id);
+        toast.success(`Requisição ${req.numero} excluída`);
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao excluir");
+      } finally {
+        setDeletingId(null);
+      }
+    });
+  }
 
   // Contagens por status
   const counts = useMemo(() => {
@@ -327,12 +350,25 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                     </span>
                   </div>
 
-                  {/* Chevron */}
+                  {/* Ações */}
                   <div className="self-center flex justify-end">
-                    <ChevronRight
-                      size={14}
-                      className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
-                    />
+                    {(r.status === "rascunho" || r.status === "cancelado") ? (
+                      <button
+                        onClick={(e) => handleDelete(e, r)}
+                        disabled={deletingId === r.id}
+                        title="Excluir requisição"
+                        className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                      >
+                        {deletingId === r.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Trash2 size={13} />}
+                      </button>
+                    ) : (
+                      <ChevronRight
+                        size={14}
+                        className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
+                      />
+                    )}
                   </div>
                 </li>
               );

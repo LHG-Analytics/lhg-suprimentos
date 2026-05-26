@@ -111,3 +111,37 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
   revalidatePath("/requisicoes");
   return { id: req.id, numero: req.numero };
 }
+
+// ── deletarRequisicao ─────────────────────────────────────────────────────────
+
+export async function deletarRequisicao(id: string) {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Verifica se existe e se pode ser excluída
+  const { data: req, error: fetchErr } = await supabase
+    .from("requisicoes")
+    .select("id, status, numero")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !req) throw new Error("Requisição não encontrada");
+
+  if (!["rascunho", "cancelado"].includes(req.status)) {
+    throw new Error(
+      `Não é possível excluir uma requisição com status "${req.status}". Cancele-a primeiro.`,
+    );
+  }
+
+  // Remove filhos antes (por segurança, caso não haja CASCADE no banco)
+  await supabase.from("requisicao_itens").delete().eq("requisicao_id", id);
+  await supabase.from("requisicao_unidades").delete().eq("requisicao_id", id);
+
+  const { error } = await supabase.from("requisicoes").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/requisicoes");
+  return { numero: req.numero };
+}
