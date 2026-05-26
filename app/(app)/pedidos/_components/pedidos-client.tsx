@@ -7,12 +7,13 @@
  * Click LHG  → modal de detalhe (ações: aprovar, rejeitar, email, Omie…).
  * Click Omie → modal de detalhe Omie.
  */
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
   Star, ReceiptText, Sparkles, RefreshCw, Calendar, DollarSign,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -675,6 +676,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const [selectedLhg,      setSelectedLhg]      = useState<Pedido | null>(null);
   const [selectedOmie,     setSelectedOmie]     = useState<OmiePedido | null>(null);
   const [syncing,          setSyncing]          = useState(false);
+  const [page,             setPage]             = useState(0);
 
   // ── Sync Omie ────────────────────────────────────────────────────────────────
   async function handleSync() {
@@ -786,6 +788,14 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       return dateB - dateA;
     });
   }, [pedidosIniciais, omie_pedidos, filtro, omieStatusFiltro, busca]);
+
+  // ── Paginação ─────────────────────────────────────────────────────────────────
+  const PAGE_SIZE   = 50;
+  const totalPages  = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const paginados   = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Reset de página quando filtros mudam
+  useEffect(() => { setPage(0); }, [filtro, omieStatusFiltro, busca]);
 
   function handleAtualizado() {
     router.refresh();
@@ -928,7 +938,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {rows.map(row => {
+            {paginados.map(row => {
               if (row.kind === "lhg") {
                 const p = row.data;
                 const forn = p.fornecedores;
@@ -1073,15 +1083,39 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           </ul>
         )}
 
-        {/* Footer com contagem */}
+        {/* Footer com contagem + paginação */}
         {rows.length > 0 && (
-          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between gap-4">
             <span className="text-[12px] text-muted-foreground/60">
               {rows.length === pedidosIniciais.length + omie_pedidos.length
                 ? `${rows.length} pedido${rows.length !== 1 ? "s" : ""} no total`
-                : `${rows.length} de ${pedidosIniciais.length + omie_pedidos.length} pedido${(pedidosIniciais.length + omie_pedidos.length) !== 1 ? "s" : ""}`}
+                : `${rows.length} de ${pedidosIniciais.length + omie_pedidos.length} filtrado${rows.length !== 1 ? "s" : ""}`}
             </span>
-            <span className="text-[11px] text-muted-foreground/40">
+
+            {/* Controles de página */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-[12px] text-muted-foreground/80 font-mono tabular-nums">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+            <span className="text-[11px] text-muted-foreground/40 hidden sm:block">
               Clique em uma linha para ver os detalhes
             </span>
           </div>

@@ -4,8 +4,8 @@
  * produtos-client.tsx — LHG-206
  * Tabela interativa do catálogo de produtos com busca, filtro por categoria e sync Omie.
  */
-import { useState, useMemo } from "react";
-import { Search, Package, RefreshCw, Tag, Layers } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Search, Package, RefreshCw, Tag, Layers, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieProdutosButton } from "./sync-omie-produtos-button";
 import { EditarProdutoModal } from "./editar-produto-modal";
@@ -72,6 +72,10 @@ function categoriaCor(cat: string) {
   return CATEGORIA_COLORS[cat] ?? "bg-muted text-muted-foreground ring-border/50";
 }
 
+// ── Paginação ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 50;
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
@@ -79,6 +83,10 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
   const [categoria,        setCategoria]        = useState<string>("todas");
   const [familia,          setFamilia]          = useState<string>("todas");
   const [produtoEditando,  setProdutoEditando]  = useState<Produto | null>(null);
+  const [page,             setPage]             = useState(0);
+
+  // Reset de página quando filtros mudam
+  useEffect(() => { setPage(0); }, [query, categoria, familia]);
 
   // Listas únicas para os filtros
   const categorias = useMemo(() => {
@@ -111,9 +119,8 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
     });
   }, [produtos, query, categoria, familia]);
 
-  const totalAtivos   = produtos.filter((p) => p.ativo).length;
-  const totalOmie     = produtos.filter((p) => p.omie_codigo).length;
-  const totalInativos = produtos.length - totalAtivos;
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -145,38 +152,6 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           )}
           <SyncOmieProdutosButton />
         </div>
-      </div>
-
-      {/* ── Stats ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: "TOTAL",        value: produtos.length,  color: "text-foreground" },
-          { label: "CATEGORIAS",   value: categorias.length, color: "text-violet-400" },
-          { label: "FAMÍLIAS OMIE",value: familias.length,  color: "text-amber-400" },
-          { label: "OMIE",         value: totalOmie,        color: "text-sky-400" },
-        ].map(({ label, value, color }) => (
-          <div
-            key={label}
-            className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4"
-          >
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-              {label}
-            </div>
-            <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
-              {value}
-            </div>
-            {label === "TOTAL" && totalInativos > 0 && (
-              <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                {totalInativos} inativo{totalInativos !== 1 ? "s" : ""}
-              </div>
-            )}
-            {label === "TOTAL" && totalAtivos > 0 && totalInativos === 0 && (
-              <div className="text-[11px] text-emerald-600 mt-0.5">
-                todos ativos
-              </div>
-            )}
-          </div>
-        ))}
       </div>
 
       {/* ── Busca + Filtros ─────────────────────────────────────────────── */}
@@ -280,7 +255,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {filtered.map((p) => (
+            {paginados.map((p) => (
               <li
                 key={p.id}
                 onClick={() => setProdutoEditando(p)}
@@ -365,15 +340,39 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           </ul>
         )}
 
-        {/* Footer */}
+        {/* Footer com contagem + paginação */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between gap-4">
             <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === produtos.length
                 ? `${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`
-                : `${filtered.length} de ${produtos.length} produto${produtos.length !== 1 ? "s" : ""}`}
+                : `${filtered.length} de ${produtos.length} filtrado${filtered.length !== 1 ? "s" : ""}`}
             </span>
-            <span className="text-[11px] text-muted-foreground/40">
+
+            {/* Controles de página */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-[12px] text-muted-foreground/80 font-mono tabular-nums">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+            <span className="text-[11px] text-muted-foreground/40 hidden sm:block">
               Clique em uma linha para editar
             </span>
           </div>

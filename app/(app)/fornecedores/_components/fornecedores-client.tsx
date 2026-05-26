@@ -2,12 +2,12 @@
 
 /**
  * fornecedores-client.tsx — LHG-207
- * Tabela interativa de fornecedores com busca e botão de sync Omie.
+ * Tabela interativa de fornecedores com busca, paginação e botão de sync Omie.
  * LHG-224: removidas colunas STATUS (ativo/inativo — não vem do Omie)
  *           e OMIE (redundante); email destacado na coluna CONTATO.
  */
-import { useState, useMemo } from "react";
-import { Search, Building2, MapPin, Phone, Mail, RefreshCw } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Search, Building2, MapPin, Phone, Mail, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieButton } from "./sync-omie-button";
 import { EditarFornecedorModal } from "./editar-fornecedor-modal";
@@ -82,6 +82,10 @@ const FILTROS: { key: FiltroKey; label: string; omieParam: string | null; active
   { key: "sem_email", label: "Sem e-mail",omieParam: null,                        activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
 ];
 
+// ── Paginação ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 50;
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClientProps) {
@@ -89,6 +93,10 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
   // Padrão: "ativos" espelha o comportamento do sync Omie (inativo: "N")
   const [filtroChip,          setFiltroChip]          = useState<FiltroKey>("ativos");
   const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
+  const [page,                setPage]                = useState(0);
+
+  // Reset de página quando filtros mudam
+  useEffect(() => { setPage(0); }, [query, filtroChip]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -107,15 +115,15 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         (f.nome_fantasia ?? "").toLowerCase().includes(q) ||
         f.cnpj.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
         (f.cidade ?? "").toLowerCase().includes(q) ||
-        (f.email ?? "").toLowerCase().includes(q)
+        (f.email ?? "").toLowerCase().includes(q) ||
+        (f.telefone ?? "").toLowerCase().includes(q) ||
+        (f.contato ?? "").toLowerCase().includes(q)
       );
     });
   }, [fornecedores, query, filtroChip]);
 
-  const totalAtivos    = fornecedores.filter((f) => f.ativo).length;
-  const totalInativos  = fornecedores.filter((f) => !f.ativo).length;
-  const totalOmie      = fornecedores.filter((f) => f.omie_codigo).length;
-  const totalComEmail  = fornecedores.filter((f) => f.email).length;
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -148,54 +156,6 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           )}
           <SyncOmieButton />
         </div>
-      </div>
-
-      {/* ── Stats (clicáveis como atalho de filtro) ─────────────────────── */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          {
-            label: "TOTAL",    value: fornecedores.length, color: "text-foreground",
-            sub: null,          chipKey: "todos"    as FiltroKey, omieParam: null,
-          },
-          {
-            label: "ATIVOS",   value: totalAtivos,          color: "text-emerald-400",
-            sub: "inativo: \"N\"",  chipKey: "ativos"   as FiltroKey, omieParam: "clientesFiltro.inativo",
-          },
-          {
-            label: "INATIVOS", value: totalInativos,        color: "text-red-400",
-            sub: "inativo: \"S\"",  chipKey: "inativos" as FiltroKey, omieParam: "clientesFiltro.inativo",
-          },
-          {
-            label: "OMIE",     value: totalOmie,            color: "text-sky-400",
-            sub: null,          chipKey: "todos"    as FiltroKey, omieParam: null,
-          },
-        ].map(({ label, value, color, sub, chipKey }) => {
-          const isActive = filtroChip === chipKey && chipKey !== "todos";
-          return (
-            <button
-              key={label}
-              onClick={() => chipKey !== "todos" && setFiltroChip(isActive ? "ativos" : chipKey)}
-              className={cn(
-                "rounded-xl border px-5 py-4 text-left transition-colors",
-                isActive
-                  ? "border-border bg-muted/80 ring-1 ring-border/60"
-                  : chipKey !== "todos"
-                    ? "border-border/80 bg-muted/40 hover:bg-muted/60 cursor-pointer"
-                    : "border-border/80 bg-muted/40 cursor-default",
-              )}
-            >
-              <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-                {label}
-              </div>
-              <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
-                {value}
-              </div>
-              {sub && (
-                <div className="text-[11px] text-muted-foreground/40 font-mono mt-0.5">{sub}</div>
-              )}
-            </button>
-          );
-        })}
       </div>
 
       {/* ── Busca ───────────────────────────────────────────────────────── */}
@@ -286,7 +246,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {filtered.map((f) => (
+            {paginados.map((f) => (
               <li
                 key={f.id}
                 onClick={() => setFornecedorEditando(f)}
@@ -349,15 +309,39 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           </ul>
         )}
 
-        {/* Footer com contagem */}
+        {/* Footer com contagem + paginação */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between gap-4">
             <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === fornecedores.length
                 ? `${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`
-                : `${filtered.length} de ${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""} filtrado${filtered.length !== 1 ? "s" : ""}`}
+                : `${filtered.length} de ${fornecedores.length} filtrado${filtered.length !== 1 ? "s" : ""}`}
             </span>
-            <span className="text-[11px] text-muted-foreground/40">
+
+            {/* Controles de página */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-[12px] text-muted-foreground/80 font-mono tabular-nums">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+            <span className="text-[11px] text-muted-foreground/40 hidden sm:block">
               Clique em uma linha para editar
             </span>
           </div>
