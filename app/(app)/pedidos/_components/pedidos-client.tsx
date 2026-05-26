@@ -2,16 +2,17 @@
 
 /**
  * pedidos-client.tsx — LHG-214/215/231
- * Lista unificada: pedidos LHG + pedidos Omie em uma única coluna.
- * Click LHG  → painel de detalhe à direita.
- * Click Omie → modal com backdrop blur.
+ * Lista unificada: pedidos LHG + pedidos Omie em layout de tabela
+ * (idêntico ao padrão fornecedores/produtos).
+ * Click LHG  → modal de detalhe (ações: aprovar, rejeitar, email, Omie…).
+ * Click Omie → modal de detalhe Omie.
  */
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
-  Star, ReceiptText, Sparkles, RefreshCw, Calendar,
+  Star, ReceiptText, Sparkles, RefreshCw, Calendar, DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -79,32 +80,46 @@ interface Props {
   omie_pedidos: OmiePedido[];
 }
 
-// Item unificado para a lista
-type ListItem =
-  | { kind: "lhg";  data: Pedido }
-  | { kind: "omie"; data: OmiePedido }
+// ── Filtros Omie — campos exatos do endpoint PesquisarPedCompra ───────────────
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+type OmieFiltroKey =
+  | "todos"
+  | "pendentes"      // lExibirPedidosPendentes
+  | "faturados"      // lExibirPedidosFaturados
+  | "recebidos"      // lExibirPedidosRecebidos
+  | "cancelados"     // lExibirPedidosCancelados
+  | "encerrados"     // lExibirPedidosEncerrados
+  | "rec_parciais"   // lExibirPedidosRecParciais
+  | "fat_parciais";  // lExibirPedidosFatParciais
 
-function formatBRL(v: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-}
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
-}
-function formatDateFull(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-}
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-function getFornNome(f: NonNullable<Pedido["fornecedores"]>) {
-  return f.nome_fantasia || f.razao_social;
-}
-function listItemDate(item: ListItem): number {
-  if (item.kind === "lhg") return new Date(item.data.created_at).getTime();
-  return new Date(item.data.data_pedido ?? item.data.omie_sincronizado_em).getTime();
-}
+const OMIE_FILTROS: {
+  key: OmieFiltroKey;
+  label: string;
+  fieldName: string | null;
+  activeClass: string;
+}[] = [
+  { key: "todos",        label: "Todos",         fieldName: null,                          activeClass: "bg-muted text-foreground" },
+  { key: "pendentes",    label: "Pendentes",      fieldName: "lExibirPedidosPendentes",     activeClass: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30" },
+  { key: "faturados",    label: "Faturados",      fieldName: "lExibirPedidosFaturados",     activeClass: "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30" },
+  { key: "recebidos",    label: "Recebidos",      fieldName: "lExibirPedidosRecebidos",     activeClass: "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30" },
+  { key: "cancelados",   label: "Cancelados",     fieldName: "lExibirPedidosCancelados",    activeClass: "bg-red-500/20 text-red-400 ring-1 ring-red-500/30" },
+  { key: "encerrados",   label: "Encerrados",     fieldName: "lExibirPedidosEncerrados",    activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
+  { key: "rec_parciais", label: "Rec. Parciais",  fieldName: "lExibirPedidosRecParciais",   activeClass: "bg-teal-500/20 text-teal-400 ring-1 ring-teal-500/30" },
+  { key: "fat_parciais", label: "Fat. Parciais",  fieldName: "lExibirPedidosFatParciais",   activeClass: "bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/30" },
+];
+
+// ── Filtros LHG ───────────────────────────────────────────────────────────────
+
+const LHG_FILTROS: { key: string; label: string }[] = [
+  { key: "todos",                label: "Todos" },
+  { key: "aguardando_aprovacao", label: "Ag. Aprovação" },
+  { key: "enviado",              label: "Enviado" },
+  { key: "em_transito",          label: "Em Trânsito" },
+  { key: "recebido",             label: "Recebido" },
+  { key: "cancelado",            label: "Cancelado" },
+];
+
+// ── Configurações de status ───────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<PedStatus, { label: string; color: string; icon: React.ReactNode }> = {
   rascunho:             { label: "Rascunho",      color: "text-muted-foreground bg-muted ring-border/50",              icon: <Package size={11} /> },
@@ -126,36 +141,31 @@ const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = 
   omie:          { color: "bg-amber-500/20",     icon: <Sparkles size={11} className="text-amber-400" /> },
 };
 
-const FILTROS: { key: string; label: string }[] = [
-  { key: "todos",               label: "Todos" },
-  { key: "aguardando_aprovacao",label: "Ag. Aprovação" },
-  { key: "enviado",             label: "Enviado" },
-  { key: "em_transito",         label: "Em Trânsito" },
-  { key: "recebido",            label: "Recebido" },
-  { key: "cancelado",           label: "Cancelado" },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const OMIE_FILTROS: { key: string; label: string; activeClass: string }[] = [
-  { key: "todos",      label: "Todos",      activeClass: "bg-muted text-foreground" },
-  { key: "pendentes",  label: "Pendentes",  activeClass: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30" },
-  { key: "faturados",  label: "Faturados",  activeClass: "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30" },
-  { key: "cancelados", label: "Cancelados", activeClass: "bg-red-500/20 text-red-400 ring-1 ring-red-500/30" },
-  { key: "encerrados", label: "Encerrados", activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
-];
-
-type OmieFiltroKey = "todos" | "pendentes" | "faturados" | "cancelados" | "encerrados";
-
-function classifyOmieStatus(situacao: string | null): OmieFiltroKey {
-  const l = (situacao ?? "").toLowerCase();
-  if (l.includes("faturad"))                      return "faturados";
-  if (l.includes("cancel"))                       return "cancelados";
-  if (l.includes("encerr") || l.includes("finali")) return "encerrados";
-  return "pendentes"; // padrão: aguardando entrega, previsão atrasada, etc.
+function formatBRL(v: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+}
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" });
+}
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function getFornNome(f: NonNullable<Pedido["fornecedores"]>) {
+  return f.nome_fantasia || f.razao_social;
 }
 
-function matchOmieStatus(situacao: string | null, filtroKey: OmieFiltroKey): boolean {
-  if (filtroKey === "todos") return true;
-  return classifyOmieStatus(situacao) === filtroKey;
+/** Classifica etapa/situação Omie nos 7 buckets do endpoint PesquisarPedCompra */
+function classifyOmieStatus(etapa: string | null, situacao: string | null): OmieFiltroKey {
+  const text = (etapa ?? situacao ?? "").toLowerCase();
+  if (text.includes("ag. fat") || text.includes("faturamento"))    return "fat_parciais";
+  if (text.includes("faturad"))                                     return "faturados";
+  if (text.includes("ag. rec") || text.includes("recebimento"))    return "rec_parciais";
+  if (text.includes("recebid"))                                     return "recebidos";
+  if (text.includes("cancel"))                                      return "cancelados";
+  if (text.includes("encerr") || text.includes("finali"))           return "encerrados";
+  return "pendentes"; // Em Análise, Aprovado, Enviado, Pedido de Compra
 }
 
 function omieSituacaoColor(s: string | null) {
@@ -163,10 +173,23 @@ function omieSituacaoColor(s: string | null) {
   const l = s.toLowerCase();
   if (l.includes("cancel"))                           return "text-red-400 bg-red-500/10 ring-red-500/20";
   if (l.includes("faturad"))                          return "text-violet-400 bg-violet-500/10 ring-violet-500/20";
-  if (l.includes("aprovad") && !l.includes("ção"))    return "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20";
+  if (l.includes("recebid"))                          return "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20";
+  if (l.includes("aprovad") && !l.includes("ção"))   return "text-emerald-400 bg-emerald-500/10 ring-emerald-500/20";
   if (l.includes("aprovação") || l.includes("aprovacao")) return "text-amber-400 bg-amber-500/10 ring-amber-500/20";
   if (l.includes("pedido"))                           return "text-sky-400 bg-sky-500/10 ring-sky-500/20";
+  if (l.includes("ag."))                              return "text-amber-400 bg-amber-500/10 ring-amber-500/20";
   return "text-muted-foreground bg-muted ring-border/40";
+}
+
+function relativeTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min  = Math.floor(diff / 60_000);
+  const h    = Math.floor(diff / 3_600_000);
+  const d    = Math.floor(diff / 86_400_000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}min atrás`;
+  if (h < 24)  return `${h}h atrás`;
+  return `${d}d atrás`;
 }
 
 // ── Modal Email ───────────────────────────────────────────────────────────────
@@ -315,7 +338,7 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-[520px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
 
@@ -353,11 +376,11 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
           {/* Grid de detalhes */}
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Situação",       value: pedido.situacao, badge: true },
-              { label: "Sit. Aprovação", value: pedido.situacao_aprovacao, badge: false },
-              { label: "Etapa",          value: pedido.etapa, badge: false },
-              { label: "Unidade",        value: pedido.unidades?.nome, badge: false },
-              { label: "Data do pedido", value: pedido.data_pedido ? formatDate(pedido.data_pedido) : null, badge: false },
+              { label: "Etapa",            value: pedido.etapa,       badge: true },
+              { label: "Situação",         value: pedido.situacao,    badge: true },
+              { label: "Sit. Aprovação",   value: pedido.situacao_aprovacao, badge: false },
+              { label: "Unidade",          value: pedido.unidades?.nome, badge: false },
+              { label: "Data do pedido",   value: pedido.data_pedido ? formatDate(pedido.data_pedido) : null, badge: false },
               { label: "Previsão entrega", value: pedido.data_previsao ? formatDate(pedido.data_previsao) : null, badge: false },
             ].map(({ label, value, badge }) => (
               <div key={label} className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
@@ -398,9 +421,9 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
   );
 }
 
-// ── Painel de Detalhe (pedidos LHG) ──────────────────────────────────────────
+// ── Detalhe Pedido LHG (conteúdo) ────────────────────────────────────────────
 
-function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado: () => void }) {
+function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedido; onAtualizado: () => void; onClose: () => void }) {
   const [pending, start]      = useTransition();
   const [emailOpen, setEmailOpen] = useState(false);
   const [rejeitarOpen, setRejeitarOpen] = useState(false);
@@ -464,10 +487,15 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
               {pedido.entrega_prev && <span>Entrega: {formatDate(pedido.entrega_prev)}</span>}
             </div>
           </div>
-          <div className="text-right shrink-0">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Total do pedido</div>
-            <div className="font-mono text-xl font-bold text-foreground">{formatBRL(pedido.valor_total)}</div>
-            {pedido.condicao_pgto && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{pedido.condicao_pgto}</div>}
+          <div className="flex items-start gap-2 shrink-0">
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Total</div>
+              <div className="font-mono text-xl font-bold text-foreground">{formatBRL(pedido.valor_total)}</div>
+              {pedido.condicao_pgto && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{pedido.condicao_pgto}</div>}
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-0.5">
+              <X size={14} />
+            </button>
           </div>
         </div>
 
@@ -617,22 +645,36 @@ function PedidoDetalhe({ pedido, onAtualizado }: { pedido: Pedido; onAtualizado:
   );
 }
 
+// ── Modal Detalhe LHG ─────────────────────────────────────────────────────────
+
+function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onClose: () => void; onAtualizado: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[4vh] px-4 pb-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-[760px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <PedidoDetalheConteudo pedido={pedido} onAtualizado={onAtualizado} onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
   const router = useRouter();
-  const [pedidos, setPedidos]       = useState(pedidosIniciais);
-  const [filtro, setFiltro]         = useState("todos");
-  const [omieStatusFiltro, setOmieStatusFiltro] = useState<OmieFiltroKey>("todos");
-  const [busca, setBusca]           = useState("");
-  const [selectedLhgId, setSelectedLhgId] = useState<string | null>(pedidosIniciais[0]?.id ?? null);
-  const [selectedOmie, setSelectedOmie]   = useState<OmiePedido | null>(null);
-  const [syncing, setSyncing]             = useState(false);
 
+  const [filtro,           setFiltro]           = useState("todos");
+  const [omieStatusFiltro, setOmieStatusFiltro] = useState<OmieFiltroKey>("todos");
+  const [busca,            setBusca]            = useState("");
+  const [selectedLhg,      setSelectedLhg]      = useState<Pedido | null>(null);
+  const [selectedOmie,     setSelectedOmie]     = useState<OmiePedido | null>(null);
+  const [syncing,          setSyncing]          = useState(false);
+
+  // ── Sync Omie ────────────────────────────────────────────────────────────────
   async function handleSync() {
     setSyncing(true);
     try {
-      const res = await fetch("/api/omie/sync-pedidos", { method: "POST" });
+      const res  = await fetch("/api/omie/sync-pedidos", { method: "POST" });
       const data = await res.json();
 
       if (!res.ok) {
@@ -642,18 +684,14 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
 
       type SyncRes = { total?: number; status?: string; detalhe?: Record<string, unknown> };
       const results = data.results as SyncRes[] | undefined;
-
-      // Verifica se algum resultado retornou com erro
       const comErro = results?.find(r => r.status === "erro");
       if (comErro) {
-        const errMsg = (comErro.detalhe?.erro as string | undefined) ?? "erro desconhecido";
-        toast.error(`Erro Omie: ${errMsg}`);
+        toast.error(`Erro Omie: ${(comErro.detalhe?.erro as string | undefined) ?? "erro desconhecido"}`);
         return;
       }
 
       const total = results?.reduce((acc, r) => acc + (r.total ?? 0), 0) ?? 0;
       if (total === 0) {
-        // Debug: mostra resposta completa para diagnóstico
         toast.warning(
           `Sync ok mas 0 pedidos retornados. Unidades: ${(data.unidades as string[] | undefined)?.join(", ") ?? "—"}`,
           { duration: 8000 },
@@ -669,230 +707,373 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     }
   }
 
-  // Lista unificada: LHG + Omie misturados, ordenados por data desc
-  const listaUnificada = useMemo<ListItem[]>(() => {
-    const lhg:  ListItem[] = pedidos.map(p => ({ kind: "lhg",  data: p }));
-    const omie: ListItem[] = omie_pedidos.map(p => ({ kind: "omie", data: p }));
-    return [...lhg, ...omie].sort((a, b) => listItemDate(b) - listItemDate(a));
-  }, [pedidos, omie_pedidos]);
+  // ── Stats ────────────────────────────────────────────────────────────────────
+  const valorTotalLhg = useMemo(
+    () => pedidosIniciais.reduce((s, p) => s + p.valor_total, 0),
+    [pedidosIniciais],
+  );
+  const valorTotalOmie = useMemo(
+    () => omie_pedidos.reduce((s, p) => s + (p.valor_total ?? 0), 0),
+    [omie_pedidos],
+  );
 
-  // Filtragem: busca sobre tudo; status LHG filtra LHG; omieStatusFiltro filtra Omie
-  const filtrados = useMemo(() => {
+  const lhgCounts = useMemo(() => {
+    const m: Record<string, number> = { todos: pedidosIniciais.length };
+    for (const p of pedidosIniciais) m[p.status] = (m[p.status] ?? 0) + 1;
+    return m;
+  }, [pedidosIniciais]);
+
+  const omieCounts = useMemo(() => {
+    const m: Record<OmieFiltroKey, number> = {
+      todos: omie_pedidos.length,
+      pendentes: 0, faturados: 0, recebidos: 0,
+      cancelados: 0, encerrados: 0, rec_parciais: 0, fat_parciais: 0,
+    };
+    for (const p of omie_pedidos) {
+      const k = classifyOmieStatus(p.etapa, p.situacao);
+      m[k] = (m[k] ?? 0) + 1;
+    }
+    return m;
+  }, [omie_pedidos]);
+
+  // ── Filtragem ────────────────────────────────────────────────────────────────
+  type RowLhg  = { kind: "lhg";  data: Pedido }
+  type RowOmie = { kind: "omie"; data: OmiePedido }
+  type Row = RowLhg | RowOmie;
+
+  const rows = useMemo<Row[]>(() => {
     const q = busca.toLowerCase().trim();
-    return listaUnificada.filter(item => {
-      if (item.kind === "lhg") {
-        const p = item.data;
+
+    const lhgRows: RowLhg[] = pedidosIniciais
+      .filter(p => {
         const matchStatus = filtro === "todos" || p.status === filtro;
         const matchBusca  = !q ||
           p.numero.toLowerCase().includes(q) ||
           (p.fornecedores ? getFornNome(p.fornecedores).toLowerCase().includes(q) : false) ||
           (p.cotacoes?.numero.toLowerCase().includes(q) ?? false);
         return matchStatus && matchBusca;
-      } else {
-        // Omie: só aparece quando filtro LHG=todos; filtrado por omieStatusFiltro e busca
-        if (filtro !== "todos") return false;
-        const p = item.data;
-        const matchBusca = !q ||
-          (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
-          (p.numero?.toString().includes(q) ?? false) ||
-          (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false);
-        return matchBusca && matchOmieStatus(p.situacao, omieStatusFiltro);
-      }
+      })
+      .map(p => ({ kind: "lhg", data: p }));
+
+    // Pedidos Omie só aparecem quando filtro LHG = "todos"
+    const omieRows: RowOmie[] = filtro !== "todos" ? [] :
+      omie_pedidos
+        .filter(p => {
+          const matchBusca = !q ||
+            (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
+            (p.numero?.toString().includes(q) ?? false) ||
+            (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false);
+          const matchStatus = omieStatusFiltro === "todos" ||
+            classifyOmieStatus(p.etapa, p.situacao) === omieStatusFiltro;
+          return matchBusca && matchStatus;
+        })
+        .map(p => ({ kind: "omie", data: p }));
+
+    // Ordena por data desc
+    return [...lhgRows, ...omieRows].sort((a, b) => {
+      const dateA = a.kind === "lhg"
+        ? new Date(a.data.created_at).getTime()
+        : new Date(a.data.data_pedido ?? a.data.omie_sincronizado_em).getTime();
+      const dateB = b.kind === "lhg"
+        ? new Date(b.data.created_at).getTime()
+        : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
+      return dateB - dateA;
     });
-  }, [listaUnificada, filtro, omieStatusFiltro, busca]);
+  }, [pedidosIniciais, omie_pedidos, filtro, omieStatusFiltro, busca]);
 
-  const selectedLhg = pedidos.find(p => p.id === selectedLhgId) ?? null;
+  function handleAtualizado() {
+    router.refresh();
+    setSelectedLhg(null);
+  }
 
-  const counts = useMemo(() => {
-    const m: Record<string, number> = { todos: pedidos.length };
-    for (const p of pedidos) m[p.status] = (m[p.status] ?? 0) + 1;
-    return m;
-  }, [pedidos]);
-
-  const omieCounts = useMemo(() => {
-    const m: Record<OmieFiltroKey, number> = { todos: omie_pedidos.length, pendentes: 0, faturados: 0, cancelados: 0, encerrados: 0 };
-    for (const p of omie_pedidos) {
-      const k = classifyOmieStatus(p.situacao);
-      m[k] = (m[k] ?? 0) + 1;
-    }
-    return m;
-  }, [omie_pedidos]);
-
-  function handleAtualizado() { /* revalidatePath via SA já atualiza no próximo load */ }
-
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-56px)]">
+    <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
 
-      {/* ── Painel esquerdo: lista unificada ─────────────────────────────────── */}
-      <div className="w-[340px] border-r border-border/60 flex flex-col shrink-0 bg-card">
-
-        {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-border/60 space-y-3 shrink-0">
-          <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold text-foreground flex items-center gap-2">
-              <ShoppingCart size={15} className="text-muted-foreground" />
-              Pedidos
-              <span className="text-[12px] font-normal text-muted-foreground/60">({filtrados.length})</span>
-            </h1>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              title="Sincronizar pedidos do Omie ERP"
-              className="group inline-flex items-center gap-1 rounded-lg border border-amber-700/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-            >
-              {syncing
-                ? <Loader2 size={11} className="animate-spin" />
-                : <RefreshCw size={11} className="group-hover:rotate-180 transition-transform duration-500" />}
-              {syncing ? "Sync…" : "Sync Omie"}
-            </button>
-          </div>
-
-          {/* Busca */}
-          <div className="relative">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
-            <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar pedido, fornecedor…"
-              className="w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-border transition-all" />
-          </div>
-
-          {/* Filtros de status (LHG) */}
-          <div className="flex gap-1 flex-wrap">
-            {FILTROS.filter(f => f.key === "todos" || (counts[f.key] ?? 0) > 0).map(f => (
-              <button key={f.key} onClick={() => setFiltro(f.key)}
-                className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                  filtro === f.key ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
-                {f.label}
-                {counts[f.key] > 0 && <span className="ml-1 text-muted-foreground/60">{counts[f.key]}</span>}
-              </button>
-            ))}
-          </div>
-
-          {/* Filtros de situação (Omie) — só aparece quando há pedidos Omie e o filtro LHG = "todos" */}
-          {omie_pedidos.length > 0 && filtro === "todos" && (
-            <div className="flex items-center gap-1 flex-wrap pt-0.5 border-t border-border/40">
-              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-400/80 font-semibold mr-0.5">
-                <Sparkles size={8} />Omie
-              </span>
-              {OMIE_FILTROS.map(f => {
-                const count = omieCounts[f.key as OmieFiltroKey] ?? 0;
-                if (f.key !== "todos" && count === 0) return null;
-                return (
-                  <button key={f.key} onClick={() => setOmieStatusFiltro(f.key as OmieFiltroKey)}
-                    className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-                      omieStatusFiltro === f.key
-                        ? f.activeClass
-                        : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
-                    {f.label}
-                    {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground leading-tight flex items-center gap-2">
+            <ShoppingCart size={18} className="text-muted-foreground" />
+            Pedidos de Compra
+          </h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Pedidos LHG + sincronizados do Omie ERP
+          </p>
         </div>
 
-        {/* Lista */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-px">
-          {filtrados.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground/60">
-              <ShoppingCart size={24} /><p className="text-sm">Nenhum pedido encontrado</p>
-            </div>
-          ) : filtrados.map(item => {
-            if (item.kind === "lhg") {
-              const p    = item.data;
-              const forn = p.fornecedores;
-              const st   = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.rascunho;
-              const isSel = selectedLhgId === p.id && !selectedOmie;
-              return (
-                <button key={`lhg-${p.id}`} onClick={() => { setSelectedLhgId(p.id); setSelectedOmie(null); }}
-                  className={cn("w-full text-left rounded-lg px-3 py-3 transition-colors",
-                    isSel ? "bg-muted ring-1 ring-border/60" : "hover:bg-muted/60")}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        {/* Fonte badge LHG */}
-                        <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">
-                          LHG
-                        </span>
-                        <span className="font-mono text-[11px] text-muted-foreground">{p.numero}</span>
-                        <span className={cn("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1", st.color)}>
-                          {st.icon}{st.label}
-                        </span>
-                      </div>
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {forn ? getFornNome(forn) : "Fornecedor desconhecido"}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        {formatDate(p.created_at)}{p.cotacoes && ` · ${p.cotacoes.numero}`}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono text-sm font-semibold text-foreground">{formatBRL(p.valor_total)}</div>
-                      <div className="text-[10px] text-muted-foreground/60 mt-0.5">{p.pedido_itens.length} iten{p.pedido_itens.length !== 1 ? "s" : ""}</div>
-                    </div>
-                  </div>
-                </button>
-              );
-            } else {
-              const p = item.data;
-              return (
-                <button key={`omie-${p.id}`} onClick={() => setSelectedOmie(p)}
-                  className="w-full text-left rounded-lg px-3 py-3 transition-colors hover:bg-muted/60">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        {/* Fonte badge Omie */}
-                        <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">
-                          <Sparkles size={7} />Omie
-                        </span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {p.numero ? `#${p.numero}` : `cod. ${p.omie_codigo}`}
-                        </span>
-                        {p.situacao && (
-                          <span className={cn("inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-medium ring-1", omieSituacaoColor(p.situacao))}>
-                            {p.situacao}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {p.fornecedor_nome ?? "Fornecedor desconhecido"}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        {p.data_pedido ? formatDate(p.data_pedido) : formatDate(p.omie_sincronizado_em)}
-                        {p.etapa && ` · ${p.etapa}`}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono text-sm font-semibold text-foreground">
-                        {p.valor_total !== null ? formatBRL(p.valor_total) : "—"}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground/60 mt-0.5 flex items-center justify-end gap-0.5">
-                        <Calendar size={8} />
-                        {p.data_previsao ? formatDate(p.data_previsao) : "—"}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            }
-          })}
-        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          title="Sincronizar pedidos do Omie ERP"
+          className="group inline-flex items-center gap-2 rounded-lg border border-amber-700/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
+        >
+          {syncing
+            ? <Loader2 size={13} className="animate-spin" />
+            : <RefreshCw size={13} className="group-hover:rotate-180 transition-transform duration-500" />}
+          {syncing ? "Sincronizando…" : "Sincronizar Omie"}
+        </button>
       </div>
 
-      {/* ── Painel direito: detalhe LHG ──────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden bg-background/50">
-        {selectedLhg && !selectedOmie ? (
-          <PedidoDetalhe key={selectedLhg.id} pedido={selectedLhg} onAtualizado={handleAtualizado} />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground/40">
-            <ShoppingCart size={40} strokeWidth={1.2} />
-            <p className="text-sm">Selecione um pedido LHG para ver os detalhes</p>
-            <p className="text-[12px] text-muted-foreground/30">Pedidos Omie abrem em modal</p>
+      {/* ── Stats ────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "PEDIDOS LHG",  value: pedidosIniciais.length, color: "text-foreground",  sub: null },
+          { label: "PEDIDOS OMIE", value: omie_pedidos.length,    color: "text-amber-400",   sub: omie_pedidos.length > 0 ? relativeTime(omie_pedidos[0]?.omie_sincronizado_em ?? "") + " sync" : null },
+          { label: "VALOR LHG",    value: formatBRL(valorTotalLhg),  color: "text-emerald-400", sub: null, mono: true },
+          { label: "VALOR OMIE",   value: valorTotalOmie > 0 ? formatBRL(valorTotalOmie) : "—", color: "text-amber-400", sub: null, mono: true },
+        ].map(({ label, value, color, sub, mono }) => (
+          <div key={label} className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4">
+            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{label}</div>
+            <div className={cn("mt-1.5 font-semibold", color, mono ? "text-lg font-mono" : "text-2xl font-mono")}>
+              {value}
+            </div>
+            {sub && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Busca ────────────────────────────────────────────────────────────── */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Buscar por número, fornecedor, cotação…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          className="w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-border focus:ring-0 transition-colors"
+        />
+        {busca && (
+          <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs">✕</button>
+        )}
+      </div>
+
+      {/* ── Filtros ───────────────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        {/* Filtros LHG */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider text-emerald-500/80 font-semibold mr-1 flex items-center gap-1">
+            <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">LHG</span>
+          </span>
+          {LHG_FILTROS.filter(f => f.key === "todos" || (lhgCounts[f.key] ?? 0) > 0).map(f => (
+            <button key={f.key} onClick={() => setFiltro(f.key)}
+              className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                filtro === f.key ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
+              {f.label}
+              {(lhgCounts[f.key] ?? 0) > 0 && (
+                <span className="ml-1 text-muted-foreground/60">{lhgCounts[f.key]}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtros Omie — 7 campos exatos do endpoint PesquisarPedCompra */}
+        {omie_pedidos.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-border/40">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-400/80 font-semibold mr-1">
+              <Sparkles size={8} />Omie
+            </span>
+            {OMIE_FILTROS.map(f => {
+              const count = omieCounts[f.key] ?? 0;
+              if (f.key !== "todos" && count === 0) return null;
+              const isActive = omieStatusFiltro === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setOmieStatusFiltro(f.key)}
+                  title={f.fieldName ? `API: ${f.fieldName}` : undefined}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    isActive ? f.activeClass : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
+                  )}
+                >
+                  {f.label}
+                  {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* ── Modal detalhe Omie ────────────────────────────────────────────────── */}
+      {/* ── Tabela ───────────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
+
+        {/* Header da tabela */}
+        <div className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3 border-b border-border/80">
+          {["PEDIDO", "FORNECEDOR", "DATA", "PREVISÃO", "VALOR", "STATUS / ETAPA", "FONTE"].map(h => (
+            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
+              {h}
+            </div>
+          ))}
+        </div>
+
+        {/* Linhas */}
+        {rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-2">
+            <ShoppingCart size={28} className="text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              {busca || filtro !== "todos" || omieStatusFiltro !== "todos"
+                ? "Nenhum pedido encontrado para os filtros selecionados"
+                : "Nenhum pedido cadastrado"}
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {rows.map(row => {
+              if (row.kind === "lhg") {
+                const p = row.data;
+                const forn = p.fornecedores;
+                const st = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.rascunho;
+                return (
+                  <li
+                    key={`lhg-${p.id}`}
+                    onClick={() => setSelectedLhg(p)}
+                    className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                  >
+                    {/* Pedido # */}
+                    <div className="font-mono text-[11px] text-muted-foreground truncate">{p.numero}</div>
+
+                    {/* Fornecedor */}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate leading-tight">
+                        {forn ? getFornNome(forn) : "Fornecedor desconhecido"}
+                      </div>
+                      {p.cotacoes && (
+                        <div className="text-[11px] text-muted-foreground/60 mt-0.5 flex items-center gap-1">
+                          <ReceiptText size={9} />Cotação {p.cotacoes.numero}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Data */}
+                    <div className="text-[12px] text-muted-foreground">
+                      {formatDate(p.created_at)}
+                    </div>
+
+                    {/* Previsão */}
+                    <div className="text-[12px] text-muted-foreground">
+                      {p.entrega_prev ? (
+                        <span className="flex items-center gap-1">
+                          <Calendar size={9} className="text-muted-foreground/50" />
+                          {formatDate(p.entrega_prev)}
+                        </span>
+                      ) : "—"}
+                    </div>
+
+                    {/* Valor */}
+                    <div className="font-mono text-sm font-semibold text-foreground">
+                      {formatBRL(p.valor_total)}
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1", st.color)}>
+                        {st.icon}{st.label}
+                      </span>
+                    </div>
+
+                    {/* Fonte */}
+                    <div>
+                      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">
+                        LHG
+                      </span>
+                    </div>
+                  </li>
+                );
+              } else {
+                // Omie
+                const p = row.data;
+                const etapaCor = omieSituacaoColor(p.etapa ?? p.situacao);
+                return (
+                  <li
+                    key={`omie-${p.id}`}
+                    onClick={() => setSelectedOmie(p)}
+                    className="grid grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                  >
+                    {/* Pedido # */}
+                    <div className="font-mono text-[11px] text-muted-foreground truncate">
+                      {p.numero ? `#${p.numero}` : `c.${p.omie_codigo}`}
+                    </div>
+
+                    {/* Fornecedor */}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate leading-tight">
+                        {p.fornecedor_nome ?? "Fornecedor desconhecido"}
+                      </div>
+                      {p.numero_pedido_forn && (
+                        <div className="text-[11px] text-muted-foreground/60 mt-0.5">Nº forn: {p.numero_pedido_forn}</div>
+                      )}
+                    </div>
+
+                    {/* Data */}
+                    <div className="text-[12px] text-muted-foreground">
+                      {p.data_pedido ? formatDate(p.data_pedido) : "—"}
+                    </div>
+
+                    {/* Previsão */}
+                    <div className="text-[12px] text-muted-foreground">
+                      {p.data_previsao ? (
+                        <span className="flex items-center gap-1">
+                          <Calendar size={9} className="text-muted-foreground/50" />
+                          {formatDate(p.data_previsao)}
+                        </span>
+                      ) : "—"}
+                    </div>
+
+                    {/* Valor */}
+                    <div className="font-mono text-sm font-semibold text-foreground">
+                      {p.valor_total !== null ? formatBRL(p.valor_total) : "—"}
+                    </div>
+
+                    {/* Etapa */}
+                    <div>
+                      {(p.etapa ?? p.situacao) ? (
+                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1", etapaCor)}>
+                          {p.etapa ?? p.situacao}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground/40">—</span>
+                      )}
+                    </div>
+
+                    {/* Fonte */}
+                    <div>
+                      <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">
+                        <Sparkles size={7} />Omie
+                      </span>
+                    </div>
+                  </li>
+                );
+              }
+            })}
+          </ul>
+        )}
+
+        {/* Footer com contagem */}
+        {rows.length > 0 && (
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
+            <span className="text-[12px] text-muted-foreground/60">
+              {rows.length === pedidosIniciais.length + omie_pedidos.length
+                ? `${rows.length} pedido${rows.length !== 1 ? "s" : ""} no total`
+                : `${rows.length} de ${pedidosIniciais.length + omie_pedidos.length} pedido${(pedidosIniciais.length + omie_pedidos.length) !== 1 ? "s" : ""}`}
+            </span>
+            <span className="text-[11px] text-muted-foreground/40">
+              Clique em uma linha para ver os detalhes
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Modais ────────────────────────────────────────────────────────────── */}
+      {selectedLhg && (
+        <ModalLhgPedido
+          key={selectedLhg.id}
+          pedido={selectedLhg}
+          onClose={() => setSelectedLhg(null)}
+          onAtualizado={handleAtualizado}
+        />
+      )}
       {selectedOmie && (
         <ModalOmiePedido
           pedido={selectedOmie}

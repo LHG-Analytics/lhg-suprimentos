@@ -65,25 +65,55 @@ function relativeTime(iso: string) {
   return `${d}d atrás`;
 }
 
+// ── Filtros de chip — campo API Omie: clientesFiltro.inativo ─────────────────
+
+type FiltroKey = "todos" | "ativos" | "inativos" | "com_email" | "sem_email";
+
+/**
+ * Chips que espelham os parâmetros da API Omie:
+ *   ativos   → clientesFiltro.inativo: "N"  (padrão do sync)
+ *   inativos → clientesFiltro.inativo: "S"
+ */
+const FILTROS: { key: FiltroKey; label: string; omieParam: string | null; activeClass: string }[] = [
+  { key: "todos",     label: "Todos",     omieParam: null,                        activeClass: "bg-muted text-foreground" },
+  { key: "ativos",    label: "Ativos",    omieParam: "inativo: \"N\"",             activeClass: "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30" },
+  { key: "inativos",  label: "Inativos",  omieParam: "inativo: \"S\"",             activeClass: "bg-red-500/20 text-red-400 ring-1 ring-red-500/30" },
+  { key: "com_email", label: "Com e-mail",omieParam: null,                        activeClass: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30" },
+  { key: "sem_email", label: "Sem e-mail",omieParam: null,                        activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
+];
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClientProps) {
   const [query,               setQuery]               = useState("");
+  // Padrão: "ativos" espelha o comportamento do sync Omie (inativo: "N")
+  const [filtroChip,          setFiltroChip]          = useState<FiltroKey>("ativos");
   const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return fornecedores;
-    return fornecedores.filter(
-      (f) =>
+
+    return fornecedores.filter((f) => {
+      // Filtro por chip — espelha parâmetros da API Omie
+      if (filtroChip === "ativos"    && !f.ativo)       return false;  // inativo: "N"
+      if (filtroChip === "inativos"  && f.ativo)        return false;  // inativo: "S"
+      if (filtroChip === "com_email" && !f.email)       return false;
+      if (filtroChip === "sem_email" && !!f.email)      return false;
+
+      // Filtro de busca textual
+      if (!q) return true;
+      return (
         f.razao_social.toLowerCase().includes(q) ||
         (f.nome_fantasia ?? "").toLowerCase().includes(q) ||
         f.cnpj.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
         (f.cidade ?? "").toLowerCase().includes(q) ||
-        (f.email ?? "").toLowerCase().includes(q),
-    );
-  }, [fornecedores, query]);
+        (f.email ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [fornecedores, query, filtroChip]);
 
+  const totalAtivos    = fornecedores.filter((f) => f.ativo).length;
+  const totalInativos  = fornecedores.filter((f) => !f.ativo).length;
   const totalOmie      = fornecedores.filter((f) => f.omie_codigo).length;
   const totalComEmail  = fornecedores.filter((f) => f.email).length;
 
@@ -120,28 +150,52 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         </div>
       </div>
 
-      {/* ── Stats ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* ── Stats (clicáveis como atalho de filtro) ─────────────────────── */}
+      <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "TOTAL",      value: fornecedores.length, color: "text-foreground",  sub: null },
-          { label: "COM E-MAIL", value: totalComEmail,       color: "text-amber-400",   sub: `${fornecedores.length - totalComEmail} sem e-mail` },
-          { label: "OMIE",       value: totalOmie,           color: "text-sky-400",     sub: null },
-        ].map(({ label, value, color, sub }) => (
-          <div
-            key={label}
-            className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4"
-          >
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-              {label}
-            </div>
-            <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
-              {value}
-            </div>
-            {sub && (
-              <div className="text-[11px] text-muted-foreground/60 mt-0.5">{sub}</div>
-            )}
-          </div>
-        ))}
+          {
+            label: "TOTAL",    value: fornecedores.length, color: "text-foreground",
+            sub: null,          chipKey: "todos"    as FiltroKey, omieParam: null,
+          },
+          {
+            label: "ATIVOS",   value: totalAtivos,          color: "text-emerald-400",
+            sub: "inativo: \"N\"",  chipKey: "ativos"   as FiltroKey, omieParam: "clientesFiltro.inativo",
+          },
+          {
+            label: "INATIVOS", value: totalInativos,        color: "text-red-400",
+            sub: "inativo: \"S\"",  chipKey: "inativos" as FiltroKey, omieParam: "clientesFiltro.inativo",
+          },
+          {
+            label: "OMIE",     value: totalOmie,            color: "text-sky-400",
+            sub: null,          chipKey: "todos"    as FiltroKey, omieParam: null,
+          },
+        ].map(({ label, value, color, sub, chipKey }) => {
+          const isActive = filtroChip === chipKey && chipKey !== "todos";
+          return (
+            <button
+              key={label}
+              onClick={() => chipKey !== "todos" && setFiltroChip(isActive ? "ativos" : chipKey)}
+              className={cn(
+                "rounded-xl border px-5 py-4 text-left transition-colors",
+                isActive
+                  ? "border-border bg-muted/80 ring-1 ring-border/60"
+                  : chipKey !== "todos"
+                    ? "border-border/80 bg-muted/40 hover:bg-muted/60 cursor-pointer"
+                    : "border-border/80 bg-muted/40 cursor-default",
+              )}
+            >
+              <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
+                {label}
+              </div>
+              <div className={cn("text-2xl font-mono font-semibold mt-1.5", color)}>
+                {value}
+              </div>
+              {sub && (
+                <div className="text-[11px] text-muted-foreground/40 font-mono mt-0.5">{sub}</div>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Busca ───────────────────────────────────────────────────────── */}
@@ -171,6 +225,34 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         )}
       </div>
 
+      {/* ── Filtros de chip — espelham parâmetros da API Omie ──────────── */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {FILTROS.map((f) => {
+          const isActive = filtroChip === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFiltroChip(f.key)}
+              title={f.omieParam ? `API Omie: clientesFiltro.${f.omieParam}` : undefined}
+              className={cn(
+                "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                isActive ? f.activeClass : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60",
+              )}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+        {(filtroChip !== "ativos" || query) && (
+          <button
+            onClick={() => { setFiltroChip("ativos"); setQuery(""); }}
+            className="rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground/70 hover:text-foreground/80 hover:bg-muted/40 transition-colors ml-1"
+          >
+            ✕ Limpar
+          </button>
+        )}
+      </div>
+
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
@@ -192,9 +274,11 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Building2 size={28} className="text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              {query ? "Nenhum fornecedor encontrado" : "Nenhum fornecedor cadastrado"}
+              {query || filtroChip !== "todos"
+                ? "Nenhum fornecedor para os filtros selecionados"
+                : "Nenhum fornecedor cadastrado"}
             </p>
-            {!query && (
+            {!query && filtroChip === "todos" && (
               <p className="text-xs text-muted-foreground/60">
                 Clique em &quot;Sincronizar Omie&quot; para importar
               </p>
@@ -271,7 +355,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             <span className="text-[12px] text-muted-foreground/60">
               {filtered.length === fornecedores.length
                 ? `${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`
-                : `${filtered.length} de ${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""}`}
+                : `${filtered.length} de ${fornecedores.length} fornecedor${fornecedores.length !== 1 ? "es" : ""} filtrado${filtered.length !== 1 ? "s" : ""}`}
             </span>
             <span className="text-[11px] text-muted-foreground/40">
               Clique em uma linha para editar
