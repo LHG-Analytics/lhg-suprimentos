@@ -4,7 +4,7 @@
  * produtos-client.tsx — LHG-206
  * Tabela interativa do catálogo de produtos com busca, filtro por categoria e sync Omie.
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Search, Package, RefreshCw, Tag, Layers, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieProdutosButton } from "./sync-omie-produtos-button";
@@ -85,8 +85,10 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
   const [produtoEditando,  setProdutoEditando]  = useState<Produto | null>(null);
   const [page,             setPage]             = useState(0);
 
-  // Reset de página quando filtros mudam
-  useEffect(() => { setPage(0); }, [query, categoria, familia]);
+  // Helpers que resetam página no mesmo batch do React 18 (sem render intermediário errado)
+  function handleQuery(v: string)     { setQuery(v);      setPage(0); }
+  function handleCategoria(v: string) { setCategoria(v);  setPage(0); }
+  function handleFamilia(v: string)   { setFamilia(v);    setPage(0); }
 
   // Listas únicas para os filtros
   const categorias = useMemo(() => {
@@ -175,7 +177,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
               type="text"
               placeholder="Buscar por nome, código, família ou unidade…"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleQuery(e.target.value)}
               className={cn(
                 "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 transition-colors",
                 "text-sm text-foreground placeholder:text-muted-foreground/50",
@@ -195,7 +197,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             )}
             {query && (
               <button
-                onClick={() => setQuery("")}
+                onClick={() => handleQuery("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs"
               >
                 ✕
@@ -214,7 +216,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
           <Tag size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <select
             value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
+            onChange={(e) => handleCategoria(e.target.value)}
             className={cn(
               "rounded-lg border border-border bg-muted/60 pl-8 pr-8 py-2.5",
               "text-sm text-foreground appearance-none cursor-pointer",
@@ -234,7 +236,7 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
             <Layers size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <select
               value={familia}
-              onChange={(e) => setFamilia(e.target.value)}
+              onChange={(e) => handleFamilia(e.target.value)}
               className={cn(
                 "rounded-lg border border-border bg-muted/60 pl-8 pr-8 py-2.5",
                 "text-sm text-foreground appearance-none cursor-pointer",

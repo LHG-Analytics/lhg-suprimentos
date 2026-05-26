@@ -6,7 +6,7 @@
  * LHG-224: removidas colunas STATUS (ativo/inativo — não vem do Omie)
  *           e OMIE (redundante); email destacado na coluna CONTATO.
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Search, Building2, MapPin, Phone, Mail, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieButton } from "./sync-omie-button";
@@ -95,8 +95,10 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
   const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
   const [page,                setPage]                = useState(0);
 
-  // Reset de página quando filtros mudam
-  useEffect(() => { setPage(0); }, [query, filtroChip]);
+  // Helpers que resetam a página ANTES do próximo render (mesmo batch do React 18)
+  function handleQuery(v: string)      { setQuery(v);       setPage(0); }
+  function handleChip(k: FiltroKey)    { setFiltroChip(k);  setPage(0); }
+  function handleLimpar()              { setFiltroChip("ativos"); setQuery(""); setPage(0); }
 
   const q = query.toLowerCase().trim();
 
@@ -173,7 +175,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             type="text"
             placeholder="Buscar por nome, CNPJ, cidade ou e-mail…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQuery(e.target.value)}
             className={cn(
               "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 transition-colors",
               "text-sm text-foreground placeholder:text-muted-foreground/50",
@@ -196,7 +198,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           )}
           {query && (
             <button
-              onClick={() => setQuery("")}
+              onClick={() => handleQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs"
             >
               ✕
@@ -218,7 +220,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           return (
             <button
               key={f.key}
-              onClick={() => setFiltroChip(f.key)}
+              onClick={() => handleChip(f.key)}
               title={f.omieParam ? `API Omie: clientesFiltro.${f.omieParam}` : undefined}
               className={cn(
                 "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
@@ -231,7 +233,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         })}
         {(filtroChip !== "ativos" || query) && (
           <button
-            onClick={() => { setFiltroChip("ativos"); setQuery(""); }}
+            onClick={handleLimpar}
             className="rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground/70 hover:text-foreground/80 hover:bg-muted/40 transition-colors ml-1"
           >
             ✕ Limpar
@@ -268,7 +270,7 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
             </p>
             {buscaAtiva && (
               <button
-                onClick={() => setQuery("")}
+                onClick={() => handleQuery("")}
                 className="text-xs text-emerald-400/70 hover:text-emerald-400 transition-colors"
               >
                 Limpar busca

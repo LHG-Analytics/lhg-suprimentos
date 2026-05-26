@@ -7,7 +7,7 @@
  * Click LHG  → modal de detalhe (ações: aprovar, rejeitar, email, Omie…).
  * Click Omie → modal de detalhe Omie.
  */
-import { useState, useMemo, useTransition, useEffect } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
@@ -799,8 +799,10 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const totalPages  = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginados   = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  // Reset de página quando filtros mudam
-  useEffect(() => { setPage(0); }, [filtro, omieStatusFiltro, busca]);
+  // Helpers que resetam página no mesmo batch do React 18 (sem render intermediário errado)
+  function handleBusca(v: string)             { setBusca(v);             setPage(0); }
+  function handleFiltro(v: string)            { setFiltro(v);            setPage(0); }
+  function handleOmieStatus(v: OmieFiltroKey) { setOmieStatusFiltro(v);  setPage(0); }
 
   function handleAtualizado() {
     router.refresh();
@@ -862,7 +864,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
             type="text"
             placeholder="Buscar por número, fornecedor, cotação…"
             value={busca}
-            onChange={e => setBusca(e.target.value)}
+            onChange={e => handleBusca(e.target.value)}
             className={cn(
               "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 text-sm text-foreground",
               "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 transition-colors",
@@ -880,7 +882,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
             </span>
           )}
           {busca && (
-            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs">✕</button>
+            <button onClick={() => handleBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs">✕</button>
           )}
         </div>
         {buscaCurta && (
@@ -898,7 +900,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
             <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">LHG</span>
           </span>
           {LHG_FILTROS.filter(f => f.key === "todos" || (lhgCounts[f.key] ?? 0) > 0).map(f => (
-            <button key={f.key} onClick={() => setFiltro(f.key)}
+            <button key={f.key} onClick={() => handleFiltro(f.key)}
               className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
                 filtro === f.key ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
               {f.label}
@@ -922,7 +924,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
               return (
                 <button
                   key={f.key}
-                  onClick={() => setOmieStatusFiltro(f.key)}
+                  onClick={() => handleOmieStatus(f.key)}
                   title={f.fieldName ? `API: ${f.fieldName}` : undefined}
                   className={cn(
                     "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
