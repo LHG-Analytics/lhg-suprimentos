@@ -114,10 +114,12 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
   // Busca textual — só ativa com 2+ caracteres (1 letra sozinha é comum demais)
   const filtered = useMemo(() => {
     if (q.length < 2) return chipFiltered;
+    // CNPJ só compara se a busca contém dígitos — evita "".includes("") = true para todo mundo
+    const qDigits = q.replace(/\D/g, "");
     return chipFiltered.filter((f) =>
       f.razao_social.toLowerCase().includes(q) ||
       (f.nome_fantasia ?? "").toLowerCase().includes(q) ||
-      f.cnpj.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
+      (qDigits.length > 0 && f.cnpj.replace(/\D/g, "").includes(qDigits)) ||
       (f.cidade ?? "").toLowerCase().includes(q) ||
       (f.email ?? "").toLowerCase().includes(q) ||
       (f.telefone ?? "").toLowerCase().includes(q) ||
