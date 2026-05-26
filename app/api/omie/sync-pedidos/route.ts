@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { syncPedidosCompra } from "@/lib/omie/sync";
@@ -42,11 +43,12 @@ export async function GET(req: NextRequest) {
     console.warn(`${tag} Requisição não autorizada — ip=${req.headers.get("x-forwarded-for") ?? "?"}`);
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
-  console.log(`${tag} Cron iniciado`);
-  return runSync(tag);
+  // Cron sempre sincroniza TODAS as unidades
+  console.log(`${tag} Cron iniciado — sincronizando todas as unidades`);
+  return runSync(tag, null);
 }
 
-// ── POST — disparo manual pelo admin ─────────────────────────────────────────
+// ── POST — disparo manual pelo usuário ───────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const tag = "[sync-pedidos POST]";
@@ -54,22 +56,37 @@ export async function POST(req: NextRequest) {
     console.warn(`${tag} Requisição não autorizada`);
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
-  console.log(`${tag} Sync manual iniciado`);
-  return runSync(tag);
+
+  // Respeita a unidade ativa na sidebar (cookie lhg-unidade-slug)
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? null;
+  const filtroDesc = slug && slug !== "todas" ? `unidade="${slug}"` : "todas as unidades";
+  console.log(`${tag} Sync manual iniciado — ${filtroDesc}`);
+  return runSync(tag, slug && slug !== "todas" ? slug : null);
 }
 
 // ── Lógica de sync ────────────────────────────────────────────────────────────
 
-async function runSync(tag: string) {
+/**
+ * @param slug  slug da unidade ativa (cookie lhg-unidade-slug).
+ *              null = sincroniza todas as unidades (modo cron).
+ */
+async function runSync(tag: string, slug: string | null) {
   const inicio = Date.now();
   const supabase = createServiceClient();
 
-  const { data: unidades, error: dbErr } = await supabase
+  // ⚠️ Supabase builder é imutável — cada .eq() retorna nova instância
+  let query = supabase
     .from("unidades")
-    .select("id, nome, omie_app_key, omie_app_secret")
+    .select("id, nome, slug, omie_app_key, omie_app_secret")
     .eq("ativa", true)
     .not("omie_app_key", "is", null)
     .not("omie_app_secret", "is", null);
+
+  // Filtro por slug quando disparado manualmente (não é cron)
+  if (slug) query = query.eq("slug", slug);
+
+  const { data: unidades, error: dbErr } = await query;
 
   if (dbErr) {
     console.error(`${tag} Erro ao buscar unidades:`, dbErr.message, dbErr.code);
