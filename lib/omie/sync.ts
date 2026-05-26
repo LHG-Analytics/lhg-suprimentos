@@ -334,15 +334,12 @@ function mapPedidoCompra(
   const nCodPedido    = cab?.nCodPedido    ?? cab2?.nCodPed    ?? 0;
   const nNumPedido    = cab?.nNumPedido    ?? (cab2?.cNumero ? parseInt(cab2.cNumero, 10) || null : null);
   const dDtPedido     = cab?.dDtPedido     ?? cab2?.dIncData;
-  // Previsão de entrega real = data de vencimento da 1ª parcela (dVencto).
-  // Confirmado nos logs: parcelas_consulta[0].dVencto = "25/06/2026" (prazo acordado).
-  // cab2.dDtPrevisao é apenas "dia seguinte" ao pedido (valor default Omie — ignorar).
+  // Previsão de entrega: campo dDtPrevisao do Omie (campo canônico conforme suporte).
   const dDtPrevisao   =
-    item.parcelas_consulta?.[0]?.dVencto ??  // ← data real de vencimento/entrega
-    cab?.dDtPrevisao ??                        // formato antigo (IncluirPedidoCompra)
+    cab2?.dDtPrevisao ??     // PesquisarPedCompra (campo principal)
+    cab?.dDtPrevisao ??      // formato antigo (IncluirPedidoCompra)
     cab2?.dDtPrevEntrega ??
     cab2?.dDtEntrega;
-    // NÃO usar cab2?.dDtPrevisao — é "dia seguinte" ao pedido (default Omie)
   const nCodFornecedor = cab?.nCodFornecedor ?? cab2?.nCodFor ?? null;
   const cEtapa        = cab?.cEtapa        ?? cab2?.cEtapa;
 

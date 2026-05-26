@@ -802,9 +802,10 @@ export async function listPedidosCompraPage(
     creds,
     {
       nPagina:                   pagina,
-      nRegsPorPagina:            Math.min(registrosPorPagina, 50), // 50 por página conforme API
-      lApenasImportadoApi:       "F",  // F → inclui pedidos criados manualmente
-      lApenasAlterados:          "F",  // F → trazer TODOS (não só alterados recentemente)
+      nRegsPorPagina:            Math.min(registrosPorPagina, 50),
+      // "N" = não filtrar por origem (inclui criados manualmente e via API)
+      lApenasImportadoApi:       "N",
+      // Exibir todos os status — sem lApenasAlterados (flag extra que pode excluir registros)
       lExibirPedidosPendentes:   "T",
       lExibirPedidosFaturados:   "T",
       lExibirPedidosRecebidos:   "T",
@@ -812,8 +813,8 @@ export async function listPedidosCompraPage(
       lExibirPedidosEncerrados:  "T",
       lExibirPedidosRecParciais: "T",
       lExibirPedidosFatParciais: "T",
-      dDataInicial:              formatOmieDate(inicio), // DD/MM/YYYY — 2 anos atrás
-      dDataFinal:                formatOmieDate(hoje),   // DD/MM/YYYY — hoje
+      dDataInicial:              formatOmieDate(inicio),
+      dDataFinal:                formatOmieDate(hoje),
     },
   );
 }
