@@ -588,17 +588,19 @@ export async function criarPedidoCompra(
 export interface OmiePesquisarPedCompraParam {
   nPagina: number;
   nRegsPorPagina: number;
-  // Filtros obrigatórios para exibir TODOS os pedidos independente de status
-  // "F" = falso/não; "T" = todos/sim
-  lApenasImportadoApi?:        "S" | "N" | "F" | "T"; // "F" = incluir todos (não só API)
-  lExibirPedidosPendentes?:    "S" | "N" | "T" | "F"; // "T" = exibir pendentes
-  lExibirPedidosFaturados?:    "S" | "N" | "T" | "F"; // "T" = exibir faturados
-  lExibirPedidosRecebidos?:    "S" | "N" | "T" | "F"; // "T" = exibir recebidos
-  lExibirPedidosCancelados?:   "S" | "N" | "T" | "F"; // "T" = exibir cancelados
-  lExibirPedidosEncerrados?:   "S" | "N" | "T" | "F"; // "T" = exibir encerrados
-  lExibirPedidosRecParciais?:  "S" | "N" | "T" | "F"; // "T" = exibir recebimentos parciais
-  lExibirPedidosFatParciais?:  "S" | "N" | "T" | "F"; // "T" = exibir faturamentos parciais
-  lApenasAlterados?:           "S" | "N" | "F" | "T"; // "F" = trazer TODOS (não só alterados)
+  // Filtros de status — "F"=não/falso; "T"=todos/sim
+  lApenasImportadoApi?:        "S" | "N" | "F" | "T";
+  lExibirPedidosPendentes?:    "S" | "N" | "T" | "F";
+  lExibirPedidosFaturados?:    "S" | "N" | "T" | "F";
+  lExibirPedidosRecebidos?:    "S" | "N" | "T" | "F";
+  lExibirPedidosCancelados?:   "S" | "N" | "T" | "F";
+  lExibirPedidosEncerrados?:   "S" | "N" | "T" | "F";
+  lExibirPedidosRecParciais?:  "S" | "N" | "T" | "F";
+  lExibirPedidosFatParciais?:  "S" | "N" | "T" | "F";
+  lApenasAlterados?:           "S" | "N" | "F" | "T";
+  // Filtro por período (DD/MM/YYYY) — obrigatório para retornar registros
+  dDataInicial?: string;
+  dDataFinal?:   string;
 }
 
 export interface OmiePedidoCompraListItem {
@@ -644,35 +646,50 @@ export interface OmieListarPedidosResponse {
   pedido?:               OmiePedidoCompraListItem[];
 }
 
+/** Formata uma Date em DD/MM/YYYY (formato Omie). */
+function formatOmieDate(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 /**
  * Busca uma página de pedidos de compra no Omie.
  *
  * Endpoint: /produtos/pedidocompra/ — call: PesquisarPedCompra
- * Parâmetros corretos: nPagina, nRegsPorPagina (máx 100), lApenasImportadoApi: "N"
+ * Filtra pelos últimos 7 dias (dDataInicial/dDataFinal) para garantir retorno.
  *
  * ⚠️ NÃO usar /compras/pedidocompras/ — requer módulo Compras (plano pago separado).
  */
 export async function listPedidosCompraPage(
   creds: OmieCredentials,
   pagina: number,
-  registrosPorPagina = 100,
+  registrosPorPagina = 50,
 ): Promise<OmieListarPedidosResponse> {
+  // Janela de 7 dias: dDataInicial = hoje-7, dDataFinal = hoje
+  const hoje   = new Date();
+  const inicio = new Date(hoje);
+  inicio.setDate(hoje.getDate() - 7);
+
   return omiePost<OmiePesquisarPedCompraParam, OmieListarPedidosResponse>(
     "/produtos/pedidocompra/",
     "PesquisarPedCompra",
     creds,
     {
       nPagina:                   pagina,
-      nRegsPorPagina:            Math.min(registrosPorPagina, 100), // máx 100 por página
-      lApenasImportadoApi:       "F",  // F=falso → inclui pedidos criados manualmente
-      lApenasAlterados:          "F",  // F=falso → trazer TODOS (não só alterados recentemente)
-      lExibirPedidosPendentes:   "T",  // T → exibir pendentes
-      lExibirPedidosFaturados:   "T",  // T → exibir faturados
-      lExibirPedidosRecebidos:   "T",  // T → exibir recebidos
-      lExibirPedidosCancelados:  "T",  // T → exibir cancelados
-      lExibirPedidosEncerrados:  "T",  // T → exibir encerrados
-      lExibirPedidosRecParciais: "T",  // T → exibir recebimentos parciais
-      lExibirPedidosFatParciais: "T",  // T → exibir faturamentos parciais
+      nRegsPorPagina:            Math.min(registrosPorPagina, 50), // 50 por página conforme API
+      lApenasImportadoApi:       "F",  // F → inclui pedidos criados manualmente
+      lApenasAlterados:          "F",  // F → trazer TODOS (não só alterados recentemente)
+      lExibirPedidosPendentes:   "T",
+      lExibirPedidosFaturados:   "T",
+      lExibirPedidosRecebidos:   "T",
+      lExibirPedidosCancelados:  "T",
+      lExibirPedidosEncerrados:  "T",
+      lExibirPedidosRecParciais: "T",
+      lExibirPedidosFatParciais: "T",
+      dDataInicial:              formatOmieDate(inicio), // DD/MM/YYYY
+      dDataFinal:                formatOmieDate(hoje),   // DD/MM/YYYY
     },
   );
 }
