@@ -695,7 +695,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     }
   }
 
-  // ── Sync por filtro individual (diagnóstico) ─────────────────────────────────
+  // ── Contagem rápida por filtro (1 chamada API, sem sync no banco) ────────────
   async function handleFiltroSync(filtro: string) {
     if (syncing || filtroSyncing[filtro]) return;
     setFiltroSyncing(prev => ({ ...prev, [filtro]: true }));
@@ -703,19 +703,16 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       const res  = await fetch("/api/omie/sync-pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filtro }),
+        body: JSON.stringify({ filtro, contarApenas: true }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(`Erro ao sincronizar ${filtro}: ${data?.error ?? res.status}`);
+        toast.error(`Erro ao contar ${filtro}: ${data?.error ?? res.status}`);
         return;
       }
-      type SyncRes = { detalhe?: { totalRegistrosOmie?: number } };
-      const r = (data.results as SyncRes[] | undefined)?.[0];
-      const total = r?.detalhe?.totalRegistrosOmie ?? 0;
+      type CountRes = { total: number };
+      const total = (data.counts as CountRes[] | undefined)?.[0]?.total ?? 0;
       setFiltroSyncCounts(prev => ({ ...prev, [filtro]: total }));
-      toast.success(`${filtro}: ${total} registro${total !== 1 ? "s" : ""} no Omie`);
-      router.refresh();
     } catch (err) {
       toast.error(`Erro: ${err instanceof Error ? err.message : "desconhecido"}`);
     } finally {

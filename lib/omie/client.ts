@@ -855,6 +855,24 @@ export async function listPedidosCompraPage(
 }
 
 /**
+ * Retorna apenas a contagem total de pedidos do Omie para um filtro.
+ * Faz UMA única chamada à API (página 1, 1 registro) e lê nTotalRegistros.
+ * Muito mais rápido que iterar todas as páginas — use para diagnóstico.
+ */
+export async function countPedidosCompra(
+  creds: OmieCredentials,
+  filtro: OmiePedidoFiltro = "todos",
+): Promise<number> {
+  const res = await listPedidosCompraPage(creds, 1, 1, filtro);
+  return (
+    res.nTotalRegistros ??
+    res.nTotRegistros ??
+    res.total_de_registros ??
+    0
+  );
+}
+
+/**
  * Itera todas as páginas de pedidos de compra do Omie.
  */
 export async function listAllPedidosCompra(

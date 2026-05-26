@@ -15,6 +15,7 @@ import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { syncPedidosCompra } from "@/lib/omie/sync";
+import { countPedidosCompra } from "@/lib/omie/client";
 import type { OmieCredentials, OmiePedidoFiltro } from "@/lib/omie/client";
 import type { SyncResult } from "@/lib/omie/sync";
 
@@ -62,22 +63,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 
-  // Lê o filtro de status do body (opcional — padrão "todos")
+  // Lê o filtro e flag contarApenas do body
   let filtro: OmiePedidoFiltro = "todos";
+  let contarApenas = false;
   try {
     const body = await req.json().catch(() => ({}));
     const f = body?.filtro as string | undefined;
-    if (f && FILTROS_VALIDOS.includes(f as OmiePedidoFiltro)) {
-      filtro = f as OmiePedidoFiltro;
-    }
+    if (f && FILTROS_VALIDOS.includes(f as OmiePedidoFiltro)) filtro = f as OmiePedidoFiltro;
+    if (body?.contarApenas === true) contarApenas = true;
   } catch { /* body vazio ou não-JSON */ }
 
   // Respeita a unidade ativa na sidebar (cookie lhg-unidade-slug)
   const cookieStore = await cookies();
   const slug = cookieStore.get("lhg-unidade-slug")?.value ?? null;
+
+  // Modo contarApenas: 1 chamada por unidade, sem sync no banco
+  if (contarApenas) {
+    return runCount(tag, slug && slug !== "todas" ? slug : null, filtro);
+  }
+
   const filtroDesc = slug && slug !== "todas" ? `unidade="${slug}"` : "todas as unidades";
   console.log(`${tag} Sync manual iniciado — ${filtroDesc} filtro=${filtro}`);
   return runSync(tag, slug && slug !== "todas" ? slug : null, filtro);
+}
+
+// ── Lógica de contagem rápida (sem sync) ──────────────────────────────────────
+
+async function runCount(tag: string, slug: string | null, filtro: OmiePedidoFiltro) {
+  const supabase = createServiceClient();
+
+  let query = supabase
+    .from("unidades")
+    .select("id, nome, slug, omie_app_key, omie_app_secret")
+    .eq("ativa", true)
+    .not("omie_app_key", "is", null)
+    .not("omie_app_secret", "is", null);
+  if (slug) query = query.eq("slug", slug);
+
+  const { data: unidades, error } = await query;
+  if (error || !unidades?.length) {
+    return NextResponse.json({ ok: false, error: error?.message ?? "Nenhuma unidade." }, { status: 400 });
+  }
+
+  const counts: { unidade: string; filtro: string; total: number }[] = [];
+  for (const unidade of unidades) {
+    const creds: OmieCredentials = {
+      appKey:    unidade.omie_app_key as string,
+      appSecret: unidade.omie_app_secret as string,
+    };
+    try {
+      const total = await countPedidosCompra(creds, filtro);
+      counts.push({ unidade: unidade.nome, filtro, total });
+      console.log(`${tag} contarApenas filtro=${filtro} unidade=${unidade.nome} total=${total}`);
+    } catch (err) {
+      counts.push({ unidade: unidade.nome, filtro, total: 0 });
+      console.error(`${tag} Erro ao contar filtro=${filtro} unidade=${unidade.nome}:`, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return NextResponse.json({ ok: true, counts });
 }
 
 // ── Lógica de sync ────────────────────────────────────────────────────────────
