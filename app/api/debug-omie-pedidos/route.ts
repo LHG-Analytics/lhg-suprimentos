@@ -45,45 +45,72 @@ export async function GET(_req: NextRequest) {
     appSecret: unidade.omie_app_secret as string,
   };
 
-  try {
-    const raw = await omiePost<Record<string, unknown>, Record<string, unknown>>(
-      "/produtos/pedidocompra/",
-      "PesquisarPedCompra",
-      creds,
-      // Parâmetros corretos do PesquisarPedCompra: nPagina, nRegsPorPagina, lApenasImportadoApi
-      // Usa página 2 (max 2 registros) para evitar REDUNDANT com o sync (que usa página 1, 100 registros)
-      { nPagina: 2, nRegsPorPagina: 2, lApenasImportadoApi: "N" } as Record<string, unknown>,
-    );
-
-    // Mapeia todas as chaves da resposta
-    const keysInfo = Object.entries(raw).reduce<Record<string, unknown>>((acc, [k, v]) => {
-      acc[k] = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : v;
-      return acc;
-    }, {});
-
-    // Detecta o campo que contém os pedidos (qualquer array de objetos)
-    let campoDetectado = "NENHUM";
-    let primeiroPedido: unknown = null;
-    for (const [k, v] of Object.entries(raw)) {
-      if (Array.isArray(v) && v.length > 0 && typeof v[0] === "object") {
-        campoDetectado = k;
-        primeiroPedido = v[0];
-        break;
-      }
+  // Testa DOIS cenários lado a lado para diagnóstico:
+  // A) Sem filtros lExibir (comportamento antigo, página 3 para evitar REDUNDANT)
+  // B) Com filtros lExibir "T" (comportamento novo, página 4)
+  async function chamarOmie(nPagina: number, comFiltros: boolean) {
+    const params: Record<string, unknown> = {
+      nPagina,
+      nRegsPorPagina: 3,
+      lApenasImportadoApi: "F",
+      lApenasAlterados:    "F",
+    };
+    if (comFiltros) {
+      params.lExibirPedidosPendentes   = "T";
+      params.lExibirPedidosFaturados   = "T";
+      params.lExibirPedidosRecebidos   = "T";
+      params.lExibirPedidosCancelados  = "T";
+      params.lExibirPedidosEncerrados  = "T";
+      params.lExibirPedidosRecParciais = "T";
+      params.lExibirPedidosFatParciais = "T";
     }
+    try {
+      const raw = await omiePost<Record<string, unknown>, Record<string, unknown>>(
+        "/produtos/pedidocompra/", "PesquisarPedCompra", creds, params,
+      );
+      const keysInfo = Object.entries(raw).reduce<Record<string, unknown>>((acc, [k, v]) => {
+        acc[k] = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : v;
+        return acc;
+      }, {});
+      let campoDetectado = "NENHUM";
+      let primeiroPedido: unknown = null;
+      for (const [k, v] of Object.entries(raw)) {
+        if (Array.isArray(v) && v.length > 0 && typeof v[0] === "object") {
+          campoDetectado = k; primeiroPedido = v[0]; break;
+        }
+      }
+      return {
+        ok: true,
+        params_enviados: params,
+        paginacao: {
+          nPagina:         raw.nPagina,
+          nTotPaginas:     raw.nTotPaginas,
+          nTotRegistros:   raw.nTotRegistros,
+          total_de_paginas:   raw.total_de_paginas,
+          total_de_registros: raw.total_de_registros,
+        },
+        campo_detectado: campoDetectado,
+        todas_as_chaves: keysInfo,
+        primeiro_item: primeiroPedido,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, params_enviados: params, erro: msg };
+    }
+  }
+
+  try {
+    const [semFiltros, comFiltros] = await Promise.all([
+      chamarOmie(3, false),
+      chamarOmie(4, true),
+    ]);
 
     return NextResponse.json({
       ok: true,
       unidade: { nome: unidade.nome, slug: unidade.slug },
       slug_cookie: slug,
-      paginacao: {
-        total_de_paginas:   raw.total_de_paginas,
-        total_de_registros: raw.total_de_registros,
-        registros:          raw.registros,
-      },
-      campo_detectado: campoDetectado,
-      todas_as_chaves: keysInfo,
-      primeiro_item: primeiroPedido,
+      cenario_A_sem_filtros_lExibir: semFiltros,
+      cenario_B_com_filtros_lExibir_T: comFiltros,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

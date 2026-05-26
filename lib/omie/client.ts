@@ -588,12 +588,17 @@ export async function criarPedidoCompra(
 export interface OmiePesquisarPedCompraParam {
   nPagina: number;
   nRegsPorPagina: number;
-  // Filtros obrigatórios para exibir todos os pedidos independente de status
-  lApenasImportadoApi?:      "S" | "N" | "F" | "T"; // "F"/"N"=todos, "T"/"S"=só API
-  lExibirPedidosPendentes?:  "S" | "N" | "T" | "F"; // "T"=sim
-  lExibirPedidosFaturados?:  "S" | "N" | "T" | "F"; // "T"=sim
-  lExibirPedidosCancelados?: "S" | "N" | "T" | "F"; // "T"=sim
-  lExibirPedidosEncerrados?: "S" | "N" | "T" | "F"; // "T"=sim
+  // Filtros obrigatórios para exibir TODOS os pedidos independente de status
+  // "F" = falso/não; "T" = todos/sim
+  lApenasImportadoApi?:        "S" | "N" | "F" | "T"; // "F" = incluir todos (não só API)
+  lExibirPedidosPendentes?:    "S" | "N" | "T" | "F"; // "T" = exibir pendentes
+  lExibirPedidosFaturados?:    "S" | "N" | "T" | "F"; // "T" = exibir faturados
+  lExibirPedidosRecebidos?:    "S" | "N" | "T" | "F"; // "T" = exibir recebidos
+  lExibirPedidosCancelados?:   "S" | "N" | "T" | "F"; // "T" = exibir cancelados
+  lExibirPedidosEncerrados?:   "S" | "N" | "T" | "F"; // "T" = exibir encerrados
+  lExibirPedidosRecParciais?:  "S" | "N" | "T" | "F"; // "T" = exibir recebimentos parciais
+  lExibirPedidosFatParciais?:  "S" | "N" | "T" | "F"; // "T" = exibir faturamentos parciais
+  lApenasAlterados?:           "S" | "N" | "F" | "T"; // "F" = trazer TODOS (não só alterados)
 }
 
 export interface OmiePedidoCompraListItem {
@@ -657,13 +662,17 @@ export async function listPedidosCompraPage(
     "PesquisarPedCompra",
     creds,
     {
-      nPagina:                  pagina,
-      nRegsPorPagina:           Math.min(registrosPorPagina, 100), // máx 100 por página
-      lApenasImportadoApi:      "F",  // "F"=falso → inclui pedidos criados manualmente (não só via API)
-      lExibirPedidosPendentes:  "T",  // T=sim → exibir pendentes
-      lExibirPedidosFaturados:  "T",  // T=sim → exibir faturados
-      lExibirPedidosCancelados: "T",  // T=sim → exibir cancelados
-      lExibirPedidosEncerrados: "T",  // T=sim → exibir encerrados
+      nPagina:                   pagina,
+      nRegsPorPagina:            Math.min(registrosPorPagina, 100), // máx 100 por página
+      lApenasImportadoApi:       "F",  // F=falso → inclui pedidos criados manualmente
+      lApenasAlterados:          "F",  // F=falso → trazer TODOS (não só alterados recentemente)
+      lExibirPedidosPendentes:   "T",  // T → exibir pendentes
+      lExibirPedidosFaturados:   "T",  // T → exibir faturados
+      lExibirPedidosRecebidos:   "T",  // T → exibir recebidos
+      lExibirPedidosCancelados:  "T",  // T → exibir cancelados
+      lExibirPedidosEncerrados:  "T",  // T → exibir encerrados
+      lExibirPedidosRecParciais: "T",  // T → exibir recebimentos parciais
+      lExibirPedidosFatParciais: "T",  // T → exibir faturamentos parciais
     },
   );
 }
@@ -684,7 +693,11 @@ export async function listAllPedidosCompra(
     try {
       res = await listPedidosCompraPage(creds, pagina);
     } catch (err) {
-      if (isOmieEmptyError(err)) break;
+      if (isOmieEmptyError(err)) {
+        // Omie devolveu "Não existem registros" — conta não tem pedidos com esses filtros
+        console.warn(`[omie/client] PesquisarPedCompra página ${pagina}: resposta "sem registros" — encerrando paginação. Mensagem: ${err instanceof OmieError ? err.message : String(err)}`);
+        break;
+      }
       // REDUNDANT: Omie bloqueia chamadas < 60s. Aguarda e tenta de novo (1x).
       if (err instanceof OmieError && err.message.toUpperCase().includes("REDUNDANT")) {
         console.warn("[omie/client] REDUNDANT detectado — aguardando 65s antes de tentar de novo…");
@@ -692,9 +705,11 @@ export async function listAllPedidosCompra(
         try {
           res = await listPedidosCompraPage(creds, pagina);
         } catch (err2) {
+          console.error("[omie/client] Retry após REDUNDANT também falhou:", err2 instanceof Error ? err2.message : String(err2));
           throw err2;
         }
       } else {
+        console.error(`[omie/client] PesquisarPedCompra erro inesperado página ${pagina}:`, err instanceof Error ? err.message : String(err));
         throw err;
       }
     }
@@ -702,6 +717,14 @@ export async function listAllPedidosCompra(
     // PesquisarPedCompra usa nTotPaginas; fallback para total_de_paginas (legado)
     totalPaginas = res.nTotPaginas ?? res.total_de_paginas ?? 1;
     const totalRegistros = res.nTotRegistros ?? res.total_de_registros ?? 0;
+
+    // Log da paginação sempre (diagnóstico)
+    const resRaw = res as unknown as Record<string, unknown>;
+    console.log(
+      `[omie/client] PesquisarPedCompra página ${pagina}/${totalPaginas}:` +
+      ` nTotRegistros=${totalRegistros}` +
+      ` chaves=${Object.keys(resRaw).join(",")}`,
+    );
 
     // Tenta campos conhecidos primeiro
     let items: OmiePedidoCompraListItem[] =
@@ -715,7 +738,6 @@ export async function listAllPedidosCompra(
 
     // Fallback dinâmico: varre TODOS os campos buscando o primeiro array de objetos
     // (resistente a mudanças de nome de campo no Omie)
-    const resRaw = res as unknown as Record<string, unknown>;
     if (items.length === 0 && totalRegistros > 0) {
       for (const [key, val] of Object.entries(resRaw)) {
         if (
@@ -724,7 +746,7 @@ export async function listAllPedidosCompra(
           typeof val[0] === "object" &&
           val[0] !== null
         ) {
-          console.log(`[omie/client] PesquisarPedCompra: itens em campo "${key}" (${val.length})`);
+          console.log(`[omie/client] PesquisarPedCompra: itens encontrados no campo "${key}" (${val.length})`);
           items = val as OmiePedidoCompraListItem[];
           break;
         }
@@ -732,7 +754,7 @@ export async function listAllPedidosCompra(
       if (items.length === 0) {
         console.warn(
           `[omie/client] PesquisarPedCompra: ${totalRegistros} registros no Omie mas nenhum array encontrado.` +
-          ` Chaves: ${Object.keys(resRaw).join(", ")}`,
+          ` Resposta completa: ${JSON.stringify(res)}`,
         );
       }
     }
