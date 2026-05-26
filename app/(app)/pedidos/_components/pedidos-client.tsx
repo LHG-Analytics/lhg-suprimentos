@@ -673,6 +673,11 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
   // ── Sync por filtro: navega imediatamente, sincroniza em background ──────────
   async function handleFiltroSync(filtro: FiltroOmie) {
     if (filtroSyncing[filtro]) return;
+    // Se já é o filtro ativo, só atualiza do banco sem chamar o Omie
+    if (filtro === filtroAtivo) {
+      router.refresh();
+      return;
+    }
     // 1. Navega imediatamente (mostra dados já no banco para esse filtro)
     router.push(`/pedidos?filtro=${filtro}`);
     // 2. Sincroniza em background
@@ -850,18 +855,33 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
       </div>
 
 
+      {/* ── Resumo ───────────────────────────────────────────────────────────── */}
+      {rows.length > 0 && (
+        <div className="flex items-center gap-3 px-1 text-[12px] text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground tabular-nums">{rows.length}</span>
+            {" "}pedido{rows.length !== 1 ? "s" : ""}
+          </span>
+          <span className="text-border/60">·</span>
+          <span>
+            Custo total:{" "}
+            <span className="font-mono font-semibold text-foreground">
+              {formatBRL(rows.reduce((s, r) => s + (r.kind === "lhg" ? r.data.valor_total : (r.data.valor_total ?? 0)), 0))}
+            </span>
+          </span>
+        </div>
+      )}
+
       {/* ── Tabela ───────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
 
         {/* Header da tabela */}
-        <div className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3 border-b border-border/80">
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PEDIDO</div>
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FORNECEDOR / ITENS</div>
           <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA DA COMPRA</div>
           <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO ENTREGA</div>
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">CUSTO</div>
-          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">STATUS / ETAPA</div>
-          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FONTE</div>
         </div>
 
         {/* Linhas */}
@@ -885,7 +905,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
                   <li
                     key={`lhg-${p.id}`}
                     onClick={() => setSelectedLhg(p)}
-                    className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                    className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
                   >
                     {/* Pedido # */}
                     <div className="font-mono text-[11px] text-muted-foreground truncate">{p.numero}</div>
@@ -925,31 +945,16 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
                     <div className="font-mono text-sm font-semibold text-foreground">
                       {formatBRL(p.valor_total)}
                     </div>
-
-                    {/* Status */}
-                    <div>
-                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1", st.color)}>
-                        {st.icon}{st.label}
-                      </span>
-                    </div>
-
-                    {/* Fonte */}
-                    <div className="hidden md:block">
-                      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20">
-                        LHG
-                      </span>
-                    </div>
                   </li>
                 );
               } else {
                 // Omie
                 const p = row.data;
-                const etapaCor = omieSituacaoColor(p.etapa ?? p.situacao);
                 return (
                   <li
                     key={`omie-${p.id}`}
                     onClick={() => setSelectedOmie(p)}
-                    className="grid grid-cols-[80px_1fr_120px_1fr_56px] md:grid-cols-[80px_2fr_96px_96px_130px_1fr_72px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
+                    className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
                   >
                     {/* Pedido # */}
                     <div className="font-mono text-[11px] text-muted-foreground truncate">
@@ -986,24 +991,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
                     <div className="font-mono text-sm font-semibold text-foreground">
                       {p.valor_total !== null ? formatBRL(p.valor_total) : "—"}
                     </div>
-
-                    {/* Etapa */}
-                    <div>
-                      {(p.etapa ?? p.situacao) ? (
-                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1", etapaCor)}>
-                          {p.etapa ?? p.situacao}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground/40">—</span>
-                      )}
-                    </div>
-
-                    {/* Fonte */}
-                    <div className="hidden md:block">
-                      <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">
-                        <Sparkles size={7} />Omie
-                      </span>
-                    </div>
                   </li>
                 );
               }
@@ -1011,41 +998,26 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
           </ul>
         )}
 
-        {/* Footer com contagem + paginação */}
-        {rows.length > 0 && (
-          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between gap-4">
-            <span className="text-[12px] text-muted-foreground/60">
-              {rows.length === pedidosIniciais.length + omie_pedidos.length
-                ? `${rows.length} pedido${rows.length !== 1 ? "s" : ""} no total`
-                : `${rows.length} de ${pedidosIniciais.length + omie_pedidos.length} filtrado${rows.length !== 1 ? "s" : ""}`}
+        {/* Paginação */}
+        {rows.length > 0 && totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-[12px] text-muted-foreground/80 font-mono tabular-nums">
+              {page + 1} / {totalPages}
             </span>
-
-            {/* Controles de página */}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="text-[12px] text-muted-foreground/80 font-mono tabular-nums">
-                  {page + 1} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            )}
-
-            <span className="text-[11px] text-muted-foreground/40 hidden sm:block">
-              Clique em uma linha para ver os detalhes
-            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         )}
       </div>
