@@ -98,32 +98,36 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
   // Reset de página quando filtros mudam
   useEffect(() => { setPage(0); }, [query, filtroChip]);
 
+  const q = query.toLowerCase().trim();
+
+  // Chip filter — sempre aplicado
+  const chipFiltered = useMemo(() => fornecedores.filter((f) => {
+    if (filtroChip === "ativos"    && !f.ativo)  return false;
+    if (filtroChip === "inativos"  && f.ativo)   return false;
+    if (filtroChip === "com_email" && !f.email)  return false;
+    if (filtroChip === "sem_email" && !!f.email) return false;
+    return true;
+  }), [fornecedores, filtroChip]);
+
+  // Busca textual — só ativa com 2+ caracteres (1 letra sozinha é comum demais)
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
-
-    return fornecedores.filter((f) => {
-      // Filtro por chip — espelha parâmetros da API Omie
-      if (filtroChip === "ativos"    && !f.ativo)       return false;  // inativo: "N"
-      if (filtroChip === "inativos"  && f.ativo)        return false;  // inativo: "S"
-      if (filtroChip === "com_email" && !f.email)       return false;
-      if (filtroChip === "sem_email" && !!f.email)      return false;
-
-      // Filtro de busca textual
-      if (!q) return true;
-      return (
-        f.razao_social.toLowerCase().includes(q) ||
-        (f.nome_fantasia ?? "").toLowerCase().includes(q) ||
-        f.cnpj.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
-        (f.cidade ?? "").toLowerCase().includes(q) ||
-        (f.email ?? "").toLowerCase().includes(q) ||
-        (f.telefone ?? "").toLowerCase().includes(q) ||
-        (f.contato ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [fornecedores, query, filtroChip]);
+    if (q.length < 2) return chipFiltered;
+    return chipFiltered.filter((f) =>
+      f.razao_social.toLowerCase().includes(q) ||
+      (f.nome_fantasia ?? "").toLowerCase().includes(q) ||
+      f.cnpj.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
+      (f.cidade ?? "").toLowerCase().includes(q) ||
+      (f.email ?? "").toLowerCase().includes(q) ||
+      (f.telefone ?? "").toLowerCase().includes(q) ||
+      (f.contato ?? "").toLowerCase().includes(q)
+    );
+  }, [chipFiltered, q]);
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const buscaAtiva  = q.length >= 2;
+  const buscaCurta  = q.length === 1;
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -159,29 +163,51 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
       </div>
 
       {/* ── Busca ───────────────────────────────────────────────────────── */}
-      <div className="relative">
-        <Search
-          size={14}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-        />
-        <input
-          type="text"
-          placeholder="Buscar por nome, CNPJ, cidade ou e-mail…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={cn(
-            "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5",
-            "text-sm text-foreground placeholder:text-muted-foreground/50",
-            "focus:outline-none focus:border-border focus:ring-0 transition-colors",
+      <div className="space-y-1.5">
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          />
+          <input
+            type="text"
+            placeholder="Buscar por nome, CNPJ, cidade ou e-mail…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={cn(
+              "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 transition-colors",
+              "text-sm text-foreground placeholder:text-muted-foreground/50",
+              "focus:outline-none focus:ring-0",
+              buscaAtiva
+                ? "border-emerald-500/40 pr-28"
+                : "border-border pr-9",
+            )}
+          />
+          {/* Badge de resultado — aparece ao buscar */}
+          {buscaAtiva && (
+            <span className={cn(
+              "absolute right-8 top-1/2 -translate-y-1/2 text-[11px] font-mono px-2 py-0.5 rounded-full",
+              filtered.length === 0
+                ? "bg-red-500/10 text-red-400"
+                : "bg-emerald-500/10 text-emerald-400",
+            )}>
+              {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+            </span>
           )}
-        />
-        {query && (
-          <button
-            onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs"
-          >
-            ✕
-          </button>
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {/* Dica quando só tem 1 caractere */}
+        {buscaCurta && (
+          <p className="text-[11px] text-muted-foreground/60 pl-1">
+            Digite mais um caractere para buscar…
+          </p>
         )}
       </div>
 
@@ -234,11 +260,21 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Building2 size={28} className="text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              {query || filtroChip !== "todos"
-                ? "Nenhum fornecedor para os filtros selecionados"
-                : "Nenhum fornecedor cadastrado"}
+              {buscaAtiva
+                ? `Nenhum fornecedor encontrado para "${query.trim()}"`
+                : filtroChip !== "todos"
+                  ? "Nenhum fornecedor para o filtro selecionado"
+                  : "Nenhum fornecedor cadastrado"}
             </p>
-            {!query && filtroChip === "todos" && (
+            {buscaAtiva && (
+              <button
+                onClick={() => setQuery("")}
+                className="text-xs text-emerald-400/70 hover:text-emerald-400 transition-colors"
+              >
+                Limpar busca
+              </button>
+            )}
+            {!buscaAtiva && filtroChip === "todos" && (
               <p className="text-xs text-muted-foreground/60">
                 Clique em &quot;Sincronizar Omie&quot; para importar
               </p>

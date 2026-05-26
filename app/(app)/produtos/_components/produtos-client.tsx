@@ -103,24 +103,32 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
     return Array.from(set).sort();
   }, [produtos]);
 
+  const q = query.toLowerCase().trim();
+
+  // Filtro por categoria/família — sempre aplicado
+  const chipFiltered = useMemo(() => produtos.filter((p) => {
+    if (categoria !== "todas" && p.categoria !== categoria) return false;
+    if (familia   !== "todas" && p.familia_omie !== familia) return false;
+    return true;
+  }), [produtos, categoria, familia]);
+
+  // Busca textual — só ativa com 2+ caracteres
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    return produtos.filter((p) => {
-      if (categoria !== "todas" && p.categoria !== categoria) return false;
-      if (familia   !== "todas" && p.familia_omie !== familia) return false;
-      if (!q) return true;
-      return (
-        p.nome.toLowerCase().includes(q) ||
-        p.codigo.toLowerCase().includes(q) ||
-        p.categoria.toLowerCase().includes(q) ||
-        (p.familia_omie ?? "").toLowerCase().includes(q) ||
-        p.unidade_med.toLowerCase().includes(q)
-      );
-    });
-  }, [produtos, query, categoria, familia]);
+    if (q.length < 2) return chipFiltered;
+    return chipFiltered.filter((p) =>
+      p.nome.toLowerCase().includes(q) ||
+      p.codigo.toLowerCase().includes(q) ||
+      p.categoria.toLowerCase().includes(q) ||
+      (p.familia_omie ?? "").toLowerCase().includes(q) ||
+      p.unidade_med.toLowerCase().includes(q)
+    );
+  }, [chipFiltered, q]);
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const buscaAtiva  = q.length >= 2;
+  const buscaCurta  = q.length === 1;
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -157,29 +165,47 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
       {/* ── Busca + Filtros ─────────────────────────────────────────────── */}
       <div className="flex gap-2 flex-wrap">
         {/* Campo de busca */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search
-            size={14}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-          />
-          <input
-            type="text"
-            placeholder="Buscar por nome, código, família ou unidade…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className={cn(
-              "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5",
-              "text-sm text-foreground placeholder:text-muted-foreground/50",
-              "focus:outline-none focus:border-border focus:ring-0 transition-colors",
+        <div className="flex-1 min-w-[200px] space-y-1">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Buscar por nome, código, família ou unidade…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className={cn(
+                "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 transition-colors",
+                "text-sm text-foreground placeholder:text-muted-foreground/50",
+                "focus:outline-none focus:ring-0",
+                buscaAtiva ? "border-emerald-500/40 pr-28" : "border-border pr-9",
+              )}
+            />
+            {buscaAtiva && (
+              <span className={cn(
+                "absolute right-8 top-1/2 -translate-y-1/2 text-[11px] font-mono px-2 py-0.5 rounded-full",
+                filtered.length === 0
+                  ? "bg-red-500/10 text-red-400"
+                  : "bg-emerald-500/10 text-emerald-400",
+              )}>
+                {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+              </span>
             )}
-          />
-          {query && (
-            <button
-              onClick={() => setQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs"
-            >
-              ✕
-            </button>
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {buscaCurta && (
+            <p className="text-[11px] text-muted-foreground/60 pl-1">
+              Digite mais um caractere para buscar…
+            </p>
           )}
         </div>
 

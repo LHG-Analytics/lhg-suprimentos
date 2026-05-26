@@ -749,8 +749,13 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   type RowOmie = { kind: "omie"; data: OmiePedido }
   type Row = RowLhg | RowOmie;
 
+  const buscaQ     = busca.toLowerCase().trim();
+  const buscaAtiva = buscaQ.length >= 2;
+  const buscaCurta = buscaQ.length === 1;
+
   const rows = useMemo<Row[]>(() => {
-    const q = busca.toLowerCase().trim();
+    // Busca textual só ativa com 2+ caracteres
+    const q = buscaQ.length >= 2 ? buscaQ : "";
 
     const lhgRows: RowLhg[] = pedidosIniciais
       .filter(p => {
@@ -787,7 +792,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
       return dateB - dateA;
     });
-  }, [pedidosIniciais, omie_pedidos, filtro, omieStatusFiltro, busca]);
+  }, [pedidosIniciais, omie_pedidos, filtro, omieStatusFiltro, buscaQ]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
@@ -850,17 +855,38 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       </div>
 
       {/* ── Busca ────────────────────────────────────────────────────────────── */}
-      <div className="relative">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Buscar por número, fornecedor, cotação…"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          className="w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-border focus:ring-0 transition-colors"
-        />
-        {busca && (
-          <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground text-xs">✕</button>
+      <div className="space-y-1.5">
+        <div className="relative">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar por número, fornecedor, cotação…"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            className={cn(
+              "w-full rounded-lg border bg-muted/60 pl-9 py-2.5 text-sm text-foreground",
+              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 transition-colors",
+              buscaAtiva ? "border-emerald-500/40 pr-28" : "border-border pr-9",
+            )}
+          />
+          {buscaAtiva && (
+            <span className={cn(
+              "absolute right-8 top-1/2 -translate-y-1/2 text-[11px] font-mono px-2 py-0.5 rounded-full",
+              rows.length === 0
+                ? "bg-red-500/10 text-red-400"
+                : "bg-emerald-500/10 text-emerald-400",
+            )}>
+              {rows.length} resultado{rows.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          {busca && (
+            <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs">✕</button>
+          )}
+        </div>
+        {buscaCurta && (
+          <p className="text-[11px] text-muted-foreground/60 pl-1">
+            Digite mais um caractere para buscar…
+          </p>
         )}
       </div>
 
