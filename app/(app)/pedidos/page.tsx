@@ -72,6 +72,9 @@ export default async function PedidosPage({
   }
 
   // Query de omie_pedidos filtrada pela unidade ativa E pelo filtro de status
+  // Nota: filtro_omie foi adicionado pela migration 0017 e ainda não está nos
+  // tipos gerados pelo Supabase — chamamos .eq() depois da atribuição any
+  // para evitar erro de TypeScript no build.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let omieQuery: any = supabase
     .from("omie_pedidos_compra")
@@ -81,9 +84,10 @@ export default async function PedidosPage({
       etapa, numero_pedido_forn, filtro_omie, omie_sincronizado_em, unidade_id,
       unidades(nome, slug)
     `)
-    .eq("filtro_omie", filtroAtivo)
     .order("numero", { ascending: false });
 
+  // filtro_omie: chamado sobre `any` para contornar tipos desatualizados
+  omieQuery = omieQuery.eq("filtro_omie", filtroAtivo);
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
   const [{ data: pedidos }, omieResult] = await Promise.all([
