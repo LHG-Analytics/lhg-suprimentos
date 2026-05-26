@@ -135,9 +135,23 @@ export async function syncFornecedores(
 
     total = items.length;
 
-    // Filtro por tag "Fornecedor" já é feito no cliente Omie,
-    // então todos os itens aqui são fornecedores legítimos.
-    const mappedItems = items.map((item) => mapFornecedor(item, unidadeId));
+    // Filtro por tag "Fornecedor" já é feito no cliente Omie.
+    // Filtra registros sem CNPJ — o upsert usa onConflict: "cnpj" e a coluna
+    // tem constraint NOT NULL. Sem CNPJ o upsert falha para o batch inteiro.
+    const semCnpj = items.filter(item => !item.cnpj_cpf?.trim());
+    if (semCnpj.length > 0) {
+      console.warn(
+        `[omie/sync] ${semCnpj.length} fornecedor(es) sem CNPJ — pulados:`,
+        semCnpj.map(i => `${i.codigo_cliente} (${i.razao_social})`).join(", "),
+      );
+    }
+
+    const mappedItems = items
+      .filter(item => !!item.cnpj_cpf?.trim())
+      .map((item) => mapFornecedor(item, unidadeId));
+
+    // Ajusta total para refletir apenas os registros elegíveis (com CNPJ)
+    total = mappedItems.length;
     const BATCH = 50;
 
     for (let i = 0; i < mappedItems.length; i += BATCH) {
@@ -162,6 +176,9 @@ export async function syncFornecedores(
       novos,
       erros,
       duracaoMs: Date.now() - inicio,
+      detalhe: semCnpj.length > 0
+        ? { sem_cnpj: semCnpj.length, total_omie: items.length }
+        : undefined,
     };
 
     await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_full" });
