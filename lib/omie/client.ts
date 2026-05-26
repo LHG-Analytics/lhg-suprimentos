@@ -603,41 +603,54 @@ export interface OmiePesquisarPedCompraParam {
   dDataFinal?:   string;
 }
 
+// Formato antigo (IncluirPedidoCompra / ListarPedCompra)
 export interface OmiePedidoCompraListItem {
-  cabecalho: {
-    nCodPedido:       number;   // ID interno Omie
-    nNumPedido:       number;   // número sequencial
-    dDtPedido?:       string;   // DD/MM/YYYY
-    dDtPrevisao?:     string;   // DD/MM/YYYY
+  cabecalho?: {
+    nCodPedido?:      number;
+    nNumPedido?:      number;
+    dDtPedido?:       string;
+    dDtPrevisao?:     string;
     nCodFornecedor?:  number;
-    cEtapa?:          string;   // "10"=digitação, "20"=ag. confirmação, etc.
+    cEtapa?:          string;
     nValTotalPedido?: number;
-    nValorTotal?:     number;   // variação de nome em alguns registros
+    nValorTotal?:     number;
   };
   informacoes_adicionais?: {
-    cSitPedido?:    string;  // "Aguardando entrega", "Previsão de entrega atrasada"...
-    cSitAprovacao?: string;  // "Aprovado", ""
-    cNumPedFornec?: string;  // N° do pedido no fornecedor
+    cSitPedido?:    string;
+    cSitAprovacao?: string;
+    cNumPedFornec?: string;
     cRazaoSocial?:  string;
     cNomeFantasia?: string;
   };
-  faturamento?: {
-    nValTotalPedido?: number;
+  faturamento?: { nValTotalPedido?: number };
+  // ── Formato PesquisarPedCompra (pedidos_pesquisa) ──────────────────────────
+  cabecalho_consulta?: {
+    nCodPed?:     number;   // ID interno Omie
+    cNumero?:     string;   // número sequencial como string
+    dIncData?:    string;   // DD/MM/YYYY — data de criação
+    dDtPrevisao?: string;   // DD/MM/YYYY
+    nCodFor?:     number;   // código do fornecedor
+    cEtapa?:      string;
   };
+  parcelas_consulta?: Array<{ nValor?: number; nParcela?: number }>;
+  produtos_consulta?: Array<{ nValTot?: number; cDescricao?: string }>;
 }
 
-// Resposta de PesquisarPedCompra — usa nTotPaginas/nTotRegistros (não total_de_paginas)
+// Resposta de PesquisarPedCompra
 export interface OmieListarPedidosResponse {
-  // Paginação — formato PesquisarPedCompra
-  nPagina?:       number;
-  nTotPaginas?:   number;
-  nTotRegistros?: number;
-  // Paginação — formato legado (outros endpoints)
-  pagina?:              number;
-  total_de_paginas?:    number;
-  total_de_registros?:  number;
-  registros?:           number;
-  // Campos possíveis para os itens (Omie usa nomes diferentes por versão)
+  // Paginação — formato PesquisarPedCompra real (nTotalPaginas com "al")
+  nTotalPaginas?:   number;
+  nTotalRegistros?: number;
+  // Paginação — variações (nTot, total_de)
+  nTotPaginas?:        number;
+  nTotRegistros?:      number;
+  pagina?:             number;
+  total_de_paginas?:   number;
+  total_de_registros?: number;
+  registros?:          number;
+  // Itens — PesquisarPedCompra retorna em "pedidos_pesquisa"
+  pedidos_pesquisa?:     OmiePedidoCompraListItem[];
+  // Variações de campo para outros formatos de listagem
   pedidos_compra?:       OmiePedidoCompraListItem[];
   lista_pedidos_compra?: OmiePedidoCompraListItem[];
   pedido_compra?:        OmiePedidoCompraListItem[];
@@ -731,20 +744,28 @@ export async function listAllPedidosCompra(
       }
     }
 
-    // PesquisarPedCompra usa nTotPaginas; fallback para total_de_paginas (legado)
-    totalPaginas = res.nTotPaginas ?? res.total_de_paginas ?? 1;
-    const totalRegistros = res.nTotRegistros ?? res.total_de_registros ?? 0;
+    // Paginação: PesquisarPedCompra retorna nTotalPaginas (com "al"), não nTotPaginas
+    totalPaginas =
+      res.nTotalPaginas ??   // formato real: PesquisarPedCompra
+      res.nTotPaginas ??     // variação
+      res.total_de_paginas ?? // legado
+      1;
+    const totalRegistros =
+      res.nTotalRegistros ??
+      res.nTotRegistros ??
+      res.total_de_registros ??
+      0;
 
-    // Log da paginação sempre (diagnóstico)
     const resRaw = res as unknown as Record<string, unknown>;
     console.log(
       `[omie/client] PesquisarPedCompra página ${pagina}/${totalPaginas}:` +
-      ` nTotRegistros=${totalRegistros}` +
+      ` totalRegistros=${totalRegistros}` +
       ` chaves=${Object.keys(resRaw).join(",")}`,
     );
 
-    // Tenta campos conhecidos primeiro
+    // PesquisarPedCompra retorna itens em "pedidos_pesquisa"
     let items: OmiePedidoCompraListItem[] =
+      res.pedidos_pesquisa ??    // formato PesquisarPedCompra (real)
       res.pedidos_compra ??
       res.lista_pedidos_compra ??
       res.pedido_compra ??
@@ -753,25 +774,19 @@ export async function listAllPedidosCompra(
       res.pedido ??
       [];
 
-    // Fallback dinâmico: varre TODOS os campos buscando o primeiro array de objetos
-    // (resistente a mudanças de nome de campo no Omie)
+    // Fallback dinâmico: varre todos os campos buscando array de objetos
     if (items.length === 0 && totalRegistros > 0) {
       for (const [key, val] of Object.entries(resRaw)) {
-        if (
-          Array.isArray(val) &&
-          val.length > 0 &&
-          typeof val[0] === "object" &&
-          val[0] !== null
-        ) {
-          console.log(`[omie/client] PesquisarPedCompra: itens encontrados no campo "${key}" (${val.length})`);
+        if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null) {
+          console.log(`[omie/client] PesquisarPedCompra: itens em campo "${key}" (${val.length})`);
           items = val as OmiePedidoCompraListItem[];
           break;
         }
       }
       if (items.length === 0) {
         console.warn(
-          `[omie/client] PesquisarPedCompra: ${totalRegistros} registros no Omie mas nenhum array encontrado.` +
-          ` Resposta completa: ${JSON.stringify(res)}`,
+          `[omie/client] PesquisarPedCompra: ${totalRegistros} registros mas nenhum array encontrado.` +
+          ` Chaves: ${Object.keys(resRaw).join(", ")}`,
         );
       }
     }

@@ -300,46 +300,54 @@ function omieDataParaISO(dData?: string): string | null {
 }
 
 function mapPedidoCompra(item: OmiePedidoCompraListItem, unidadeId: string) {
+  // PesquisarPedCompra retorna "cabecalho_consulta"; outros formatos retornam "cabecalho"
   const cab  = item.cabecalho;
+  const cab2 = item.cabecalho_consulta;
   const info = item.informacoes_adicionais ?? {};
 
-  // Valor: alguns endpoints retornam em nValTotalPedido, outros em nValorTotal ou faturamento
-  const valorTotal =
-    cab.nValTotalPedido ??
-    cab.nValorTotal ??
-    item.faturamento?.nValTotalPedido ??
-    0;
+  // IDs e datas — suporte a ambos os formatos
+  const nCodPedido    = cab?.nCodPedido    ?? cab2?.nCodPed    ?? 0;
+  const nNumPedido    = cab?.nNumPedido    ?? (cab2?.cNumero ? parseInt(cab2.cNumero, 10) || null : null);
+  const dDtPedido     = cab?.dDtPedido     ?? cab2?.dIncData;
+  const dDtPrevisao   = cab?.dDtPrevisao   ?? cab2?.dDtPrevisao;
+  const nCodFornecedor = cab?.nCodFornecedor ?? cab2?.nCodFor ?? null;
+  const cEtapa        = cab?.cEtapa        ?? cab2?.cEtapa;
 
-  // Nome do fornecedor: prioriza nome fantasia
+  // Valor total: formato antigo → cabecalho; formato pesquisa → soma das parcelas
+  const valorTotal =
+    cab?.nValTotalPedido ??
+    cab?.nValorTotal ??
+    item.faturamento?.nValTotalPedido ??
+    (item.parcelas_consulta?.reduce((s, p) => s + (p.nValor ?? 0), 0) ?? 0);
+
+  // Nome do fornecedor: só disponível no formato antigo (informacoes_adicionais)
   const fornecedorNome =
     info.cNomeFantasia?.trim() ||
     info.cRazaoSocial?.trim() ||
     null;
 
-  // Etapa: converte código numérico para label legível
   const ETAPAS: Record<string, string> = {
     "10": "Digitação",
-    "20": "Pedido de Compra",
+    "15": "Pedido de Compra",   // etapa observada no PesquisarPedCompra
+    "20": "Ag. Confirmação",
     "30": "Aprovação",
     "40": "Em Separação",
     "50": "Em Transporte",
     "60": "Entregue",
     "70": "Cancelado",
   };
-  const etapa = cab.cEtapa
-    ? (ETAPAS[cab.cEtapa] ?? cab.cEtapa)
-    : null;
+  const etapa = cEtapa ? (ETAPAS[cEtapa] ?? cEtapa) : null;
 
   return {
     unidade_id:           unidadeId,
-    omie_codigo:          cab.nCodPedido,
-    numero:               cab.nNumPedido ?? null,
-    data_pedido:          omieDataParaISO(cab.dDtPedido),
-    data_previsao:        omieDataParaISO(cab.dDtPrevisao),
-    fornecedor_codigo:    cab.nCodFornecedor ?? null,
+    omie_codigo:          nCodPedido,
+    numero:               nNumPedido ?? null,
+    data_pedido:          omieDataParaISO(dDtPedido),
+    data_previsao:        omieDataParaISO(dDtPrevisao),
+    fornecedor_codigo:    nCodFornecedor,
     fornecedor_nome:      fornecedorNome,
     valor_total:          valorTotal,
-    situacao:             info.cSitPedido?.trim() || null,
+    situacao:             info.cSitPedido?.trim() || etapa || null,
     situacao_aprovacao:   info.cSitAprovacao?.trim() || null,
     etapa,
     numero_pedido_forn:   info.cNumPedFornec?.trim() || null,
