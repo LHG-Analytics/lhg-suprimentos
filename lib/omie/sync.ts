@@ -322,7 +322,7 @@ function omieDataParaISO(dData?: string): string | null {
 function mapPedidoCompra(
   item: OmiePedidoCompraListItem,
   unidadeId: string,
-  clienteNomeMap?: Map<number, string>,
+  clienteNomeMap?: Map<string, string>,
 ) {
   // PesquisarPedCompra retorna "cabecalho_consulta"; outros formatos retornam "cabecalho"
   const cab  = item.cabecalho;
@@ -347,10 +347,11 @@ function mapPedidoCompra(
   // Nome do fornecedor:
   //   1. informacoes_adicionais (formato antigo — nem sempre presente no PesquisarPedCompra)
   //   2. clienteNomeMap: lookup de todos os clientes Omie por codigo_cliente
+  //   Chave sempre como String() para evitar discrepâncias number vs string em runtime.
   const fornecedorNome =
     info.cNomeFantasia?.trim() ||
     info.cRazaoSocial?.trim() ||
-    (nCodFornecedor && clienteNomeMap ? (clienteNomeMap.get(nCodFornecedor) ?? null) : null) ||
+    (nCodFornecedor != null && clienteNomeMap ? (clienteNomeMap.get(String(nCodFornecedor)) ?? null) : null) ||
     null;
 
   const ETAPAS: Record<string, string> = {
@@ -407,7 +408,8 @@ export async function syncPedidosCompra(
     // PesquisarPedCompra só retorna nCodFor (código numérico) sem nome.
     // Buscamos TODOS os clientes Omie (sem filtro de tag) para enriquecer
     // fornecedor_nome na hora do upsert.
-    let clienteNomeMap: Map<number, string> | undefined;
+    // Chaves como string para evitar discrepâncias de tipo (JS Map é type-strict).
+    let clienteNomeMap: Map<string, string> | undefined;
     try {
       clienteNomeMap = await buildClienteNomeMap(creds);
       console.log(`[omie/sync] clienteNomeMap construído com ${clienteNomeMap.size} entradas para unidade=${unidadeId}`);

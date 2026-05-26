@@ -838,24 +838,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         </button>
       </div>
 
-      {/* ── Stats ────────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "PEDIDOS LHG",  value: pedidosIniciais.length, color: "text-foreground",  sub: null },
-          { label: "PEDIDOS OMIE", value: omie_pedidos.length,    color: "text-amber-400",   sub: omie_pedidos.length > 0 ? relativeTime(omie_pedidos[0]?.omie_sincronizado_em ?? "") + " sync" : null },
-          { label: "VALOR LHG",    value: formatBRL(valorTotalLhg),  color: "text-emerald-400", sub: null, mono: true },
-          { label: "VALOR OMIE",   value: valorTotalOmie > 0 ? formatBRL(valorTotalOmie) : "—", color: "text-amber-400", sub: null, mono: true },
-        ].map(({ label, value, color, sub, mono }) => (
-          <div key={label} className="rounded-xl border border-border/80 bg-muted/40 px-5 py-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{label}</div>
-            <div className={cn("mt-1.5 font-semibold", color, mono ? "text-lg font-mono" : "text-2xl font-mono")}>
-              {value}
-            </div>
-            {sub && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{sub}</div>}
-          </div>
-        ))}
-      </div>
-
       {/* ── Busca ────────────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <div className="relative">

@@ -259,8 +259,10 @@ export async function omiePost<TParam, TResponse>(
  */
 export async function buildClienteNomeMap(
   creds: OmieCredentials,
-): Promise<Map<number, string>> {
-  const map = new Map<number, string>();
+): Promise<Map<string, string>> {
+  // Map<string, string> — chaves como string para evitar discrepâncias de tipo
+  // (a API Omie às vezes retorna IDs como numbers, às vezes como strings no JSON).
+  const map = new Map<string, string>();
   let pagina = 1;
   let totalPaginas = 1;
 
@@ -273,7 +275,7 @@ export async function buildClienteNomeMap(
         creds,
         {
           pagina,
-          registros_por_pagina: 50,
+          registros_por_pagina: 100, // máximo permitido para menos requisições
           apenas_importado_api: "N", // inclui cadastros manuais
         },
       );
@@ -292,8 +294,10 @@ export async function buildClienteNomeMap(
     totalPaginas = res.total_de_paginas;
     for (const c of res.clientes_cadastro) {
       const nome = c.nome_fantasia?.trim() || c.razao_social;
-      if (nome) map.set(c.codigo_cliente, nome);
+      // Sempre usa String() como chave para garantir consistência de tipo
+      if (nome) map.set(String(c.codigo_cliente), nome);
     }
+    console.log(`[omie/client] buildClienteNomeMap página ${pagina}/${totalPaginas}: ${res.clientes_cadastro.length} clientes`);
     pagina++;
   } while (pagina <= totalPaginas);
 
@@ -739,7 +743,7 @@ function formatOmieDate(d: Date): string {
  * Busca uma página de pedidos de compra no Omie.
  *
  * Endpoint: /produtos/pedidocompra/ — call: PesquisarPedCompra
- * Filtra pelos últimos 7 dias (dDataInicial/dDataFinal) para garantir retorno.
+ * Usa janela de 2 anos (dDataInicial/dDataFinal) para trazer TODOS os pedidos históricos.
  *
  * ⚠️ NÃO usar /compras/pedidocompras/ — requer módulo Compras (plano pago separado).
  */
@@ -748,10 +752,11 @@ export async function listPedidosCompraPage(
   pagina: number,
   registrosPorPagina = 50,
 ): Promise<OmieListarPedidosResponse> {
-  // Janela de 7 dias: dDataInicial = hoje-7, dDataFinal = hoje
+  // Janela de 2 anos: dDataInicial = hoje-730, dDataFinal = hoje
+  // Ampla o suficiente para capturar todo o histórico relevante de pedidos.
   const hoje   = new Date();
   const inicio = new Date(hoje);
-  inicio.setDate(hoje.getDate() - 7);
+  inicio.setFullYear(hoje.getFullYear() - 2);
 
   return omiePost<OmiePesquisarPedCompraParam, OmieListarPedidosResponse>(
     "/produtos/pedidocompra/",
@@ -769,8 +774,8 @@ export async function listPedidosCompraPage(
       lExibirPedidosEncerrados:  "T",
       lExibirPedidosRecParciais: "T",
       lExibirPedidosFatParciais: "T",
-      dDataInicial:              formatOmieDate(inicio), // DD/MM/YYYY
-      dDataFinal:                formatOmieDate(hoje),   // DD/MM/YYYY
+      dDataInicial:              formatOmieDate(inicio), // DD/MM/YYYY — 2 anos atrás
+      dDataFinal:                formatOmieDate(hoje),   // DD/MM/YYYY — hoje
     },
   );
 }
