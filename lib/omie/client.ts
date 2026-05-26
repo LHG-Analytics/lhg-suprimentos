@@ -588,7 +588,12 @@ export async function criarPedidoCompra(
 export interface OmiePesquisarPedCompraParam {
   nPagina: number;
   nRegsPorPagina: number;
-  lApenasImportadoApi?: "S" | "N" | "T"; // "N"=todos, "S"=só API, "T"=todos (= "N")
+  // Filtros obrigatórios para exibir todos os pedidos independente de status
+  lApenasImportadoApi?:      "S" | "N" | "F" | "T"; // "F"/"N"=todos, "T"/"S"=só API
+  lExibirPedidosPendentes?:  "S" | "N" | "T" | "F"; // "T"=sim
+  lExibirPedidosFaturados?:  "S" | "N" | "T" | "F"; // "T"=sim
+  lExibirPedidosCancelados?: "S" | "N" | "T" | "F"; // "T"=sim
+  lExibirPedidosEncerrados?: "S" | "N" | "T" | "F"; // "T"=sim
 }
 
 export interface OmiePedidoCompraListItem {
@@ -652,9 +657,13 @@ export async function listPedidosCompraPage(
     "PesquisarPedCompra",
     creds,
     {
-      nPagina:           pagina,
-      nRegsPorPagina:    Math.min(registrosPorPagina, 100), // máx 100 por página
-      lApenasImportadoApi: "N",                             // incluir TODOS os pedidos
+      nPagina:                  pagina,
+      nRegsPorPagina:           Math.min(registrosPorPagina, 100), // máx 100 por página
+      lApenasImportadoApi:      "F",  // "F"=falso → inclui pedidos criados manualmente (não só via API)
+      lExibirPedidosPendentes:  "T",  // T=sim → exibir pendentes
+      lExibirPedidosFaturados:  "T",  // T=sim → exibir faturados
+      lExibirPedidosCancelados: "T",  // T=sim → exibir cancelados
+      lExibirPedidosEncerrados: "T",  // T=sim → exibir encerrados
     },
   );
 }
@@ -676,7 +685,18 @@ export async function listAllPedidosCompra(
       res = await listPedidosCompraPage(creds, pagina);
     } catch (err) {
       if (isOmieEmptyError(err)) break;
-      throw err;
+      // REDUNDANT: Omie bloqueia chamadas < 60s. Aguarda e tenta de novo (1x).
+      if (err instanceof OmieError && err.message.toUpperCase().includes("REDUNDANT")) {
+        console.warn("[omie/client] REDUNDANT detectado — aguardando 65s antes de tentar de novo…");
+        await new Promise(r => setTimeout(r, 65_000));
+        try {
+          res = await listPedidosCompraPage(creds, pagina);
+        } catch (err2) {
+          throw err2;
+        }
+      } else {
+        throw err;
+      }
     }
 
     // PesquisarPedCompra usa nTotPaginas; fallback para total_de_paginas (legado)

@@ -135,6 +135,29 @@ const FILTROS: { key: string; label: string }[] = [
   { key: "cancelado",           label: "Cancelado" },
 ];
 
+const OMIE_FILTROS: { key: string; label: string; activeClass: string }[] = [
+  { key: "todos",      label: "Todos",      activeClass: "bg-muted text-foreground" },
+  { key: "pendentes",  label: "Pendentes",  activeClass: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30" },
+  { key: "faturados",  label: "Faturados",  activeClass: "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30" },
+  { key: "cancelados", label: "Cancelados", activeClass: "bg-red-500/20 text-red-400 ring-1 ring-red-500/30" },
+  { key: "encerrados", label: "Encerrados", activeClass: "bg-muted text-muted-foreground ring-1 ring-border/60" },
+];
+
+type OmieFiltroKey = "todos" | "pendentes" | "faturados" | "cancelados" | "encerrados";
+
+function classifyOmieStatus(situacao: string | null): OmieFiltroKey {
+  const l = (situacao ?? "").toLowerCase();
+  if (l.includes("faturad"))                      return "faturados";
+  if (l.includes("cancel"))                       return "cancelados";
+  if (l.includes("encerr") || l.includes("finali")) return "encerrados";
+  return "pendentes"; // padrão: aguardando entrega, previsão atrasada, etc.
+}
+
+function matchOmieStatus(situacao: string | null, filtroKey: OmieFiltroKey): boolean {
+  if (filtroKey === "todos") return true;
+  return classifyOmieStatus(situacao) === filtroKey;
+}
+
 function omieSituacaoColor(s: string | null) {
   if (!s) return "text-muted-foreground bg-muted ring-border/40";
   const l = s.toLowerCase();
@@ -600,6 +623,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const router = useRouter();
   const [pedidos, setPedidos]       = useState(pedidosIniciais);
   const [filtro, setFiltro]         = useState("todos");
+  const [omieStatusFiltro, setOmieStatusFiltro] = useState<OmieFiltroKey>("todos");
   const [busca, setBusca]           = useState("");
   const [selectedLhgId, setSelectedLhgId] = useState<string | null>(pedidosIniciais[0]?.id ?? null);
   const [selectedOmie, setSelectedOmie]   = useState<OmiePedido | null>(null);
@@ -609,17 +633,37 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     setSyncing(true);
     try {
       const res = await fetch("/api/omie/sync-pedidos", { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        const total = (data.results as { total?: number }[] | undefined)
-          ?.reduce((acc: number, r) => acc + (r.total ?? 0), 0) ?? 0;
-        toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""} do Omie`);
-        router.refresh();
-      } else {
-        toast.error("Erro ao sincronizar pedidos Omie");
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(`Erro HTTP ${res.status}: ${data?.error ?? "desconhecido"}`);
+        return;
       }
-    } catch {
-      toast.error("Erro ao sincronizar pedidos Omie");
+
+      type SyncRes = { total?: number; status?: string; detalhe?: Record<string, unknown> };
+      const results = data.results as SyncRes[] | undefined;
+
+      // Verifica se algum resultado retornou com erro
+      const comErro = results?.find(r => r.status === "erro");
+      if (comErro) {
+        const errMsg = (comErro.detalhe?.erro as string | undefined) ?? "erro desconhecido";
+        toast.error(`Erro Omie: ${errMsg}`);
+        return;
+      }
+
+      const total = results?.reduce((acc, r) => acc + (r.total ?? 0), 0) ?? 0;
+      if (total === 0) {
+        // Debug: mostra resposta completa para diagnóstico
+        toast.warning(
+          `Sync ok mas 0 pedidos retornados. Unidades: ${(data.unidades as string[] | undefined)?.join(", ") ?? "—"}`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""} do Omie`);
+      }
+      router.refresh();
+    } catch (err) {
+      toast.error(`Erro ao sincronizar: ${err instanceof Error ? err.message : "desconhecido"}`);
     } finally {
       setSyncing(false);
     }
@@ -632,7 +676,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     return [...lhg, ...omie].sort((a, b) => listItemDate(b) - listItemDate(a));
   }, [pedidos, omie_pedidos]);
 
-  // Filtragem: busca sobre tudo; status só filtra LHG (Omie sempre aparece quando filtro=todos)
+  // Filtragem: busca sobre tudo; status LHG filtra LHG; omieStatusFiltro filtra Omie
   const filtrados = useMemo(() => {
     const q = busca.toLowerCase().trim();
     return listaUnificada.filter(item => {
@@ -645,16 +689,17 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           (p.cotacoes?.numero.toLowerCase().includes(q) ?? false);
         return matchStatus && matchBusca;
       } else {
-        // Omie: só aparece quando filtro=todos, filtrável por busca
+        // Omie: só aparece quando filtro LHG=todos; filtrado por omieStatusFiltro e busca
         if (filtro !== "todos") return false;
         const p = item.data;
-        return !q ||
+        const matchBusca = !q ||
           (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
           (p.numero?.toString().includes(q) ?? false) ||
           (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false);
+        return matchBusca && matchOmieStatus(p.situacao, omieStatusFiltro);
       }
     });
-  }, [listaUnificada, filtro, busca]);
+  }, [listaUnificada, filtro, omieStatusFiltro, busca]);
 
   const selectedLhg = pedidos.find(p => p.id === selectedLhgId) ?? null;
 
@@ -663,6 +708,15 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
     for (const p of pedidos) m[p.status] = (m[p.status] ?? 0) + 1;
     return m;
   }, [pedidos]);
+
+  const omieCounts = useMemo(() => {
+    const m: Record<OmieFiltroKey, number> = { todos: omie_pedidos.length, pendentes: 0, faturados: 0, cancelados: 0, encerrados: 0 };
+    for (const p of omie_pedidos) {
+      const k = classifyOmieStatus(p.situacao);
+      m[k] = (m[k] ?? 0) + 1;
+    }
+    return m;
+  }, [omie_pedidos]);
 
   function handleAtualizado() { /* revalidatePath via SA já atualiza no próximo load */ }
 
@@ -712,6 +766,29 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
               </button>
             ))}
           </div>
+
+          {/* Filtros de situação (Omie) — só aparece quando há pedidos Omie e o filtro LHG = "todos" */}
+          {omie_pedidos.length > 0 && filtro === "todos" && (
+            <div className="flex items-center gap-1 flex-wrap pt-0.5 border-t border-border/40">
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-400/80 font-semibold mr-0.5">
+                <Sparkles size={8} />Omie
+              </span>
+              {OMIE_FILTROS.map(f => {
+                const count = omieCounts[f.key as OmieFiltroKey] ?? 0;
+                if (f.key !== "todos" && count === 0) return null;
+                return (
+                  <button key={f.key} onClick={() => setOmieStatusFiltro(f.key as OmieFiltroKey)}
+                    className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      omieStatusFiltro === f.key
+                        ? f.activeClass
+                        : "bg-muted/40 text-muted-foreground hover:text-foreground/80 hover:bg-muted/60")}>
+                    {f.label}
+                    {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Lista */}

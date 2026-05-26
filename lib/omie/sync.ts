@@ -358,9 +358,11 @@ export async function syncPedidosCompra(
   let erros = 0;
 
   try {
+    console.log(`[omie/sync] Iniciando listAllPedidosCompra para unidade=${unidadeId}`);
     const items = await listAllPedidosCompra(creds, (page, totalPages) => {
       console.log(`[omie/sync] Pedidos unidade=${unidadeId} página ${page}/${totalPages}`);
     });
+    console.log(`[omie/sync] listAllPedidosCompra retornou ${items.length} itens para unidade=${unidadeId}`);
 
     total = items.length;
     const BATCH = 50;
