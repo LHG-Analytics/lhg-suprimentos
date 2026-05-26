@@ -790,11 +790,11 @@ export async function listPedidosCompraPage(
   pagina: number,
   registrosPorPagina = 50,
 ): Promise<OmieListarPedidosResponse> {
-  // Janela de 2 anos: dDataInicial = hoje-730, dDataFinal = hoje
-  // Ampla o suficiente para capturar todo o histórico relevante de pedidos.
+  // Janela de 5 anos: dDataInicial = hoje-1825, dDataFinal = hoje
+  // Garante captura de pedidos históricos anteriores a 2 anos atrás.
   const hoje   = new Date();
   const inicio = new Date(hoje);
-  inicio.setFullYear(hoje.getFullYear() - 2);
+  inicio.setFullYear(hoje.getFullYear() - 5);
 
   return omiePost<OmiePesquisarPedCompraParam, OmieListarPedidosResponse>(
     "/produtos/pedidocompra/",
