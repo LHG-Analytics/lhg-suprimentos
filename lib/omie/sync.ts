@@ -486,14 +486,21 @@ export interface UnidadeComCreds {
  */
 export async function syncTodasUnidades(
   supabase: SupabaseClient,
+  /** Quando informado, restringe o sync à unidade com esse slug (ex.: "lush-ipiranga"). */
+  slugFiltro?: string,
 ): Promise<{ results: SyncResult[]; unidades: string[] }> {
   // Busca unidades com credenciais Omie configuradas
-  const { data: unidades, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from("unidades")
     .select("id, slug, nome, omie_app_key, omie_app_secret")
     .eq("ativa", true)
     .not("omie_app_key", "is", null)
     .not("omie_app_secret", "is", null);
+
+  if (slugFiltro) query = query.eq("slug", slugFiltro);
+
+  const { data: unidades, error } = await query;
 
   if (error || !unidades?.length) {
     console.warn("[omie/sync] Nenhuma unidade com credenciais Omie configurada.");

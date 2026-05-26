@@ -14,12 +14,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import {
   syncTodasUnidades,
   syncFornecedores,
   syncProdutos,
+  syncPedidosCompra,
   type SyncResult,
 } from "@/lib/omie/sync";
 import type { OmieCredentials } from "@/lib/omie/client";
@@ -72,12 +74,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse do body (opcional)
-  let entidade: "fornecedores" | "produtos" | "todos" = "todos";
+  let entidade: "fornecedores" | "produtos" | "pedidos" | "todos" = "todos";
   try {
     const body = await req.json().catch(() => ({}));
     if (
       body?.entidade === "fornecedores" ||
       body?.entidade === "produtos" ||
+      body?.entidade === "pedidos" ||
       body?.entidade === "todos"
     ) {
       entidade = body.entidade;
@@ -86,14 +89,20 @@ export async function POST(req: NextRequest) {
     // body inválido — usa padrão "todos"
   }
 
+  // ── Unidade ativa ─────────────────────────────────────────────────────────
+  // Lê o cookie definido pelo UnidadeContext no client.
+  // Quando não é "todas", filtra o sync para a unidade do usuário logado.
+  const cookieStore = await cookies();
+  const unidadeSlug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
   const inicio = Date.now();
   const supabase = createServiceClient();
   const results: SyncResult[] = [];
 
   try {
     if (entidade === "todos") {
-      // Sync completo: todas as unidades
-      const { results: r, unidades } = await syncTodasUnidades(supabase);
+      // Sync completo — respeita unidade ativa quando disponível
+      const { results: r, unidades } = await syncTodasUnidades(supabase, unidadeSlug !== "todas" ? unidadeSlug : undefined);
       const duracaoTotal = Date.now() - inicio;
 
       return NextResponse.json({
@@ -104,13 +113,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Sync parcial: busca unidades com credenciais
-    const { data: unidades, error: dbErr } = await supabase
+    // Sync parcial: busca unidade(s) com credenciais
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase
       .from("unidades")
       .select("id, slug, nome, omie_app_key, omie_app_secret")
       .eq("ativa", true)
       .not("omie_app_key", "is", null)
       .not("omie_app_secret", "is", null);
+
+    // Filtra pela unidade ativa quando o usuário está em uma unidade específica
+    if (unidadeSlug && unidadeSlug !== "todas") {
+      query = query.eq("slug", unidadeSlug);
+    }
+
+    const { data: unidades, error: dbErr } = await query;
 
     if (dbErr) {
       console.error("[omie/sync] Erro ao buscar unidades:", dbErr.message, dbErr.code);
@@ -127,7 +144,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Nenhuma unidade com credenciais Omie configurada.",
+          error: `Nenhuma unidade com credenciais Omie configurada${unidadeSlug !== "todas" ? ` para "${unidadeSlug}"` : ""}.`,
         },
         { status: 400 },
       );
@@ -144,6 +161,9 @@ export async function POST(req: NextRequest) {
       if (entidade === "fornecedores") {
         const r = await syncFornecedores(supabase, creds, unidade.id);
         results.push(r);
+      } else if (entidade === "pedidos") {
+        const r = await syncPedidosCompra(supabase, creds, unidade.id);
+        results.push(r);
       } else if (entidade === "produtos" && !produtosSincronizados) {
         const r = await syncProdutos(supabase, creds, unidade.id);
         results.push(r);
@@ -154,7 +174,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       results,
-      unidades: unidades.map((u) => u.nome),
+      unidades: (unidades as Array<{ nome: string }>).map((u) => u.nome),
       duracaoTotal: Date.now() - inicio,
     });
   } catch (err) {
