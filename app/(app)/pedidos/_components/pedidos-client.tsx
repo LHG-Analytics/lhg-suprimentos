@@ -846,7 +846,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
             </span>
           )}
           {busca && (
-            <button onClick={() => handleBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs">✕</button>
+            <button onClick={() => handleBusca("")} aria-label="Limpar busca" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground text-xs">✕</button>
           )}
         </div>
         {buscaCurta && (

@@ -144,7 +144,7 @@ function NovaCotacaoModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
           <h2 className="text-base font-semibold text-foreground">Nova cotação</h2>
-          <button onClick={handleClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button onClick={handleClose} aria-label="Fechar" className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             ✕
           </button>
         </div>
@@ -418,7 +418,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
           )}
         />
         {query && (
-          <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground text-xs">
+          <button onClick={() => setQuery("")} aria-label="Limpar busca" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground text-xs">
             ✕
           </button>
         )}
