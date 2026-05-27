@@ -76,12 +76,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse do body (opcional)
-  let entidade: "fornecedores" | "produtos" | "pedidos" | "todos" = "todos";
+  let entidade: "fornecedores" | "produtos" | "cmc" | "pedidos" | "todos" = "todos";
   try {
     const body = await req.json().catch(() => ({}));
     if (
       body?.entidade === "fornecedores" ||
       body?.entidade === "produtos" ||
+      body?.entidade === "cmc" ||
       body?.entidade === "pedidos" ||
       body?.entidade === "todos"
     ) {
@@ -166,6 +167,12 @@ export async function POST(req: NextRequest) {
       } else if (entidade === "pedidos") {
         const r = await syncPedidosCompra(supabase, creds, unidade.id);
         results.push(r);
+      } else if (entidade === "cmc" && !produtosSincronizados) {
+        // Só CMC — sem sync de catálogo. Útil para testes manuais e diagnóstico.
+        // Processa lote de 200 produtos (fila por cmc_updated_at ASC NULLS FIRST).
+        const rCMC = await syncCMCProdutos(supabase, creds, unidade.id);
+        results.push(rCMC);
+        produtosSincronizados = true; // CMC é global (produtos compartilhados)
       } else if (entidade === "produtos" && !produtosSincronizados) {
         // Passo 1: Sync do catálogo (rápido — batch upsert)
         const rCatalogo = await syncProdutos(supabase, creds, unidade.id);
