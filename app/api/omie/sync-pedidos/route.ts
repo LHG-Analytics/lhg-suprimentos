@@ -45,13 +45,13 @@ async function autenticar(req: NextRequest): Promise<boolean> {
  * Valida que o usuário autenticado tem acesso ao slug de unidade solicitado.
  * Compradores e admins têm acesso a todas as unidades.
  * Outros papéis (aprovador, solicitante) precisam estar em user_unidades.
- * Retorna null se acesso permitido, ou mensagem de erro.
+ * Retorna null se acesso permitido, ou mensagem de erro genérica.
  */
 async function validarAcessoUnidade(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   slug: string,
 ): Promise<string | null> {
   try {
-    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return "Não autorizado.";
 
@@ -71,7 +71,10 @@ async function validarAcessoUnidade(
     ]);
 
     // Unidade precisa existir e estar ativa
-    if (!unidade) return `Unidade '${slug}' não encontrada ou inativa.`;
+    if (!unidade) {
+      console.warn(`[validarAcessoUnidade] Unidade '${slug}' não encontrada ou inativa.`);
+      return "Acesso negado.";
+    }
 
     // Comprador e admin têm acesso universal
     const role = profile?.role ?? "solicitante";
@@ -86,7 +89,8 @@ async function validarAcessoUnidade(
       .maybeSingle();
 
     if (!acesso) {
-      return `Acesso negado: usuário não pertence à unidade '${slug}'.`;
+      console.warn(`[validarAcessoUnidade] Usuário não pertence à unidade '${slug}'.`);
+      return "Acesso negado.";
     }
 
     return null; // acesso permitido
@@ -120,20 +124,19 @@ export async function POST(req: NextRequest) {
   // Lê o filtro e flag contarApenas do body
   let filtro: OmiePedidoFiltro = "todos";
   let contarApenas = false;
-  try {
-    const body = await req.json().catch(() => ({}));
-    const f = body?.filtro as string | undefined;
-    if (f && FILTROS_VALIDOS.includes(f as OmiePedidoFiltro)) filtro = f as OmiePedidoFiltro;
-    if (body?.contarApenas === true) contarApenas = true;
-  } catch { /* body vazio ou não-JSON */ }
+  const body = await req.json().catch(() => ({})) as { filtro?: string; contarApenas?: boolean };
+  const f = body?.filtro as string | undefined;
+  if (f && FILTROS_VALIDOS.includes(f as OmiePedidoFiltro)) filtro = f as OmiePedidoFiltro;
+  if (body?.contarApenas === true) contarApenas = true;
 
   // Respeita a unidade ativa na sidebar (cookie lhg-unidade-slug)
   const cookieStore = await cookies();
   const slug = cookieStore.get("lhg-unidade-slug")?.value ?? null;
 
-  // ── NOVO: Valida acesso à unidade específica ──────────────────────────────────
+  // Valida acesso à unidade específica (evita dupla criação de client: reutiliza abaixo)
   if (slug && slug !== "todas") {
-    const erroAcesso = await validarAcessoUnidade(slug);
+    const supabaseForValidation = await createClient();
+    const erroAcesso = await validarAcessoUnidade(supabaseForValidation, slug);
     if (erroAcesso) {
       console.warn(`${tag} Acesso negado à unidade slug="${slug}": ${erroAcesso}`);
       return NextResponse.json({ ok: false, error: erroAcesso }, { status: 403 });
