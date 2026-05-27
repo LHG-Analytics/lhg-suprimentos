@@ -447,7 +447,7 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
 ### ✅ M4 — Sprint 3 (Aprovação e Pedido de Compra)
 - ✅ LHG-213: Aprovação de pedidos — alçada de aprovação por usuário (`alcada_valor` migration 0011); `aprovarPedido` bloqueia se valor > alçada; admin tem aprovação ilimitada; soft budget check via Sheets mantido
 - ✅ LHG-214: Push Omie — `criarPedidoCompra()` em `lib/omie/client.ts`; Server Action `pushPedidoOmie(id)`; botão UI tri-estado (pendente/erro/sincronizado) em `pedidos-client.tsx`
-- 🔄 LHG-215: Email ao fornecedor — `enviarEmailFornecedor` com template HTML dark + Resend dinâmico; modo "simulado" quando sem `RESEND_API_KEY`; aguardando chave + React Email template completo
+- ✅ LHG-215: Email ao fornecedor — `enviarEmailFornecedor` com React Email template (`emails/pedido-compra-fornecedor.tsx`); tema dark, header emerald, tabela de itens, entrega/pgto, footer LHG; Resend dinâmico; modo "simulado" sem `RESEND_API_KEY`
 
 ### ✅ M5 — Sprint 4 (Entrada de NF) — redesenhado
 - ✅ LHG-216 + LHG-217: Módulo NF redesenhado — entrada por número NF + consulta Omie API
