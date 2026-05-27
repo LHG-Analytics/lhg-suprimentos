@@ -257,6 +257,13 @@ export async function syncProdutos(
 
       // Passo 2 — UPDATE dos campos de metadados Omie em produtos EXISTENTES desta unidade.
       //
+      // ⚠️  preco_custo NÃO é atualizado aqui intencionalmente.
+      //     O syncProdutos popula o catálogo com valor_custo do Omie apenas no INSERT
+      //     inicial (quando o produto é novo). Após isso, syncCMCProdutos é a única
+      //     fonte de verdade para preco_custo — ele usa o CMC real (PosicaoEstoque),
+      //     que é mais preciso. Incluir preco_custo no UPDATE sobrescreveria o CMC
+      //     toda vez que o catálogo fosse re-sincronizado.
+      //
       // Política de categoria no re-sync:
       //   - sempre atualiza categoria derivada de familia_omie.
       //   - se familia_omie for null, categoria fica "Outros" (fallback).
@@ -270,10 +277,10 @@ export async function syncProdutos(
             categoria:            categoriaParaFamilia(p.familia_omie),
             ncm:                  p.ncm,
             ean:                  p.ean,
-            preco_custo:          p.preco_custo,
             omie_descricao:       p.omie_descricao,
             omie_sincronizado_em: p.omie_sincronizado_em,
             ativo:                p.ativo,
+            // preco_custo: omitido — gerenciado exclusivamente por syncCMCProdutos
           })
           .eq("omie_codigo", p.omie_codigo)
           .eq("omie_unidade_id", unidadeId);
@@ -331,10 +338,12 @@ export async function syncProdutos(
  *
  * @returns SyncResult com novos = quantidade de produtos com CMC atualizado.
  */
-// Quantos produtos processar por invocação do cron.
-// 200 × 280ms ≈ 56s — cabe confortavelmente no budget de after() (300s total).
-// Com 600 produtos no catálogo, todos são cobertos em ~3 dias de rotação.
-const CMC_BATCH_SIZE = 200;
+// Budget de tempo (ms) para o loop de CMC dentro do after().
+// after() tem 300s de budget independente da resposta HTTP.
+// Usamos 240s para ter 60s de margem de segurança antes do hard-limit.
+// Com short-circuit (para no 1º local com CMC > 0), a média real é ~1.5 calls/produto
+// × 280ms = ~420ms/produto → ~570 produtos em 240s. Suficiente para cobrir todo o catálogo.
+const CMC_TIME_BUDGET_MS = 240_000;
 
 export async function syncCMCProdutos(
   supabase: SupabaseClient,
@@ -347,16 +356,16 @@ export async function syncCMCProdutos(
   let erros       = 0;
 
   try {
-    // Busca os CMC_BATCH_SIZE produtos mais desatualizados desta unidade.
-    // NULL vem primeiro (nunca sincronizados), depois os mais antigos.
-    // Isso cria uma fila de prioridade auto-gerenciada: a cada run o lote avança.
+    // Busca TODOS os produtos desta unidade ordenados pelo cmc_updated_at mais antigo.
+    // NULL vem primeiro (nunca sincronizados), depois os mais desatualizados.
+    // O loop usa time budget em vez de limite de quantidade: processa o máximo possível
+    // dentro de CMC_TIME_BUDGET_MS e a fila auto-avança pelo cmc_updated_at.
     const { data: produtos, error: fetchErr } = await supabase
       .from("produtos")
       .select("id, omie_codigo, nome, cmc_updated_at")
       .eq("omie_unidade_id", unidadeId)
       .not("omie_codigo", "is", null)
-      .order("cmc_updated_at", { ascending: true, nullsFirst: true })
-      .limit(CMC_BATCH_SIZE);
+      .order("cmc_updated_at", { ascending: true, nullsFirst: true });
 
     if (fetchErr) throw fetchErr;
     if (!produtos?.length) {
@@ -388,15 +397,27 @@ export async function syncCMCProdutos(
         : [0]; // fallback: padrão Omie
 
     console.log(
-      `[omie/sync] CMC: iniciando lote de ${total} produto(s) — unidade=${unidadeId}`,
+      `[omie/sync] CMC: iniciando ${total} produto(s) — unidade=${unidadeId}`,
       `(mais antigo: ${(produtos[0].cmc_updated_at as string | null) ?? "nunca"})`,
       `| locais: [${locaisEstoque.join(", ")}]`,
+      `| budget: ${CMC_TIME_BUDGET_MS / 1000}s`,
     );
 
-    let bloqueado = false;
+    let bloqueado   = false;
+    const loopStart = Date.now();
+    let processados = 0;
 
     for (const produto of produtos) {
       if (bloqueado) break;
+
+      // Para o loop se o budget de tempo foi atingido (60s de margem antes do hard-limit)
+      const elapsed = Date.now() - loopStart;
+      if (elapsed > CMC_TIME_BUDGET_MS) {
+        console.log(
+          `[omie/sync] CMC: budget atingido (${Math.round(elapsed / 1000)}s) após ${processados}/${total} produtos — continuará no próximo sync`,
+        );
+        break;
+      }
 
       const omieId = Number(produto.omie_codigo);
       if (!omieId) continue;
@@ -462,6 +483,7 @@ export async function syncCMCProdutos(
         } else if (bestCmc !== null) {
           atualizados++;
         }
+        processados++;
       } catch (err) {
         // "Sem registros" globais → avança a fila sem penalizar
         if (isOmieEmptyError(err)) {
@@ -469,6 +491,7 @@ export async function syncCMCProdutos(
             .from("produtos")
             .update({ cmc_updated_at: new Date().toISOString() })
             .eq("id", produto.id);
+          processados++;
           continue;
         }
 
