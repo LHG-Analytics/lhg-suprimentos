@@ -80,7 +80,21 @@ export function GastosChart({ series, labels }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isDark = !mounted || resolvedTheme !== "light";
+  // Evita hydration mismatch: Recharts usa ResizeObserver (browser-only).
+  // Servidor e cliente renderizam o skeleton até o useEffect rodar.
+  if (!mounted) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-5 h-full flex flex-col">
+        <div className="shrink-0 mb-5">
+          <div className="h-4 w-44 rounded bg-muted animate-pulse mb-2" />
+          <div className="h-3 w-60 rounded bg-muted/50 animate-pulse" />
+        </div>
+        <div className="flex-1 min-h-[280px] rounded-lg bg-muted/30 animate-pulse" />
+      </div>
+    );
+  }
+
+  const isDark = resolvedTheme !== "light";
 
   // Cores adaptadas ao tema
   const gridColor  = isDark ? "rgba(63,63,70,0.5)"   : "rgba(0,0,0,0.07)";
