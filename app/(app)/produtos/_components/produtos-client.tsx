@@ -5,10 +5,12 @@
  * Tabela interativa do catálogo de produtos com busca, filtro por categoria e sync Omie.
  */
 import { useState, useMemo } from "react";
-import { Search, Package, RefreshCw, Tag, Layers, ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Package, RefreshCw, Tag, Layers, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncOmieProdutosButton } from "./sync-omie-produtos-button";
 import { EditarProdutoModal } from "./editar-produto-modal";
+import { CriarProdutoModal } from "./criar-produto-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ interface LastLog {
 interface ProdutosClientProps {
   produtos: Produto[];
   lastLog: LastLog | null;
+  unidades: Array<{ id: string; nome: string }>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,12 +81,14 @@ const PAGE_SIZE = 50;
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
+export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientProps) {
+  const router = useRouter();
   const [query,            setQuery]            = useState("");
   const [categoria,        setCategoria]        = useState<string>("todas");
   const [familia,          setFamilia]          = useState<string>("todas");
   const [produtoEditando,  setProdutoEditando]  = useState<Produto | null>(null);
   const [page,             setPage]             = useState(0);
+  const [criarOpen,        setCriarOpen]        = useState(false);
 
   // Helpers que resetam página no mesmo batch do React 18 (sem render intermediário errado)
   function handleQuery(v: string)     { setQuery(v);      setPage(0); }
@@ -160,6 +165,13 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
               </div>
             </div>
           )}
+          <button
+            onClick={() => setCriarOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/60 bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+          >
+            <Plus size={14} />
+            Novo Produto
+          </button>
           <SyncOmieProdutosButton />
         </div>
       </div>
@@ -412,6 +424,14 @@ export function ProdutosClient({ produtos, lastLog }: ProdutosClientProps) {
         key={produtoEditando?.id ?? "closed"}
         produto={produtoEditando}
         onClose={() => setProdutoEditando(null)}
+      />
+
+      {/* Modal de criação */}
+      <CriarProdutoModal
+        open={criarOpen}
+        onClose={() => setCriarOpen(false)}
+        onCreated={() => router.refresh()}
+        unidades={unidades}
       />
     </div>
   );

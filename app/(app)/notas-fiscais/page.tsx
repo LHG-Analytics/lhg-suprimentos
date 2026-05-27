@@ -18,7 +18,7 @@ export default async function NotasFiscaisPage() {
       .from("notas_fiscais")
       .select(`
         id, numero, omie_num_nf, serie, emissao, valor_total,
-        status, lancada_no_omie, lancada_em, created_at,
+        status, lancada_no_omie, lancada_em, omie_receb_id, omie_concluido, created_at,
         fornecedores!notas_fiscais_fornecedor_id_fkey(razao_social, nome_fantasia),
         pedidos(numero),
         nf_itens(id, descricao_omie, familia_omie, qtd_nf, preco_nf)

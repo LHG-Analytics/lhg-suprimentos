@@ -15,6 +15,7 @@ import {
   type OmieCredentials,
   type OmieNotaEntradaDet,
 } from "@/lib/omie/client";
+import { listarRecebimentos, associarPedidoRecebimento, concluirRecebimento } from "@/lib/omie/recebimento";
 
 // ── registrarNF ────────────────────────────────────────────────────────────────
 
@@ -281,6 +282,36 @@ export async function lancarNFOmie(nfId: string) {
     .update({ lancada_no_omie: true, lancada_em: new Date().toISOString(), status: "lancada" })
     .eq("id", nfId);
 
+  // ── Auto-associar Pedido ao Recebimento (se NF tem pedido com omie_codigo) ──
+  type PedidoReceb = { id: string } | null;
+  const pedidoReceb = nf.pedidos as PedidoReceb;
+
+  if (pedidoReceb?.id) {
+    const { data: pedData } = await supabase
+      .from("pedidos")
+      .select("omie_codigo")
+      .eq("id", pedidoReceb.id)
+      .single();
+
+    if (pedData?.omie_codigo) {
+      try {
+        const recebimentos = await listarRecebimentos(creds, omieNodNota);
+        const receb = recebimentos[0];
+
+        if (receb?.nIdReceb) {
+          await associarPedidoRecebimento(creds, receb.nIdReceb, Number(pedData.omie_codigo));
+
+          await supabase
+            .from("notas_fiscais")
+            .update({ omie_receb_id: receb.nIdReceb })
+            .eq("id", nfId);
+        }
+      } catch (err) {
+        console.warn("[lancarNFOmie] Associação automática de recebimento falhou:", err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
   revalidatePath("/notas-fiscais");
   return { ok: true, omieNodNota };
 }
@@ -295,4 +326,78 @@ export async function atualizarDecisaoItem(itemId: string, decisao: string) {
   const { error } = await supabase.from("nf_itens").update({ decisao }).eq("id", itemId);
   if (error) throw new Error(error.message);
   revalidatePath("/notas-fiscais");
+}
+
+// ── concluirRecebimentoOmie ────────────────────────────────────────────────────
+
+export async function concluirRecebimentoOmie(
+  nfId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: nf, error: nfErr } = await supabase
+    .from("notas_fiscais")
+    .select(`
+      id, omie_receb_id, omie_concluido, lancada_no_omie,
+      pedido_id,
+      unidades!notas_fiscais_unidade_id_fkey(omie_app_key, omie_app_secret)
+    `)
+    .eq("id", nfId)
+    .single();
+
+  if (nfErr || !nf) return { erro: "NF não encontrada" };
+  if (!nf.lancada_no_omie) return { erro: "NF ainda não foi lançada no Omie" };
+  if (nf.omie_concluido)   return { erro: "Recebimento já foi concluído" };
+  if (!nf.omie_receb_id)   return { erro: "NF sem ID de recebimento Omie — vincule ao pedido primeiro" };
+
+  type UnitCreds = { omie_app_key: string | null; omie_app_secret: string | null } | null;
+  const unid = nf.unidades as UnitCreds;
+
+  // Fallback: buscar creds via pedido se unidade direta não tiver
+  let appKey = unid?.omie_app_key;
+  let appSecret = unid?.omie_app_secret;
+
+  if ((!appKey || !appSecret) && nf.pedido_id) {
+    const { data: pedUnid } = await supabase
+      .from("pedido_unidades")
+      .select("unidades(omie_app_key, omie_app_secret)")
+      .eq("pedido_id", nf.pedido_id)
+      .limit(1)
+      .maybeSingle();
+
+    type PedUnidRow = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null } | null;
+    const pu = pedUnid as PedUnidRow;
+    appKey    = pu?.unidades?.omie_app_key ?? null;
+    appSecret = pu?.unidades?.omie_app_secret ?? null;
+  }
+
+  if (!appKey || !appSecret) {
+    return { erro: "Credenciais Omie não encontradas para esta NF" };
+  }
+
+  const creds: OmieCredentials = { appKey: String(appKey), appSecret: String(appSecret) };
+
+  try {
+    await concluirRecebimento(creds, nf.omie_receb_id);
+  } catch (err) {
+    return { erro: err instanceof OmieError ? `Omie: ${err.message}` : "Erro ao concluir recebimento" };
+  }
+
+  await supabase
+    .from("notas_fiscais")
+    .update({ omie_concluido: true })
+    .eq("id", nfId);
+
+  if (nf.pedido_id) {
+    await supabase
+      .from("pedidos")
+      .update({ status: "finalizado" })
+      .eq("id", nf.pedido_id);
+    revalidatePath("/pedidos");
+  }
+
+  revalidatePath("/notas-fiscais");
+  return { ok: true };
 }

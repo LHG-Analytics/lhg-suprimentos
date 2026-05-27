@@ -701,7 +701,9 @@ export type Database = {
           lancada_em: string | null
           lancada_no_omie: boolean | null
           numero: string | null
+          omie_concluido: boolean
           omie_num_nf: string | null
+          omie_receb_id: number | null
           pedido_id: string | null
           serie: string | null
           status: string
@@ -718,7 +720,9 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
+          omie_concluido?: boolean
           omie_num_nf?: string | null
+          omie_receb_id?: number | null
           pedido_id?: string | null
           serie?: string | null
           status?: string
@@ -735,7 +739,9 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
+          omie_concluido?: boolean
           omie_num_nf?: string | null
+          omie_receb_id?: number | null
           pedido_id?: string | null
           serie?: string | null
           status?: string
