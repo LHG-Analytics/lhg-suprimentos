@@ -173,30 +173,45 @@ export function useRealtimeNotifications(): {
             novos:    number;
             total:    number;
             status:   string;
+            detalhe:  { processados?: number } | null;
           };
           if (log.entidade !== "cmc_produtos") return;
 
-          const descricao =
-            log.novos > 0
+          // processados: quantos foram consultados nesta rodada (< total quando
+          // o time budget foi atingido antes de varrer todo o catálogo).
+          const processados = log.detalhe?.processados ?? log.total;
+          const parcial     = processados < log.total;
+
+          // Descrição diferenciada: sync parcial vs completo
+          const descricao = parcial
+            ? `${log.novos} preço${log.novos !== 1 ? "s" : ""} atualizado${log.novos !== 1 ? "s" : ""} · ${processados}/${log.total} verificados neste sync`
+            : log.novos > 0
               ? `${log.novos} de ${log.total} produto${log.total !== 1 ? "s" : ""} com preço de custo atualizado`
               : "Nenhum preço novo — produtos sem movimentação no Omie";
 
           push({
             type:        "success",
-            title:       "Sync Omie concluído",
+            title:       parcial ? "Sync Omie parcial" : "Sync Omie concluído",
             description: descricao,
             href:        "/produtos",
           });
 
-          toast.success("Produtos sincronizados com Omie ✓", {
-            description: descricao,
-            duration:    12_000,
-            icon:        createElement(RefreshCw, { size: 14, className: "text-emerald-400" }),
-            action: {
-              label:   "Ver produtos",
-              onClick: () => { window.location.href = "/produtos"; },
+          toast.success(
+            parcial ? "Sync Omie parcial ✓" : "Produtos sincronizados com Omie ✓",
+            {
+              description: parcial
+                ? `${descricao} — sincronize novamente para continuar`
+                : descricao,
+              duration: 14_000,
+              icon:     createElement(RefreshCw, { size: 14, className: "text-emerald-400" }),
+              action: {
+                label:   parcial ? "Sincronizar mais" : "Ver produtos",
+                onClick: () => {
+                  window.location.href = parcial ? "/produtos" : "/produtos";
+                },
+              },
             },
-          });
+          );
         },
       )
 

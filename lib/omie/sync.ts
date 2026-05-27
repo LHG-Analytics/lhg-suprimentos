@@ -501,15 +501,18 @@ export async function syncCMCProdutos(
       }
     }
 
-    console.log(`[omie/sync] CMC: ${atualizados}/${total} com custo atualizado, ${erros} erros — unidade=${unidadeId}`);
+    console.log(`[omie/sync] CMC: ${atualizados}/${total} com custo atualizado, ${processados} verificados, ${erros} erros — unidade=${unidadeId}`);
 
     const result: SyncResult = {
       entidade: "cmc_produtos",
       status: erros === 0 ? "ok" : erros === total ? "erro" : "parcial",
-      total,
+      total,           // total de produtos no catálogo
       novos: atualizados,
       erros,
       duracaoMs: Date.now() - inicio,
+      // processados: quantos produtos foram efetivamente consultados no Omie nesta rodada.
+      // Pode ser menor que total quando o time budget foi atingido.
+      detalhe: processados < total ? { processados } : undefined,
     };
 
     await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_cmc" });
