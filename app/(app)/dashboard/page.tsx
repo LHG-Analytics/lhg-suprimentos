@@ -17,6 +17,7 @@ import { CotacoesTable, type CotacaoRow } from "./_components/cotacoes-table";
 import { DashboardHeader } from "./_components/dashboard-header";
 import { OrcamentoWidgetSkeleton } from "./_components/orcamento-widget";
 import { OrcamentoSection } from "./_components/orcamento-section";
+import { OmieSyncStatus } from "./_components/omie-sync-status";
 import { type OrcamentoSheet } from "@/lib/sheets/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 // getUnidadeSheetConfig foi movido para OrcamentoSection (carregado via Suspense)
@@ -514,13 +515,14 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* ── Gráfico + Ações + Orçamento ──────────────────────────────── */}
+      {/* ── Gráfico + Ações + Status Omie ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[420px]">
         <div className="lg:col-span-2 h-full">
           <GastosChart series={chart.series} labels={chart.labels} />
         </div>
-        <div className="h-full">
+        <div className="flex flex-col gap-3 h-full">
           <AcoesFeed acoes={acoes} />
+          <OmieSyncStatus />
         </div>
       </div>
 
