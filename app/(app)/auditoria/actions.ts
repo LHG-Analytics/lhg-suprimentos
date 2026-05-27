@@ -43,7 +43,7 @@ export async function buscarEventosAuditoria(limite = 100): Promise<EventoAudito
       texto:      e.texto,
       autor_nome: e.autor_nome,
       created_at: e.created_at,
-      href:       "/pedidos",
+      href:       pedido ? `/pedidos/${pedido.id}` : "/pedidos",
     };
   });
 }
