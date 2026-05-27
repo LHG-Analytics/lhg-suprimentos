@@ -41,6 +41,60 @@ async function autenticar(req: NextRequest): Promise<boolean> {
   }
 }
 
+/**
+ * Valida que o usuário autenticado tem acesso ao slug de unidade solicitado.
+ * Compradores e admins têm acesso a todas as unidades.
+ * Outros papéis (aprovador, solicitante) precisam estar em user_unidades.
+ * Retorna null se acesso permitido, ou mensagem de erro.
+ */
+async function validarAcessoUnidade(
+  slug: string,
+): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return "Não autorizado.";
+
+    // Busca role + unidade em paralelo
+    const [{ data: profile }, { data: unidade }] = await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("unidades")
+        .select("id")
+        .eq("slug", slug)
+        .eq("ativa", true)
+        .single(),
+    ]);
+
+    // Unidade precisa existir e estar ativa
+    if (!unidade) return `Unidade '${slug}' não encontrada ou inativa.`;
+
+    // Comprador e admin têm acesso universal
+    const role = profile?.role ?? "solicitante";
+    if (role === "admin" || role === "comprador") return null;
+
+    // Outros papéis: verificar pivot user_unidades
+    const { data: acesso } = await supabase
+      .from("user_unidades")
+      .select("unidade_id")
+      .eq("user_id", user.id)
+      .eq("unidade_id", unidade.id)
+      .maybeSingle();
+
+    if (!acesso) {
+      return `Acesso negado: usuário não pertence à unidade '${slug}'.`;
+    }
+
+    return null; // acesso permitido
+  } catch {
+    return "Erro ao validar acesso à unidade.";
+  }
+}
+
 // ── GET — disparado pelo cron Vercel ──────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -76,6 +130,15 @@ export async function POST(req: NextRequest) {
   // Respeita a unidade ativa na sidebar (cookie lhg-unidade-slug)
   const cookieStore = await cookies();
   const slug = cookieStore.get("lhg-unidade-slug")?.value ?? null;
+
+  // ── NOVO: Valida acesso à unidade específica ──────────────────────────────────
+  if (slug && slug !== "todas") {
+    const erroAcesso = await validarAcessoUnidade(slug);
+    if (erroAcesso) {
+      console.warn(`${tag} Acesso negado à unidade slug="${slug}": ${erroAcesso}`);
+      return NextResponse.json({ ok: false, error: erroAcesso }, { status: 403 });
+    }
+  }
 
   // Modo contarApenas: 1 chamada por unidade, sem sync no banco
   if (contarApenas) {
