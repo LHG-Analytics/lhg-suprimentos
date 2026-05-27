@@ -352,7 +352,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
 
                   {/* Ações */}
                   <div className="self-center flex justify-end">
-                    {(r.status === "rascunho" || r.status === "cancelado") ? (
+                    {r.status !== "aprovado" ? (
                       <button
                         onClick={(e) => handleDelete(e, r)}
                         disabled={deletingId === r.id}

@@ -10,6 +10,49 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
+// ── deletarCotacao ────────────────────────────────────────────────────────────
+
+export async function deletarCotacao(id: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: cot, error: fetchErr } = await supabase
+    .from("cotacoes")
+    .select("id, status, numero")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !cot) throw new Error("Cotação não encontrada");
+
+  if (cot.status === "aprovado") {
+    throw new Error("Não é possível excluir uma cotação já aprovada (pedidos já foram gerados).");
+  }
+
+  // Remove filhos na ordem correta (FK: matriz → itens → fornecedores → unidades → cotação)
+  const { data: itens } = await supabase
+    .from("cotacao_itens")
+    .select("id")
+    .eq("cotacao_id", id);
+
+  if (itens?.length) {
+    await supabase
+      .from("cotacao_matriz")
+      .delete()
+      .in("cotacao_item_id", itens.map(i => i.id));
+  }
+
+  await supabase.from("cotacao_itens").delete().eq("cotacao_id", id);
+  await supabase.from("cotacao_fornecedores").delete().eq("cotacao_id", id);
+  await supabase.from("cotacao_unidades").delete().eq("cotacao_id", id);
+
+  const { error } = await supabase.from("cotacoes").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/cotacoes");
+  return { numero: cot.numero };
+}
+
 // ── criarCotacao ──────────────────────────────────────────────────────────────
 
 const NovaCotacaoSchema = z.object({

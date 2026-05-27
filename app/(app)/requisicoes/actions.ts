@@ -129,10 +129,8 @@ export async function deletarRequisicao(id: string) {
 
   if (fetchErr || !req) throw new Error("Requisição não encontrada");
 
-  if (!["rascunho", "cancelado"].includes(req.status)) {
-    throw new Error(
-      `Não é possível excluir uma requisição com status "${req.status}". Cancele-a primeiro.`,
-    );
+  if (req.status === "aprovado") {
+    throw new Error("Não é possível excluir uma requisição já aprovada.");
   }
 
   // Remove filhos antes (por segurança, caso não haja CASCADE no banco)

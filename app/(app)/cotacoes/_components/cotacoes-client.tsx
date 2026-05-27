@@ -8,11 +8,11 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Scale, Plus, ChevronRight, Sparkles,
-  AlertTriangle, Calendar, Loader2,
+  AlertTriangle, Calendar, Loader2, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { criarCotacao } from "../actions";
+import { criarCotacao, deletarCotacao } from "../actions";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -253,9 +253,28 @@ function NovaCotacaoModal({
 
 export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const router = useRouter();
-  const [filter,    setFilter]    = useState<FilterStatus>("todas");
-  const [query,     setQuery]     = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
+  const [filter,     setFilter]    = useState<FilterStatus>("todas");
+  const [query,      setQuery]     = useState("");
+  const [modalOpen,  setModalOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [, startDelete] = useTransition();
+
+  function handleDelete(e: React.MouseEvent, cot: Cotacao) {
+    e.stopPropagation();
+    if (!window.confirm(`Excluir a cotação ${cot.numero} "${cot.titulo}"?\nTodos os itens, fornecedores e preços serão removidos.`)) return;
+    setDeletingId(cot.id);
+    startDelete(async () => {
+      try {
+        await deletarCotacao(cot.id);
+        toast.success(`Cotação ${cot.numero} excluída`);
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao excluir");
+      } finally {
+        setDeletingId(null);
+      }
+    });
+  }
 
   // ── Mini-KPIs ──────────────────────────────────────────────────────────────
   const emCotacao     = cotacoes.filter(c => c.status === "cotacao").length;
@@ -510,9 +529,22 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                     )}
                   </div>
 
-                  {/* Chevron */}
+                  {/* Ações */}
                   <div className="self-center flex justify-end">
-                    <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    {c.status !== "aprovado" ? (
+                      <button
+                        onClick={(e) => handleDelete(e, c)}
+                        disabled={deletingId === c.id}
+                        title="Excluir cotação"
+                        className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                      >
+                        {deletingId === c.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Trash2 size={13} />}
+                      </button>
+                    ) : (
+                      <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    )}
                   </div>
                 </li>
               );
