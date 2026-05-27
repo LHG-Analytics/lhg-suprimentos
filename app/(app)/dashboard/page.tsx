@@ -18,6 +18,7 @@ import { DashboardHeader } from "./_components/dashboard-header";
 import { OrcamentoWidgetSkeleton } from "./_components/orcamento-widget";
 import { OrcamentoSection } from "./_components/orcamento-section";
 import { OmieSyncStatus } from "./_components/omie-sync-status";
+import { OmieSyncStatusSkeleton } from "./_components/omie-sync-status-skeleton";
 import { OmieResumoSection } from "./_components/omie-resumo-section";
 import { OmieResumoWidgetSkeleton } from "./_components/omie-resumo-widget";
 import { type OrcamentoSheet } from "@/lib/sheets/client";
@@ -450,17 +451,26 @@ export default async function DashboardPage({
   const periodoFrom = rawFrom ?? defaultFrom;
   const periodoTo   = rawTo   ?? defaultTo;
 
-  // Busca dados do Supabase em paralelo (rápido ~300ms)
-  // O Google Sheets (OrcamentoSection) é carregado via Suspense, sem bloquear esta query.
-  const [kpis, chart, acoes, { rows: cotacoes, total: totalCots }, gastosCat, gastosCatPrev] =
-    await Promise.all([
-      fetchKpis(supabase),
-      fetchChartData(supabase),
-      fetchAcoes(supabase),
-      fetchCotacoes(supabase),
-      fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
-      fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString()),
-    ]);
+  // Busca dados do Supabase em paralelo (rápido ~300ms).
+  // Promise.allSettled garante que uma falha isolada não derruba o dashboard inteiro.
+  const results = await Promise.allSettled([
+    fetchKpis(supabase),
+    fetchChartData(supabase),
+    fetchAcoes(supabase),
+    fetchCotacoes(supabase),
+    fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
+    fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString()),
+  ]);
+
+  // Valores de fallback para cada seção
+  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, nfsPendentes: 0 };
+  const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
+  const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [] };
+  const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
+  const cotacoesRes   = results[3].status === "fulfilled" ? results[3].value : { rows: [], total: 0 };
+  const gastosCat     = results[4].status === "fulfilled" ? results[4].value : {};
+  const gastosCatPrev = results[5].status === "fulfilled" ? results[5].value : {};
+  const { rows: cotacoes, total: totalCots } = cotacoesRes;
 
   // CMV sem orçamento (sheets carrega via Suspense separadamente)
   const cmv = computeCmvMetrics(gastosCat, gastosCatPrev, null);
@@ -539,7 +549,9 @@ export default async function DashboardPage({
         </div>
         <div className="flex flex-col gap-3 h-full">
           <AcoesFeed acoes={acoes} />
-          <OmieSyncStatus />
+          <Suspense fallback={<OmieSyncStatusSkeleton />}>
+            <OmieSyncStatus />
+          </Suspense>
         </div>
       </div>
 

@@ -103,7 +103,13 @@ async function fetchSyncStatus() {
 }
 
 export async function OmieSyncStatus() {
-  const syncs = await fetchSyncStatus();
+  let syncs: SyncInfo[];
+  try {
+    syncs = await fetchSyncStatus();
+  } catch {
+    // Falha silenciosa — erros de Supabase não devem quebrar o dashboard
+    return null;
+  }
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4">
