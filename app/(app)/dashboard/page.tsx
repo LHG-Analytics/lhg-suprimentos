@@ -427,7 +427,11 @@ function computeCmvMetrics(
 }
 
 // ── Página ─────────────────────────────────────────────────────────────────────
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -437,6 +441,14 @@ export default async function DashboardPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0);
+
+  // ── Filtro de período (para OmieResumoSection + DashboardHeader) ────────────
+  // Padrão: mês corrente se nenhum parâmetro for fornecido.
+  const { from: rawFrom, to: rawTo } = await searchParams;
+  const defaultFrom = monthStart.toISOString().split("T")[0]; // YYYY-MM-DD
+  const defaultTo   = now.toISOString().split("T")[0];        // YYYY-MM-DD
+  const periodoFrom = rawFrom ?? defaultFrom;
+  const periodoTo   = rawTo   ?? defaultTo;
 
   // Busca dados do Supabase em paralelo (rápido ~300ms)
   // O Google Sheets (OrcamentoSection) é carregado via Suspense, sem bloquear esta query.
@@ -453,12 +465,10 @@ export default async function DashboardPage() {
   // CMV sem orçamento (sheets carrega via Suspense separadamente)
   const cmv = computeCmvMetrics(gastosCat, gastosCatPrev, null);
 
-  const periodoLabel = `${datePtBr(monthStart)} – ${datePtBr(now)}`;
-
   return (
     <div className="max-w-[1600px] mx-auto space-y-3 pb-8">
       {/* ── Header ───────────────────────────────────────────────────── */}
-      <DashboardHeader periodoLabel={periodoLabel} />
+      <DashboardHeader from={periodoFrom} to={periodoTo} />
 
       {/* ── KPIs ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
@@ -519,7 +529,7 @@ export default async function DashboardPage() {
 
       {/* ── Resumo de Compras Omie — carrega via Suspense (chamada Omie) ── */}
       <Suspense fallback={<OmieResumoWidgetSkeleton />}>
-        <OmieResumoSection />
+        <OmieResumoSection from={periodoFrom} to={periodoTo} />
       </Suspense>
 
       {/* ── Gráfico + Ações + Status Omie ──────────────────────────── */}

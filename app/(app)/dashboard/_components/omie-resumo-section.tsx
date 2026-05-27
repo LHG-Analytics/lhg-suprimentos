@@ -6,7 +6,8 @@
  * Separado do page.tsx para ser envolto em <Suspense>, assim o dashboard
  * carrega KPIs/gráfico imediatamente enquanto este componente busca do Omie.
  *
- * Período: 1º de janeiro do ano corrente até hoje (visão anual).
+ * Período: recebido como props (ISO YYYY-MM-DD) do DashboardPage, que lê
+ *          os searchParams ?from=...&to=... definidos pelo DashboardHeader.
  * Unidade: respeita o cookie lhg-unidade-slug; se "todas", usa a primeira
  *          unidade ativa com credenciais Omie.
  */
@@ -17,7 +18,8 @@ import { obterResumoCompras, formatOmieDate, type OmieCredentials } from "@/lib/
 import { OmieResumoWidget } from "./omie-resumo-widget";
 
 // ── Cache: 10 min por unidade+período ─────────────────────────────────────────
-// Evita chamar Omie a cada pageview; revalida automaticamente a cada 10 min.
+// Chave inclui appKey+appSecret+datas — períodos diferentes ficam em entradas
+// distintas automaticamente (unstable_cache serializa os argumentos da função).
 const getCachedResumo = unstable_cache(
   async (appKey: string, appSecret: string, dInicio: string, dFim: string) => {
     const creds: OmieCredentials = { appKey, appSecret };
@@ -27,18 +29,27 @@ const getCachedResumo = unstable_cache(
   { revalidate: 600 }, // 10 minutos
 );
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+interface OmieResumoSectionProps {
+  /** Data de início no formato ISO YYYY-MM-DD (vinda de searchParams) */
+  from: string;
+  /** Data de fim no formato ISO YYYY-MM-DD (vinda de searchParams) */
+  to:   string;
+}
+
 // ── Componente ─────────────────────────────────────────────────────────────────
 
-export async function OmieResumoSection() {
-  // Período: 01/01/ano_atual → hoje
-  const hoje      = new Date();
-  const anoInicio = new Date(hoje.getFullYear(), 0, 1);
-  const dInicio   = formatOmieDate(anoInicio);
-  const dFim      = formatOmieDate(hoje);
+export async function OmieResumoSection({ from, to }: OmieResumoSectionProps) {
+  // Converte ISO → formato Omie (DD/MM/YYYY)
+  const fromDate = new Date(from + "T00:00:00");
+  const toDate   = new Date(to   + "T00:00:00");
+  const dInicio  = formatOmieDate(fromDate);
+  const dFim     = formatOmieDate(toDate);
 
   // Unidade ativa (mesmo cookie que o UnidadeContext usa)
-  const cookieStore  = await cookies();
-  const unidadeSlug  = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+  const cookieStore = await cookies();
+  const unidadeSlug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
 
   // Busca credenciais no Supabase (service client — leitura segura server-side)
   const supabase = createServiceClient();
@@ -61,16 +72,16 @@ export async function OmieResumoSection() {
 
   try {
     const resumo = await getCachedResumo(
-      unidades.omie_app_key  as string,
+      unidades.omie_app_key   as string,
       unidades.omie_app_secret as string,
       dInicio,
       dFim,
     );
 
-    // Período formatado em pt-BR para exibição
-    const periodoLabel = `${anoInicio.toLocaleDateString("pt-BR", {
+    // Rótulo de período legível em pt-BR
+    const periodoLabel = `${fromDate.toLocaleDateString("pt-BR", {
       day: "2-digit", month: "short", year: "numeric",
-    })} – ${hoje.toLocaleDateString("pt-BR", {
+    })} – ${toDate.toLocaleDateString("pt-BR", {
       day: "2-digit", month: "short",
     })}`;
 
