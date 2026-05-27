@@ -195,7 +195,7 @@ function ModalEmail({ pedido, onClose, onEnviado }: { pedido: Pedido; onClose: (
             <Mail size={14} className="text-sky-400" />
             <h2 className="text-sm font-semibold text-foreground">Enviar pedido ao fornecedor</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
+          <button onClick={onClose} aria-label="Fechar" className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
           <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
@@ -265,7 +265,7 @@ function ModalRejeitar({ pedidoId, onClose, onRejeitado }: { pedidoId: string; o
       <div className="relative w-full max-w-[440px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/80">
           <div className="flex items-center gap-2"><XCircle size={14} className="text-red-400" /><h2 className="text-sm font-semibold text-foreground">Rejeitar pedido</h2></div>
-          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
+          <button onClick={onClose} aria-label="Fechar" className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           <p className="text-sm text-muted-foreground">Informe o motivo da rejeição (opcional):</p>
@@ -324,7 +324,7 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
               Pedido Omie {pedido.numero ? `#${pedido.numero}` : `cod. ${pedido.omie_codigo}`}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
+          <button onClick={onClose} aria-label="Fechar" className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X size={14} /></button>
         </div>
 
         {/* Body */}
@@ -492,7 +492,7 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
               <div className="font-mono text-xl font-bold text-foreground">{formatBRL(pedido.valor_total)}</div>
               {pedido.condicao_pgto && <div className="text-[11px] text-muted-foreground/60 mt-0.5">{pedido.condicao_pgto}</div>}
             </div>
-            <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-0.5">
+            <button onClick={onClose} aria-label="Fechar" className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-0.5">
               <X size={14} />
             </button>
           </div>
@@ -1006,6 +1006,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
+              aria-label="Página anterior"
               className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft size={14} />
@@ -1016,6 +1017,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
+              aria-label="Próxima página"
               className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight size={14} />

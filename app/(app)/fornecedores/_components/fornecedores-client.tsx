@@ -378,6 +378,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
+                  aria-label="Página anterior"
                   className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft size={14} />
@@ -388,6 +389,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={page >= totalPages - 1}
+                  aria-label="Próxima página"
                   className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight size={14} />

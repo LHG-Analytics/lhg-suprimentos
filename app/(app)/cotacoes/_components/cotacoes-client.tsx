@@ -549,6 +549,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                         <button
                           onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
                           title="Editar cotação"
+                          aria-label="Editar"
                           className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Pencil size={13} />
@@ -557,6 +558,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                           onClick={(e) => handleDelete(e, c)}
                           disabled={deletingId === c.id}
                           title="Excluir cotação"
+                          aria-label="Excluir"
                           className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
                         >
                           {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
