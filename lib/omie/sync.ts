@@ -378,12 +378,25 @@ export async function syncCMCProdutos(
       `(mais antigo: ${(produtos[0].cmc_updated_at as string | null) ?? "nunca"})`,
     );
 
+    let primeiroLog = true; // loga resposta bruta do 1º produto para diagnóstico
+
     for (const produto of produtos) {
       const omieId = Number(produto.omie_codigo);
       if (!omieId) continue;
 
       try {
         const pos = await consultarPosicaoEstoque(creds, omieId, dHoje);
+
+        // Log diagnóstico: imprime resposta completa do 1º produto para validar
+        // nomes de campos do Omie (nCMC, posicao_estoque, etc.).
+        if (primeiroLog) {
+          console.log(
+            `[omie/sync] CMC DEBUG produto=${omieId} resposta:`,
+            JSON.stringify(pos),
+          );
+          primeiroLog = false;
+        }
+
         const cmc = extractCMC(pos);
 
         // Sempre atualiza cmc_updated_at para avançar a fila, mesmo que CMC seja 0.
