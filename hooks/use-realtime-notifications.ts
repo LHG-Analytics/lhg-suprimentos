@@ -215,7 +215,15 @@ export function useRealtimeNotifications(): {
         },
       )
 
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.info("[realtime] ✅ Canal lhg-shell-notifications conectado");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error("[realtime] ❌ Falha na conexão:", status, err);
+        } else {
+          console.info("[realtime] Status:", status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
