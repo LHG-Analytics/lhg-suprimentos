@@ -213,8 +213,8 @@ export function EditarProdutoModal({ produto, onClose }: EditarProdutoModalProps
               Somente leitura
             </p>
             {[
-              { label: "Código interno", value: produto.codigo },
-              { label: "Código Omie",    value: produto.omie_codigo ?? "—" },
+              { label: "Código Omie",    value: produto.codigo },
+              { label: "ID interno Omie", value: produto.omie_codigo ?? "—" },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between gap-2">
                 <span className="text-[11px] text-muted-foreground">{label}</span>
