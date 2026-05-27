@@ -9,7 +9,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { toast } from "sonner";
-import { CheckCircle2, ShoppingCart, Truck } from "lucide-react";
+import { CheckCircle2, ShoppingCart, Truck, RefreshCw } from "lucide-react";
 import { createElement } from "react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -158,6 +158,45 @@ export function useRealtimeNotifications(): {
           const novo = payload.new as { numero: string; titulo: string };
           push({ type: "info", title: `Nova cotação: ${novo.titulo}`, description: novo.numero, href: "/cotacoes" });
           toast.info(`Nova cotação: ${novo.titulo}`, { description: novo.numero });
+        },
+      )
+
+      // ── Sync Omie CMC: conclusão (INSERT em integracao_logs) ──────────────────
+      // Disparado pelo after() do route handler quando syncCMCProdutos termina.
+      // Entrega notificação no sino + toast com link para /produtos.
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "integracao_logs" },
+        (payload) => {
+          const log = payload.new as {
+            entidade: string;
+            novos:    number;
+            total:    number;
+            status:   string;
+          };
+          if (log.entidade !== "cmc_produtos") return;
+
+          const descricao =
+            log.novos > 0
+              ? `${log.novos} de ${log.total} produto${log.total !== 1 ? "s" : ""} com preço de custo atualizado`
+              : "Nenhum preço novo — produtos sem movimentação no Omie";
+
+          push({
+            type:        "success",
+            title:       "Sync Omie concluído",
+            description: descricao,
+            href:        "/produtos",
+          });
+
+          toast.success("Produtos sincronizados com Omie ✓", {
+            description: descricao,
+            duration:    12_000,
+            icon:        createElement(RefreshCw, { size: 14, className: "text-emerald-400" }),
+            action: {
+              label:   "Ver produtos",
+              onClick: () => { window.location.href = "/produtos"; },
+            },
+          });
         },
       )
 

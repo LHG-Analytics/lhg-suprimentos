@@ -3,6 +3,10 @@
 /**
  * sync-omie-produtos-button.tsx — LHG-206
  * Botão que dispara POST /api/omie/sync com entidade=produtos.
+ *
+ * Fire-and-forget: o botão libera imediatamente após disparar a requisição.
+ * O usuário pode navegar livremente enquanto o sync roda em background.
+ * A notificação de conclusão chega via Supabase Realtime (use-realtime-notifications).
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,44 +22,42 @@ export function SyncOmieProdutosButton() {
     if (syncing) return;
     setSyncing(true);
 
-    const toastId = toast.loading("Sincronizando produtos com Omie…");
+    // Toast imediato — não espera resposta do servidor
+    toast.info("Sincronização Omie iniciada", {
+      description: "Catálogo e preços sendo atualizados em segundo plano",
+      duration: 6_000,
+    });
 
-    try {
-      const res = await fetch("/api/omie/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entidade: "produtos" }),
+    // Libera o botão: usuário pode navegar livremente
+    // (setTimeout evita double-click acidental)
+    setTimeout(() => setSyncing(false), 2_000);
+
+    // Fire-and-forget: keepalive mantém a requisição mesmo após navegação.
+    // Catálogo termina em ~15s e faz router.refresh() silencioso.
+    // CMC termina em ~2-3min e dispara notificação via Supabase Realtime.
+    fetch("/api/omie/sync", {
+      method:   "POST",
+      headers:  { "Content-Type": "application/json" },
+      body:     JSON.stringify({ entidade: "produtos" }),
+      keepalive: true,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error ?? `Erro HTTP ${res.status}`);
+          return;
+        }
+        // Catálogo sincronizado — atualiza a página atual silenciosamente
+        // (se o usuário ainda estiver no app)
+        router.refresh();
+      })
+      .catch((err) => {
+        // AbortError = usuário navegou, keepalive pode não estar disponível
+        // neste ambiente — ignora silenciosamente
+        if (err instanceof Error && err.name === "AbortError") return;
+        console.error("[omie/sync]", err);
+        toast.error("Erro ao iniciar sincronização com Omie");
       });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
-      }
-
-      // CMC roda em background (after()) — só o catálogo retorna na resposta
-      const rCatalogo = data.results?.[0];
-      const total = rCatalogo?.total ?? 0;
-      const erros = rCatalogo?.erros ?? 0;
-
-      const catalogoMsg = erros === 0
-        ? `${total} produto${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""}`
-        : `${total - erros}/${total} sincronizados — ${erros} erro${erros !== 1 ? "s" : ""}`;
-
-      toast.success(
-        `${catalogoMsg} · preços de custo sendo atualizados…`,
-        { id: toastId, duration: 6000 },
-      );
-
-      router.refresh();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Falha ao sincronizar",
-        { id: toastId },
-      );
-    } finally {
-      setSyncing(false);
-    }
   }
 
   return (
@@ -72,7 +74,7 @@ export function SyncOmieProdutosButton() {
         size={14}
         className={cn("shrink-0", syncing && "animate-spin")}
       />
-      {syncing ? "Sincronizando…" : "Sincronizar Omie"}
+      {syncing ? "Iniciando…" : "Sincronizar Omie"}
     </button>
   );
 }
