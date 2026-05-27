@@ -61,4 +61,5 @@ export const BREADCRUMB_MAP: Record<string, string[]> = {
   "/relatorios":   ["Inteligência", "Relatórios"],
   "/admin":        ["Administração", "Configurações"],
   "/perfil":       ["Conta", "Meu Perfil"],
+  "/auditoria":    ["Administração", "Auditoria"],
 };
