@@ -331,6 +331,11 @@ export async function syncProdutos(
  *
  * @returns SyncResult com novos = quantidade de produtos com CMC atualizado.
  */
+// Quantos produtos processar por invocação do cron.
+// 200 × 280ms ≈ 56s — cabe confortavelmente no budget de after() (300s total).
+// Com 600 produtos no catálogo, todos são cobertos em ~3 dias de rotação.
+const CMC_BATCH_SIZE = 200;
+
 export async function syncCMCProdutos(
   supabase: SupabaseClient,
   creds: OmieCredentials,
@@ -342,12 +347,16 @@ export async function syncCMCProdutos(
   let erros       = 0;
 
   try {
-    // Busca todos os produtos desta unidade que têm omie_codigo
+    // Busca os CMC_BATCH_SIZE produtos mais desatualizados desta unidade.
+    // NULL vem primeiro (nunca sincronizados), depois os mais antigos.
+    // Isso cria uma fila de prioridade auto-gerenciada: a cada run o lote avança.
     const { data: produtos, error: fetchErr } = await supabase
       .from("produtos")
-      .select("id, omie_codigo, nome")
+      .select("id, omie_codigo, nome, cmc_updated_at")
       .eq("omie_unidade_id", unidadeId)
-      .not("omie_codigo", "is", null);
+      .not("omie_codigo", "is", null)
+      .order("cmc_updated_at", { ascending: true, nullsFirst: true })
+      .limit(CMC_BATCH_SIZE);
 
     if (fetchErr) throw fetchErr;
     if (!produtos?.length) {
@@ -364,7 +373,10 @@ export async function syncCMCProdutos(
     total = produtos.length;
     const dHoje = formatOmieDate(new Date());
 
-    console.log(`[omie/sync] CMC: iniciando para ${total} produto(s) — unidade=${unidadeId}`);
+    console.log(
+      `[omie/sync] CMC: iniciando lote de ${total} produto(s) — unidade=${unidadeId}`,
+      `(mais antigo: ${(produtos[0].cmc_updated_at as string | null) ?? "nunca"})`,
+    );
 
     for (const produto of produtos) {
       const omieId = Number(produto.omie_codigo);
@@ -374,32 +386,45 @@ export async function syncCMCProdutos(
         const pos = await consultarPosicaoEstoque(creds, omieId, dHoje);
         const cmc = extractCMC(pos);
 
+        // Sempre atualiza cmc_updated_at para avançar a fila, mesmo que CMC seja 0.
+        // Se cmc > 0, atualiza também o preco_custo.
+        const updatePayload: Record<string, unknown> = {
+          cmc_updated_at: new Date().toISOString(),
+        };
         if (cmc !== null && cmc > 0) {
-          const { error: updateErr } = await supabase
-            .from("produtos")
-            .update({ preco_custo: cmc })
-            .eq("id", produto.id);
+          updatePayload.preco_custo = cmc;
+        }
 
-          if (updateErr) {
-            console.warn(`[omie/sync] CMC update falhou produto=${omieId}:`, updateErr.message);
-            erros++;
-          } else {
-            atualizados++;
-          }
+        const { error: updateErr } = await supabase
+          .from("produtos")
+          .update(updatePayload)
+          .eq("id", produto.id);
+
+        if (updateErr) {
+          console.warn(`[omie/sync] CMC update falhou produto=${omieId}:`, updateErr.message);
+          erros++;
+        } else if (cmc !== null && cmc > 0) {
+          atualizados++;
         }
       } catch (err) {
-        // "Sem registros" = produto sem movimento de estoque — normal, pular silenciosamente
-        if (isOmieEmptyError(err)) continue;
+        // "Sem registros" = produto sem movimento de estoque.
+        // Ainda marca cmc_updated_at para não ficar preso no topo da fila.
+        if (isOmieEmptyError(err)) {
+          await supabase
+            .from("produtos")
+            .update({ cmc_updated_at: new Date().toISOString() })
+            .eq("id", produto.id);
+          continue;
+        }
 
-        // REDUNDANT = mesmo produto consultado nos últimos 60s (sync manual recente).
-        // Os dados ainda estão válidos — pular sem contar como erro.
+        // REDUNDANT = mesmo produto consultado nos últimos 60s.
+        // Dados ainda válidos — pular sem penalizar a fila.
         if (isOmieRedundantError(err)) {
           console.info(`[omie/sync] CMC produto=${omieId}: REDUNDANT — pulando (dados recentes).`);
           continue;
         }
 
-        // BLOQUEADA = chave inteira bloqueada por ~30 min. Parar imediatamente para
-        // não desperdiçar invocações e evitar agravar o bloqueio.
+        // BLOQUEADA = chave inteira bloqueada por ~30 min. Abortar imediatamente.
         if (isOmieBlockedError(err)) {
           console.error(
             `[omie/sync] CMC: API BLOQUEADA após ${atualizados} atualizados — abortando sync.`,
@@ -416,7 +441,7 @@ export async function syncCMCProdutos(
       }
     }
 
-    console.log(`[omie/sync] CMC: ${atualizados}/${total} atualizados, ${erros} erros — unidade=${unidadeId}`);
+    console.log(`[omie/sync] CMC: ${atualizados}/${total} com custo atualizado, ${erros} erros — unidade=${unidadeId}`);
 
     const result: SyncResult = {
       entidade: "cmc_produtos",
