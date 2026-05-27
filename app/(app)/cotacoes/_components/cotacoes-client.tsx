@@ -8,12 +8,13 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Scale, Plus, ChevronRight, Sparkles,
-  AlertTriangle, Calendar, Loader2, Trash2, Pencil, X,
+  AlertTriangle, Calendar, Loader2, Trash2, Pencil, X, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { criarCotacao, deletarCotacao } from "../actions";
 import { useDebounce } from "@/hooks/use-debounce";
+import { downloadCsv } from "@/lib/csv";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EditarCotacaoModal } from "./editar-cotacao-modal";
 
@@ -334,6 +335,18 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
     return lista;
   }, [cotacoes, filter, queryDebounced, dataInicio, dataFim]);
 
+  function exportarCotacoesCSV() {
+    const headers = ["Número", "Título", "Status", "Urgente", "Criado em"];
+    const csvRows = filtered.map((c) => [
+      c.numero ?? "",
+      c.titulo ?? "",
+      STATUS_STYLES[c.status]?.label ?? c.status,
+      c.urgente ? "Sim" : "Não",
+      c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "",
+    ]);
+    downloadCsv("cotacoes", headers, csvRows);
+  }
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
 
@@ -620,12 +633,21 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
         {/* Footer */}
         {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-border/60">
+          <div className="px-5 py-3 border-t border-border/60 flex items-center justify-between">
             <span className="text-[12px] text-muted-foreground/70">
               {filtered.length === cotacoes.length
                 ? `${cotacoes.length} cotação${cotacoes.length !== 1 ? "ões" : ""}`
                 : `${filtered.length} de ${cotacoes.length} cotação${cotacoes.length !== 1 ? "ões" : ""}`}
             </span>
+            <button
+              onClick={exportarCotacoesCSV}
+              aria-label="Exportar cotações como CSV"
+              title="Exportar CSV"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors text-xs"
+            >
+              <Download size={13} />
+              <span className="hidden sm:inline">CSV</span>
+            </button>
           </div>
         )}
       </div>

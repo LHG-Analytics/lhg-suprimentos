@@ -13,12 +13,13 @@ import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
   Star, ReceiptText, Sparkles, RefreshCw, Plus,
-  ChevronLeft, ChevronRight, Calendar,
+  ChevronLeft, ChevronRight, Calendar, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { aprovarPedido, rejeitarPedido, enviarEmailFornecedor, marcarRecebido, pushPedidoOmie } from "../actions";
 import { useDebounce } from "@/hooks/use-debounce";
+import { downloadCsv } from "@/lib/csv";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -789,6 +790,32 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
     setSelectedLhg(null);
   }
 
+  function exportarPedidosCSV() {
+    const headers = ["Número", "Fornecedor", "Valor Total (R$)", "Status", "Criado em"];
+    const csvRows = rows.map((r) => {
+      if (r.kind === "lhg") {
+        const p = r.data;
+        return [
+          p.numero,
+          p.fornecedores ? (p.fornecedores.nome_fantasia ?? p.fornecedores.razao_social) : "",
+          (p.valor_total ?? 0).toFixed(2).replace(".", ","),
+          p.status,
+          p.created_at ? new Date(p.created_at).toLocaleDateString("pt-BR") : "",
+        ];
+      } else {
+        const p = r.data;
+        return [
+          p.numero ? `#${p.numero}` : `c.${p.omie_codigo}`,
+          p.fornecedor_nome ?? "",
+          (p.valor_total ?? 0).toFixed(2).replace(".", ","),
+          p.situacao ?? "",
+          p.data_pedido ? new Date(p.data_pedido + "T12:00:00").toLocaleDateString("pt-BR") : "",
+        ];
+      }
+    });
+    downloadCsv("pedidos", headers, csvRows);
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -924,6 +951,15 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
               {formatBRL(rows.reduce((s, r) => s + (r.kind === "lhg" ? r.data.valor_total : (r.data.valor_total ?? 0)), 0))}
             </span>
           </span>
+          <button
+            onClick={exportarPedidosCSV}
+            aria-label="Exportar pedidos como CSV"
+            title="Exportar CSV"
+            className="ml-auto flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors text-xs"
+          >
+            <Download size={13} />
+            <span className="hidden sm:inline">CSV</span>
+          </button>
         </div>
       )}
 
