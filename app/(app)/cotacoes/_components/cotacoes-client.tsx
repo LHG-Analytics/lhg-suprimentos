@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { criarCotacao, deletarCotacao } from "../actions";
+import { useDebounce } from "@/hooks/use-debounce";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { EditarCotacaoModal } from "./editar-cotacao-modal";
 
@@ -258,6 +259,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const router = useRouter();
   const [filter,     setFilter]    = useState<FilterStatus>("todas");
   const [query,      setQuery]     = useState("");
+  const queryDebounced = useDebounce(query, 300);
   const [modalOpen,  setModalOpen] = useState(false);
   const [confirmCot, setConfirmCot] = useState<Cotacao | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -307,7 +309,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
   // ── Filtrar + buscar ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
+    const q = queryDebounced.toLowerCase().trim();
     return cotacoes.filter((c) => {
       if (filter !== "todas" && c.status !== filter) return false;
       if (!q) return true;
@@ -318,7 +320,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         c.cotacao_unidades.some(cu => cu.unidades?.nome.toLowerCase().includes(q))
       );
     });
-  }, [cotacoes, filter, query]);
+  }, [cotacoes, filter, queryDebounced]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">

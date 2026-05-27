@@ -7,6 +7,7 @@
  *           e OMIE (redundante); email destacado na coluna CONTATO.
  */
 import { useState, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Search, Building2, MapPin, Phone, Mail, RefreshCw, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,7 @@ const PAGE_SIZE = 50;
 export function FornecedoresClient({ fornecedores, lastLog, unidades }: FornecedoresClientProps) {
   const router = useRouter();
   const [query,               setQuery]               = useState("");
+  const queryDebounced = useDebounce(query, 300);
   // Padrão: "ativos" espelha o comportamento do sync Omie (inativo: "N")
   const [filtroChip,          setFiltroChip]          = useState<FiltroKey>("ativos");
   const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
@@ -105,7 +107,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
   function handleChip(k: FiltroKey)    { setFiltroChip(k);  setPage(0); }
   function handleLimpar()              { setFiltroChip("ativos"); setQuery(""); setPage(0); }
 
-  const q = query.toLowerCase().trim();
+  const q = queryDebounced.toLowerCase().trim();
 
   // Chip filter — sempre aplicado
   const chipFiltered = useMemo(() => fornecedores.filter((f) => {
@@ -130,7 +132,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
       (f.telefone ?? "").toLowerCase().includes(q) ||
       (f.contato ?? "").toLowerCase().includes(q)
     );
-  }, [chipFiltered, q]);
+  }, [chipFiltered, q, queryDebounced]);
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);

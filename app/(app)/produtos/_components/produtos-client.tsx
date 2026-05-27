@@ -5,6 +5,7 @@
  * Tabela interativa do catálogo de produtos com busca, filtro por categoria e sync Omie.
  */
 import { useState, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter } from "next/navigation";
 import { Search, Package, RefreshCw, Tag, Layers, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ const PAGE_SIZE = 50;
 export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientProps) {
   const router = useRouter();
   const [query,            setQuery]            = useState("");
+  const queryDebounced = useDebounce(query, 300);
   const [categoria,        setCategoria]        = useState<string>("todas");
   const [familia,          setFamilia]          = useState<string>("todas");
   const [produtoEditando,  setProdutoEditando]  = useState<Produto | null>(null);
@@ -110,7 +112,7 @@ export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientPr
     return Array.from(set).sort();
   }, [produtos]);
 
-  const q = query.toLowerCase().trim();
+  const q = queryDebounced.toLowerCase().trim();
 
   // Filtro por categoria/família — sempre aplicado
   const chipFiltered = useMemo(() => produtos.filter((p) => {
@@ -129,7 +131,7 @@ export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientPr
       (p.familia_omie ?? "").toLowerCase().includes(q) ||
       p.unidade_med.toLowerCase().includes(q)
     );
-  }, [chipFiltered, q]);
+  }, [chipFiltered, q, queryDebounced]);
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginados   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);

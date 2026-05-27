@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { aprovarPedido, rejeitarPedido, enviarEmailFornecedor, marcarRecebido, pushPedidoOmie } from "../actions";
+import { useDebounce } from "@/hooks/use-debounce";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -662,6 +663,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
   const router = useRouter();
 
   const [busca,        setBusca]        = useState("");
+  const buscaDebounced = useDebounce(busca, 300);
   const [selectedLhg,  setSelectedLhg]  = useState<Pedido | null>(null);
   const [selectedOmie, setSelectedOmie] = useState<OmiePedido | null>(null);
   const [page,         setPage]         = useState(0);
@@ -710,7 +712,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
   type RowOmie = { kind: "omie"; data: OmiePedido }
   type Row = RowLhg | RowOmie;
 
-  const buscaQ     = busca.toLowerCase().trim();
+  const buscaQ     = buscaDebounced.toLowerCase().trim();
   const buscaAtiva = buscaQ.length >= 2;
   const buscaCurta = buscaQ.length === 1;
 
@@ -748,7 +750,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
         : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
       return dateB - dateA;
     });
-  }, [pedidosIniciais, omie_pedidos, buscaQ]);
+  }, [pedidosIniciais, omie_pedidos, buscaDebounced]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
