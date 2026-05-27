@@ -373,39 +373,82 @@ export async function syncCMCProdutos(
     total = produtos.length;
     const dHoje = formatOmieDate(new Date());
 
+    // Busca os locais de estoque configurados para esta unidade.
+    // Se não configurado (array vazio), usa 0 (padrão Omie = estoque principal).
+    // Cada local tem seu próprio CMC — percorremos em ordem até achar CMC > 0.
+    const { data: unidadeInfo } = await supabase
+      .from("unidades")
+      .select("omie_locais_estoque")
+      .eq("id", unidadeId)
+      .maybeSingle();
+
+    const locaisEstoque: number[] =
+      Array.isArray(unidadeInfo?.omie_locais_estoque) && unidadeInfo.omie_locais_estoque.length > 0
+        ? (unidadeInfo.omie_locais_estoque as number[])
+        : [0]; // fallback: padrão Omie
+
     console.log(
       `[omie/sync] CMC: iniciando lote de ${total} produto(s) — unidade=${unidadeId}`,
       `(mais antigo: ${(produtos[0].cmc_updated_at as string | null) ?? "nunca"})`,
+      `| locais: [${locaisEstoque.join(", ")}]`,
     );
 
-    let primeiroLog = true; // loga resposta bruta do 1º produto para diagnóstico
+    let bloqueado = false;
 
     for (const produto of produtos) {
+      if (bloqueado) break;
+
       const omieId = Number(produto.omie_codigo);
       if (!omieId) continue;
 
       try {
-        const pos = await consultarPosicaoEstoque(creds, omieId, dHoje);
+        // Tenta cada local de estoque em ordem até encontrar CMC > 0 (short-circuit).
+        // Ex: [3803913699, 3907756447, 3907756524] → para no primeiro com CMC real.
+        let bestCmc: number | null = null;
 
-        // Log diagnóstico: imprime resposta completa do 1º produto para validar
-        // nomes de campos do Omie (nCMC, posicao_estoque, etc.).
-        if (primeiroLog) {
-          console.log(
-            `[omie/sync] CMC DEBUG produto=${omieId} resposta:`,
-            JSON.stringify(pos),
-          );
-          primeiroLog = false;
+        for (const localId of locaisEstoque) {
+          try {
+            const pos = await consultarPosicaoEstoque(creds, omieId, dHoje, localId);
+            const cmc = extractCMC(pos);
+
+            if (cmc !== null && cmc > 0) {
+              bestCmc = cmc;
+              break; // short-circuit: encontrou CMC neste local
+            }
+          } catch (locErr) {
+            // REDUNDANT neste local → tenta o próximo
+            if (isOmieRedundantError(locErr)) continue;
+
+            // BLOQUEADA → abortar tudo imediatamente
+            if (isOmieBlockedError(locErr)) {
+              bloqueado = true;
+              console.error(
+                `[omie/sync] CMC: API BLOQUEADA após ${atualizados} atualizados — abortando.`,
+                locErr instanceof Error ? locErr.message : String(locErr),
+              );
+              break;
+            }
+
+            // "Sem registros" neste local → tenta o próximo
+            if (isOmieEmptyError(locErr)) continue;
+
+            // Outro erro neste local → log e tenta próximo local
+            console.warn(
+              `[omie/sync] CMC produto=${omieId} local=${localId}:`,
+              locErr instanceof Error ? locErr.message : String(locErr),
+            );
+          }
         }
 
-        const cmc = extractCMC(pos);
+        if (bloqueado) break;
 
-        // Sempre atualiza cmc_updated_at para avançar a fila, mesmo que CMC seja 0.
-        // Se cmc > 0, atualiza também o preco_custo.
+        // Sempre atualiza cmc_updated_at para avançar a fila, mesmo sem CMC.
+        // Se encontrou CMC > 0 em algum local, atualiza também o preco_custo.
         const updatePayload: Record<string, unknown> = {
           cmc_updated_at: new Date().toISOString(),
         };
-        if (cmc !== null && cmc > 0) {
-          updatePayload.preco_custo = cmc;
+        if (bestCmc !== null) {
+          updatePayload.preco_custo = bestCmc;
         }
 
         const { error: updateErr } = await supabase
@@ -416,12 +459,11 @@ export async function syncCMCProdutos(
         if (updateErr) {
           console.warn(`[omie/sync] CMC update falhou produto=${omieId}:`, updateErr.message);
           erros++;
-        } else if (cmc !== null && cmc > 0) {
+        } else if (bestCmc !== null) {
           atualizados++;
         }
       } catch (err) {
-        // "Sem registros" = produto sem movimento de estoque.
-        // Ainda marca cmc_updated_at para não ficar preso no topo da fila.
+        // "Sem registros" globais → avança a fila sem penalizar
         if (isOmieEmptyError(err)) {
           await supabase
             .from("produtos")
@@ -430,17 +472,11 @@ export async function syncCMCProdutos(
           continue;
         }
 
-        // REDUNDANT = mesmo produto consultado nos últimos 60s.
-        // Dados ainda válidos — pular sem penalizar a fila.
-        if (isOmieRedundantError(err)) {
-          console.info(`[omie/sync] CMC produto=${omieId}: REDUNDANT — pulando (dados recentes).`);
-          continue;
-        }
-
-        // BLOQUEADA = chave inteira bloqueada por ~30 min. Abortar imediatamente.
+        // BLOQUEADA no nível externo (improvável, mas defensivo)
         if (isOmieBlockedError(err)) {
+          bloqueado = true;
           console.error(
-            `[omie/sync] CMC: API BLOQUEADA após ${atualizados} atualizados — abortando sync.`,
+            `[omie/sync] CMC: API BLOQUEADA após ${atualizados} atualizados — abortando.`,
             err instanceof Error ? err.message : String(err),
           );
           break;

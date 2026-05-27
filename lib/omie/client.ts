@@ -1010,18 +1010,24 @@ export interface OmiePosicaoEstoqueResponse {
  * Endpoint: POST /estoque/consulta/ — call: PosicaoEstoque
  *
  * Parâmetro de data: "data" (não "dData") conforme documentação oficial.
+ * Parâmetro codigo_local_estoque: ID do local de estoque (0 = padrão do Omie).
+ * ⚠️ Cada local de estoque tem seu próprio CMC — sempre especifique o local correto.
  */
 export async function consultarPosicaoEstoque(
-  creds: OmieCredentials,
-  id_prod: number,
-  data?: string,
+  creds:                OmieCredentials,
+  id_prod:              number,
+  data?:                string,
+  codigo_local_estoque: number = 0,
 ): Promise<OmiePosicaoEstoqueResponse> {
   const dData = data ?? formatOmieDate(new Date());
-  return omiePost<{ id_prod: number; data: string }, OmiePosicaoEstoqueResponse>(
+  return omiePost<
+    { id_prod: number; data: string; codigo_local_estoque: number },
+    OmiePosicaoEstoqueResponse
+  >(
     "/estoque/consulta/",
     "PosicaoEstoque",
     creds,
-    { id_prod, data: dData },
+    { id_prod, data: dData, codigo_local_estoque },
   );
 }
 
