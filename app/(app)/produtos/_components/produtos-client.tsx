@@ -269,7 +269,7 @@ export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientPr
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="hidden sm:grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-border/80">
           {["PRODUTO", "CATEGORIA ORÇAMENTO", "FAMÍLIA OMIE", "UNIDADE", "PREÇO CUSTO", "STATUS"].map((h) => (
             <div
               key={h}
@@ -301,81 +301,135 @@ export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientPr
               <li
                 key={p.id}
                 onClick={() => setProdutoEditando(p)}
-                className="grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer"
+                className="hover:bg-muted/40 transition-colors cursor-pointer"
               >
-                {/* Produto */}
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate leading-tight">
-                    {p.nome}
+                {/* ── Mobile card ──────────────────────────────────────── */}
+                <div className="sm:hidden px-4 py-3 space-y-2">
+                  {/* Linha 1: nome + status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-foreground truncate leading-tight">
+                        {p.nome}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                        {p.codigo}
+                        {p.omie_codigo && (
+                          <>
+                            <span className="mx-1 text-muted-foreground/40">·</span>
+                            <span className="text-sky-600">Omie</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0",
+                      p.ativo
+                        ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
+                        : "bg-muted text-muted-foreground ring-1 ring-border/50",
+                    )}>
+                      {p.ativo ? "Ativo" : "Inativo"}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                    {p.codigo}
-                    {p.omie_codigo && (
-                      <>
-                        <span className="mx-1 text-muted-foreground/40">·</span>
-                        <span className="text-sky-600">Omie</span>
-                      </>
+                  {/* Linha 2: badges + unidade + preço */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                      categoriaCor(p.categoria),
+                    )}>
+                      {p.categoria}
+                    </span>
+                    {p.familia_omie && (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 bg-amber-500/10 text-amber-400 ring-amber-500/20">
+                        {p.familia_omie}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-muted-foreground font-mono uppercase ml-auto">
+                      {p.unidade_med}
+                    </span>
+                    {formatPreco(p.preco_custo) && (
+                      <span className="text-[12px] text-emerald-400 font-mono">
+                        {formatPreco(p.preco_custo)}
+                      </span>
                     )}
                   </div>
                 </div>
 
-                {/* Categoria (orçamento) */}
-                <div className="self-center">
-                  <span className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-                    categoriaCor(p.categoria),
-                  )}>
-                    {p.categoria}
-                  </span>
-                </div>
+                {/* ── Desktop grid ─────────────────────────────────────── */}
+                <div className="hidden sm:grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5">
+                  {/* Produto */}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate leading-tight">
+                      {p.nome}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                      {p.codigo}
+                      {p.omie_codigo && (
+                        <>
+                          <span className="mx-1 text-muted-foreground/40">·</span>
+                          <span className="text-sky-600">Omie</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                {/* Família Omie */}
-                <div className="self-center">
-                  {p.familia_omie ? (
+                  {/* Categoria (orçamento) */}
+                  <div className="self-center">
                     <span className={cn(
                       "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-                      "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+                      categoriaCor(p.categoria),
                     )}>
-                      {p.familia_omie}
+                      {p.categoria}
                     </span>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground/60">—</span>
-                  )}
-                </div>
+                  </div>
 
-                {/* Unidade de medida */}
-                <div className="self-center">
-                  <span className="text-[12px] text-muted-foreground font-mono uppercase">
-                    {p.unidade_med}
-                  </span>
-                </div>
+                  {/* Família Omie */}
+                  <div className="self-center">
+                    {p.familia_omie ? (
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                        "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+                      )}>
+                        {p.familia_omie}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground/60">—</span>
+                    )}
+                  </div>
 
-                {/* Preço de custo */}
-                <div className="self-center">
-                  {formatPreco(p.preco_custo) ? (
-                    <span className="text-[12px] text-foreground/80 font-mono">
-                      {formatPreco(p.preco_custo)}
+                  {/* Unidade de medida */}
+                  <div className="self-center">
+                    <span className="text-[12px] text-muted-foreground font-mono uppercase">
+                      {p.unidade_med}
                     </span>
-                  ) : (
-                    <span className="text-[12px] text-muted-foreground/60">—</span>
-                  )}
-                </div>
+                  </div>
 
-                {/* Status */}
-                <div className="self-center">
-                  <span className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                    p.ativo
-                      ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
-                      : "bg-muted text-muted-foreground ring-1 ring-border/50",
-                  )}>
-                    {p.ativo ? "Ativo" : "Inativo"}
-                  </span>
-                  {p.omie_sincronizado_em && (
-                    <div className="text-[10px] text-muted-foreground/40 mt-0.5 font-mono">
-                      {relativeTime(p.omie_sincronizado_em)}
-                    </div>
-                  )}
+                  {/* Preço de custo */}
+                  <div className="self-center">
+                    {formatPreco(p.preco_custo) ? (
+                      <span className="text-[12px] text-foreground/80 font-mono">
+                        {formatPreco(p.preco_custo)}
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-muted-foreground/60">—</span>
+                    )}
+                  </div>
+
+                  {/* Status */}
+                  <div className="self-center">
+                    <span className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      p.ativo
+                        ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20"
+                        : "bg-muted text-muted-foreground ring-1 ring-border/50",
+                    )}>
+                      {p.ativo ? "Ativo" : "Inativo"}
+                    </span>
+                    {p.omie_sincronizado_em && (
+                      <div className="text-[10px] text-muted-foreground/40 mt-0.5 font-mono">
+                        {relativeTime(p.omie_sincronizado_em)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}

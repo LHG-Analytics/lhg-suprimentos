@@ -401,7 +401,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
         </div>
 
         {/* ── Conteúdo + Sidebar ────────────────────────────────────────────── */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col sm:flex-row flex-1 overflow-hidden">
 
           {/* Conteúdo principal */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -603,8 +603,8 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                 {/* Tabela de itens */}
                 <div className="rounded-lg border border-border overflow-hidden">
-                  {/* Header */}
-                  <div className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-border bg-muted/40">
+                  {/* Header — oculto no mobile */}
+                  <div className="hidden sm:grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-border bg-muted/40">
                     {["PRODUTO", "QTD", "UNID.", "ÚLT. CUSTO", "OBSERVAÇÃO", ""].map(h => (
                       <div key={h} className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium">
                         {h}
@@ -614,78 +614,127 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                   {/* Linhas */}
                   {form.itens.map((item) => (
-                    <div
-                      key={item._key}
-                      className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5 border-b border-border/40 hover:bg-muted/20 transition-colors"
-                    >
-                      {/* Produto */}
-                      <ProdutoCombobox
-                        value={item.produto}
-                        onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                        produtos={produtos}
-                        familiaFiltro={familiaFiltro}
-                      />
+                    <div key={item._key} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
 
-                      {/* Quantidade */}
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={item.quantidade}
-                        onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
-                        className={cn(
-                          "w-full rounded border border-transparent bg-transparent",
-                          "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
-                          "focus:outline-none focus:border-border hover:border-border transition-colors",
-                          "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
-                        )}
-                      />
-
-                      {/* Unidade de medida */}
-                      <div className="flex items-center justify-center">
-                        <span className="text-[11px] font-mono text-muted-foreground uppercase">
-                          {item.produto?.unidade_med ?? "—"}
-                        </span>
-                      </div>
-
-                      {/* Último custo */}
-                      <div className="flex items-center justify-end">
-                        {item.produto?.preco_custo ? (
-                          <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                            {formatBRL(item.produto.preco_custo)}
+                      {/* ── Mobile: layout empilhado ── */}
+                      <div className="sm:hidden px-3 py-2 space-y-1.5">
+                        <ProdutoCombobox
+                          value={item.produto}
+                          onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
+                          produtos={produtos}
+                          familiaFiltro={familiaFiltro}
+                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantidade}
+                            onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
+                            className="w-16 rounded border border-border bg-transparent px-2 py-1.5 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <span className="text-[11px] font-mono text-muted-foreground uppercase shrink-0">
+                            {item.produto?.unidade_med ?? "—"}
                           </span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground/30">—</span>
-                        )}
+                          {item.produto?.preco_custo ? (
+                            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                              {formatBRL(item.produto.preco_custo)}
+                            </span>
+                          ) : null}
+                          <input
+                            type="text"
+                            placeholder="obs. (opcional)"
+                            value={item.observacao}
+                            onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
+                            className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-border hover:border-border transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => form.itens.length > 1 && removeItem(item._key)}
+                            disabled={form.itens.length === 1}
+                            className={cn(
+                              "flex items-center justify-center rounded p-1 transition-colors shrink-0",
+                              form.itens.length === 1
+                                ? "text-muted-foreground/20 cursor-not-allowed"
+                                : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
+                            )}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Observação */}
-                      <input
-                        type="text"
-                        placeholder="(opcional)"
-                        value={item.observacao}
-                        onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
-                        className={cn(
-                          "w-full rounded border border-transparent bg-transparent",
-                          "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
-                          "focus:outline-none focus:border-border hover:border-border transition-colors",
-                        )}
-                      />
+                      {/* ── Desktop: grid original ── */}
+                      <div className="hidden sm:grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5">
+                        {/* Produto */}
+                        <ProdutoCombobox
+                          value={item.produto}
+                          onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
+                          produtos={produtos}
+                          familiaFiltro={familiaFiltro}
+                        />
 
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => form.itens.length > 1 && removeItem(item._key)}
-                        disabled={form.itens.length === 1}
-                        className={cn(
-                          "flex items-center justify-center rounded p-1 transition-colors",
-                          form.itens.length === 1
-                            ? "text-muted-foreground/20 cursor-not-allowed"
-                            : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
-                        )}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                        {/* Quantidade */}
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.quantidade}
+                          onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
+                          className={cn(
+                            "w-full rounded border border-transparent bg-transparent",
+                            "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
+                            "focus:outline-none focus:border-border hover:border-border transition-colors",
+                            "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
+                          )}
+                        />
+
+                        {/* Unidade de medida */}
+                        <div className="flex items-center justify-center">
+                          <span className="text-[11px] font-mono text-muted-foreground uppercase">
+                            {item.produto?.unidade_med ?? "—"}
+                          </span>
+                        </div>
+
+                        {/* Último custo */}
+                        <div className="flex items-center justify-end">
+                          {item.produto?.preco_custo ? (
+                            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                              {formatBRL(item.produto.preco_custo)}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground/30">—</span>
+                          )}
+                        </div>
+
+                        {/* Observação */}
+                        <input
+                          type="text"
+                          placeholder="(opcional)"
+                          value={item.observacao}
+                          onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
+                          className={cn(
+                            "w-full rounded border border-transparent bg-transparent",
+                            "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
+                            "focus:outline-none focus:border-border hover:border-border transition-colors",
+                          )}
+                        />
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => form.itens.length > 1 && removeItem(item._key)}
+                          disabled={form.itens.length === 1}
+                          className={cn(
+                            "flex items-center justify-center rounded p-1 transition-colors",
+                            form.itens.length === 1
+                              ? "text-muted-foreground/20 cursor-not-allowed"
+                              : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
+                          )}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))}
 
@@ -786,7 +835,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
           </div>
 
           {/* ── Sidebar resumo ────────────────────────────────────────────────── */}
-          <div className="w-52 border-l border-border px-4 py-5 shrink-0 flex flex-col gap-4 bg-muted/20">
+          <div className="sm:w-52 w-full border-t sm:border-t-0 sm:border-l border-border px-4 py-3 sm:py-5 shrink-0 flex flex-row sm:flex-col gap-6 sm:gap-4 bg-muted/20 overflow-x-auto sm:overflow-x-visible">
             <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium">
               Resumo
             </div>

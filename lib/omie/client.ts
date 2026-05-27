@@ -118,7 +118,8 @@ export interface OmieProdutoItem {
   unidade?: string;             // 'UN', 'KG', etc.
   ncm?: string;
   ean?: string;
-  valor_unitario?: number;
+  valor_custo?: number;       // preço de custo (custo de aquisição) — campo correto para "Últ. Custo"
+  valor_unitario?: number;   // preço de venda (lista) — fallback quando valor_custo não existe
   // ATENÇÃO: na API real o campo é "descr_detalhada", não "descricao_detalhada"
   descr_detalhada?: string;
   descricao_detalhada?: string; // alias mantido para compatibilidade

@@ -110,7 +110,9 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
     omie_descricao:       descDetalhada,
     ncm:                  item.ncm ?? null,
     ean:                  item.ean ?? null,
-    preco_custo:          item.valor_unitario ?? null,
+    // Omie retorna valor_custo = preço de aquisição; valor_unitario = preço de venda.
+    // Prioriza custo real; cai em valor_unitario apenas se custo não vier na resposta.
+    preco_custo:          item.valor_custo ?? item.valor_unitario ?? null,
     omie_sincronizado_em: new Date().toISOString(),
     ativo:                item.inativo !== "S",
   };

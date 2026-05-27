@@ -239,8 +239,8 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
 
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
-        {/* Header da tabela */}
-        <div className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
+        {/* Header da tabela — oculto no mobile */}
+        <div className="hidden sm:grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
           {["Nº", "TÍTULO", "SOLICITANTE", "UNIDADE", "ITENS", "VALOR EST.", "STATUS", "CRIADA", ""].map((h) => (
             <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
               {h}
@@ -281,102 +281,131 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
               return (
                 <li
                   key={r.id}
-                  className="grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer group"
+                  className="cursor-pointer hover:bg-muted/40 transition-colors group"
                 >
-                  {/* Nº */}
-                  <div className="self-center font-mono text-[11px] text-muted-foreground">
-                    {r.numero}
-                  </div>
-
-                  {/* Título */}
-                  <div className="self-center min-w-0">
-                    <div className="flex items-center gap-2">
-                      {r.urgencia === "urgente" && (
-                        <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 shrink-0">
-                          <AlertTriangle size={9} />
-                          urgente
+                  {/* ── Mobile card ── */}
+                  <div className="sm:hidden px-4 py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-mono text-[11px] text-muted-foreground">{r.numero}</span>
+                        {r.urgencia === "urgente" && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 shrink-0">
+                            <AlertTriangle size={9} />urgente
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-foreground truncate">{r.titulo}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", STATUS_STYLES[r.status]?.cls)}>
+                          {STATUS_STYLES[r.status]?.label}
                         </span>
+                        <span className="text-[11px] text-muted-foreground">{unidadeLabel}</span>
+                        {r.valor_estimado && (
+                          <span className="font-mono text-[11px] text-muted-foreground">{formatBRL(r.valor_estimado)}</span>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">{relativeTime(r.created_at)}</span>
+                      </div>
+                    </div>
+                    <ChevronRight size={14} className="text-muted-foreground/40 shrink-0 mt-1" />
+                  </div>
+
+                  {/* ── Desktop grid ── */}
+                  <div className="hidden sm:grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3.5">
+                    {/* Nº */}
+                    <div className="self-center font-mono text-[11px] text-muted-foreground">
+                      {r.numero}
+                    </div>
+
+                    {/* Título */}
+                    <div className="self-center min-w-0">
+                      <div className="flex items-center gap-2">
+                        {r.urgencia === "urgente" && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 shrink-0">
+                            <AlertTriangle size={9} />
+                            urgente
+                          </span>
+                        )}
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {r.titulo}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Solicitante */}
+                    <div className="self-center flex items-center gap-2 min-w-0">
+                      <div className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
+                        "bg-muted text-muted-foreground",
+                      )}>
+                        {r.solicitante ? getInitials(r.solicitante.nome) : "?"}
+                      </div>
+                      <span className="text-[12px] text-muted-foreground truncate">
+                        {r.solicitante?.nome ?? "—"}
+                      </span>
+                    </div>
+
+                    {/* Unidade */}
+                    <div className="self-center">
+                      <span className="text-[12px] text-muted-foreground truncate block">
+                        {unidadeLabel}
+                      </span>
+                    </div>
+
+                    {/* Itens */}
+                    <div className="self-center text-right">
+                      <span className="font-mono text-[12px] text-muted-foreground">
+                        {r.requisicao_itens.length}
+                      </span>
+                    </div>
+
+                    {/* Valor est. */}
+                    <div className="self-center text-right">
+                      {r.valor_estimado ? (
+                        <span className="font-mono text-[12px] text-foreground/80">
+                          {formatBRL(r.valor_estimado)}
+                        </span>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground/60">—</span>
                       )}
-                      <span className="text-sm font-medium text-foreground truncate">
-                        {r.titulo}
+                    </div>
+
+                    {/* Status */}
+                    <div className="self-center">
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        STATUS_STYLES[r.status]?.cls,
+                      )}>
+                        {STATUS_STYLES[r.status]?.label}
                       </span>
                     </div>
-                  </div>
 
-                  {/* Solicitante */}
-                  <div className="self-center flex items-center gap-2 min-w-0">
-                    <div className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
-                      "bg-muted text-muted-foreground",
-                    )}>
-                      {r.solicitante ? getInitials(r.solicitante.nome) : "?"}
-                    </div>
-                    <span className="text-[12px] text-muted-foreground truncate">
-                      {r.solicitante?.nome ?? "—"}
-                    </span>
-                  </div>
-
-                  {/* Unidade */}
-                  <div className="self-center">
-                    <span className="text-[12px] text-muted-foreground truncate block">
-                      {unidadeLabel}
-                    </span>
-                  </div>
-
-                  {/* Itens */}
-                  <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-muted-foreground">
-                      {r.requisicao_itens.length}
-                    </span>
-                  </div>
-
-                  {/* Valor est. */}
-                  <div className="self-center text-right">
-                    {r.valor_estimado ? (
-                      <span className="font-mono text-[12px] text-foreground/80">
-                        {formatBRL(r.valor_estimado)}
+                    {/* Criada */}
+                    <div className="self-center">
+                      <span className="text-[12px] text-muted-foreground">
+                        {relativeTime(r.created_at)}
                       </span>
-                    ) : (
-                      <span className="text-[12px] text-muted-foreground/60">—</span>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Status */}
-                  <div className="self-center">
-                    <span className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      STATUS_STYLES[r.status]?.cls,
-                    )}>
-                      {STATUS_STYLES[r.status]?.label}
-                    </span>
-                  </div>
-
-                  {/* Criada */}
-                  <div className="self-center">
-                    <span className="text-[12px] text-muted-foreground">
-                      {relativeTime(r.created_at)}
-                    </span>
-                  </div>
-
-                  {/* Ações */}
-                  <div className="self-center flex justify-end">
-                    {r.status !== "aprovado" ? (
-                      <button
-                        onClick={(e) => handleDelete(e, r)}
-                        disabled={deletingId === r.id}
-                        title="Excluir requisição"
-                        className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
-                      >
-                        {deletingId === r.id
-                          ? <Loader2 size={13} className="animate-spin" />
-                          : <Trash2 size={13} />}
-                      </button>
-                    ) : (
-                      <ChevronRight
-                        size={14}
-                        className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
-                      />
-                    )}
+                    {/* Ações */}
+                    <div className="self-center flex justify-end">
+                      {r.status !== "aprovado" ? (
+                        <button
+                          onClick={(e) => handleDelete(e, r)}
+                          disabled={deletingId === r.id}
+                          title="Excluir requisição"
+                          className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                        >
+                          {deletingId === r.id
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <Trash2 size={13} />}
+                        </button>
+                      ) : (
+                        <ChevronRight
+                          size={14}
+                          className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors"
+                        />
+                      )}
+                    </div>
                   </div>
                 </li>
               );

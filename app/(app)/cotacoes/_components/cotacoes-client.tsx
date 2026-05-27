@@ -371,7 +371,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       </div>
 
       {/* ── Mini-KPIs ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           {
             label: "EM COTAÇÃO ATIVA",
@@ -482,8 +482,8 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3 border-b border-border/80">
+        {/* Header — oculto no mobile */}
+        <div className="hidden sm:grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3 border-b border-border/80">
           {["Nº", "TÍTULO", "UNIDADE", "ITENS", "FORN.", "VALOR EST.", "ECONOMIA IA", "STATUS", "PRAZO", ""].map(h => (
             <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{h}</div>
           ))}
@@ -518,112 +518,140 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                 <li
                   key={c.id}
                   onClick={() => router.push(`/cotacoes/${c.id}`)}
-                  className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer group"
+                  className="cursor-pointer hover:bg-muted/20 transition-colors group"
                 >
-                  {/* Nº */}
-                  <div className="self-center font-mono text-[11px] text-muted-foreground">{c.numero}</div>
-
-                  {/* Título */}
-                  <div className="self-center min-w-0">
-                    <div className="flex items-center gap-2">
-                      {c.urgente && (
-                        <AlertTriangle size={11} className="text-red-400 shrink-0" />
-                      )}
-                      {c.ai_analisada_em && (
-                        <Sparkles size={11} className="text-emerald-400 shrink-0" />
-                      )}
-                      <span className="text-sm font-medium text-foreground truncate">{c.titulo}</span>
-                    </div>
-                  </div>
-
-                  {/* Unidade */}
-                  <div className="self-center">
-                    <span className="text-[12px] text-muted-foreground truncate block">{unidadeLabel}</span>
-                  </div>
-
-                  {/* Itens */}
-                  <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_itens.length}</span>
-                  </div>
-
-                  {/* Forn. */}
-                  <div className="self-center text-right">
-                    <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_fornecedores.length}</span>
-                  </div>
-
-                  {/* Valor est. */}
-                  <div className="self-center text-right">
-                    {c.valor_estimado ? (
-                      <span className="font-mono text-[12px] text-foreground/80">{formatBRL(c.valor_estimado)}</span>
-                    ) : (
-                      <span className="text-[12px] text-muted-foreground/70">—</span>
-                    )}
-                  </div>
-
-                  {/* Economia IA */}
-                  <div className="self-center text-right">
-                    {c.economia && c.economia > 0 ? (
-                      <div>
-                        <div className="font-mono text-[12px] text-emerald-400">
-                          -{formatBRL(c.economia)}
-                        </div>
-                        {c.economia_pct && (
-                          <div className="text-[10px] text-emerald-600">({c.economia_pct.toFixed(1)}%)</div>
+                  {/* ── Mobile card ── */}
+                  <div className="sm:hidden px-4 py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-mono text-[11px] text-muted-foreground">{c.numero}</span>
+                        {c.urgente && <AlertTriangle size={10} className="text-red-400 shrink-0" />}
+                        {c.ai_analisada_em && <Sparkles size={10} className="text-emerald-400 shrink-0" />}
+                      </div>
+                      <p className="text-sm font-medium text-foreground truncate">{c.titulo}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", STATUS_STYLES[c.status]?.cls)}>
+                          {STATUS_STYLES[c.status]?.label}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{unidadeLabel}</span>
+                        {c.valor_estimado && (
+                          <span className="font-mono text-[11px] text-muted-foreground">{formatBRL(c.valor_estimado)}</span>
+                        )}
+                        {c.economia && c.economia > 0 && (
+                          <span className="font-mono text-[11px] text-emerald-400">-{formatBRL(c.economia)}</span>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-[12px] text-muted-foreground/70">—</span>
-                    )}
+                    </div>
+                    <ChevronRight size={14} className="text-muted-foreground/40 shrink-0 mt-1" />
                   </div>
 
-                  {/* Status */}
-                  <div className="self-center">
-                    <span className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      STATUS_STYLES[c.status]?.cls,
-                    )}>
-                      {STATUS_STYLES[c.status]?.label}
-                    </span>
-                  </div>
+                  {/* ── Desktop grid ── */}
+                  <div className="hidden sm:grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3.5">
+                    {/* Nº */}
+                    <div className="self-center font-mono text-[11px] text-muted-foreground">{c.numero}</div>
 
-                  {/* Prazo */}
-                  <div className="self-center">
-                    {c.prazo ? (
-                      <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
-                        <Calendar size={10} />
-                        {formatDate(c.prazo)}
+                    {/* Título */}
+                    <div className="self-center min-w-0">
+                      <div className="flex items-center gap-2">
+                        {c.urgente && (
+                          <AlertTriangle size={11} className="text-red-400 shrink-0" />
+                        )}
+                        {c.ai_analisada_em && (
+                          <Sparkles size={11} className="text-emerald-400 shrink-0" />
+                        )}
+                        <span className="text-sm font-medium text-foreground truncate">{c.titulo}</span>
                       </div>
-                    ) : (
-                      <span className="text-[12px] text-muted-foreground/70">—</span>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Ações */}
-                  <div className="self-center flex justify-end gap-1">
-                    {c.status !== "aprovado" && (
-                      <>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
-                          title="Editar cotação"
-                          aria-label="Editar"
-                          className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(e, c)}
-                          disabled={deletingId === c.id}
-                          title="Excluir cotação"
-                          aria-label="Excluir"
-                          className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
-                        >
-                          {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                        </button>
-                      </>
-                    )}
-                    {c.status === "aprovado" && (
-                      <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                    )}
+                    {/* Unidade */}
+                    <div className="self-center">
+                      <span className="text-[12px] text-muted-foreground truncate block">{unidadeLabel}</span>
+                    </div>
+
+                    {/* Itens */}
+                    <div className="self-center text-right">
+                      <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_itens.length}</span>
+                    </div>
+
+                    {/* Forn. */}
+                    <div className="self-center text-right">
+                      <span className="font-mono text-[12px] text-muted-foreground">{c.cotacao_fornecedores.length}</span>
+                    </div>
+
+                    {/* Valor est. */}
+                    <div className="self-center text-right">
+                      {c.valor_estimado ? (
+                        <span className="font-mono text-[12px] text-foreground/80">{formatBRL(c.valor_estimado)}</span>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground/70">—</span>
+                      )}
+                    </div>
+
+                    {/* Economia IA */}
+                    <div className="self-center text-right">
+                      {c.economia && c.economia > 0 ? (
+                        <div>
+                          <div className="font-mono text-[12px] text-emerald-400">
+                            -{formatBRL(c.economia)}
+                          </div>
+                          {c.economia_pct && (
+                            <div className="text-[10px] text-emerald-600">({c.economia_pct.toFixed(1)}%)</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground/70">—</span>
+                      )}
+                    </div>
+
+                    {/* Status */}
+                    <div className="self-center">
+                      <span className={cn(
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        STATUS_STYLES[c.status]?.cls,
+                      )}>
+                        {STATUS_STYLES[c.status]?.label}
+                      </span>
+                    </div>
+
+                    {/* Prazo */}
+                    <div className="self-center">
+                      {c.prazo ? (
+                        <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                          <Calendar size={10} />
+                          {formatDate(c.prazo)}
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground/70">—</span>
+                      )}
+                    </div>
+
+                    {/* Ações */}
+                    <div className="self-center flex justify-end gap-1">
+                      {c.status !== "aprovado" && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
+                            title="Editar cotação"
+                            aria-label="Editar"
+                            className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(e, c)}
+                            disabled={deletingId === c.id}
+                            title="Excluir cotação"
+                            aria-label="Excluir"
+                            className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                          >
+                            {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                          </button>
+                        </>
+                      )}
+                      {c.status === "aprovado" && (
+                        <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                      )}
+                    </div>
                   </div>
                 </li>
               );

@@ -261,7 +261,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="hidden sm:grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-border/80">
           {["EMPRESA", "CNPJ", "CONTATO", "LOCALIZAÇÃO"].map(
             (h) => (
               <div
@@ -305,59 +305,109 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
               <li
                 key={f.id}
                 onClick={() => setFornecedorEditando(f)}
-                className="grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer"
+                className="hover:bg-muted/40 transition-colors cursor-pointer"
               >
-                {/* Empresa */}
-                <div className="min-w-0">
+                {/* ── Mobile card ──────────────────────────────────────── */}
+                <div className="sm:hidden px-4 py-3 space-y-1.5">
+                  {/* Linha 1: nome principal */}
                   <div className="text-sm font-medium text-foreground truncate leading-tight">
                     {f.nome_fantasia || f.razao_social}
                   </div>
                   {f.nome_fantasia && (
-                    <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       {f.razao_social}
                     </div>
                   )}
+                  {/* Linha 2: email + telefone */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {f.email ? (
+                      <div className="flex items-center gap-1 text-[12px] text-foreground/80 min-w-0">
+                        <Mail size={10} className="text-muted-foreground shrink-0" />
+                        <span className="truncate">{f.email}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[12px] text-muted-foreground/50">
+                        <Mail size={10} className="shrink-0" />
+                        <span>sem e-mail</span>
+                      </div>
+                    )}
+                    {f.telefone && (
+                      <div className="flex items-center gap-1 text-[12px] text-muted-foreground shrink-0">
+                        <Phone size={10} className="shrink-0" />
+                        {f.telefone}
+                      </div>
+                    )}
+                  </div>
+                  {/* Linha 3: localização + CNPJ */}
+                  <div className="flex items-center justify-between gap-2">
+                    {f.cidade ? (
+                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <MapPin size={10} className="shrink-0" />
+                        <span>{f.cidade}{f.uf && `, ${f.uf}`}</span>
+                      </div>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="text-[11px] text-muted-foreground/60 font-mono shrink-0">
+                      {formatCnpj(f.cnpj)}
+                    </span>
+                  </div>
                 </div>
 
-                {/* CNPJ */}
-                <div className="font-mono text-[12px] text-muted-foreground self-center">
-                  {formatCnpj(f.cnpj)}
-                </div>
+                {/* ── Desktop grid ─────────────────────────────────────── */}
+                <div className="hidden sm:grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5">
+                  {/* Empresa */}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate leading-tight">
+                      {f.nome_fantasia || f.razao_social}
+                    </div>
+                    {f.nome_fantasia && (
+                      <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {f.razao_social}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Contato — e-mail em destaque, telefone abaixo */}
-                <div className="min-w-0 self-center space-y-0.5">
-                  {f.email ? (
-                    <div className="flex items-center gap-1.5 text-[12px] text-foreground/80 truncate">
-                      <Mail size={10} className="text-muted-foreground shrink-0" />
-                      <span className="truncate">{f.email}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground/60">
-                      <Mail size={10} className="text-muted-foreground/40 shrink-0" />
-                      <span>sem e-mail</span>
-                    </div>
-                  )}
-                  {f.telefone && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                      <Phone size={10} className="text-muted-foreground/60 shrink-0" />
-                      {f.telefone}
-                    </div>
-                  )}
-                </div>
+                  {/* CNPJ */}
+                  <div className="font-mono text-[12px] text-muted-foreground self-center">
+                    {formatCnpj(f.cnpj)}
+                  </div>
 
-                {/* Localização */}
-                <div className="self-center">
-                  {f.cidade ? (
-                    <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                      <MapPin size={10} className="text-muted-foreground/60 shrink-0" />
-                      <span className="truncate">
-                        {f.cidade}
-                        {f.uf && `, ${f.uf}`}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-[12px] text-muted-foreground/60">—</span>
-                  )}
+                  {/* Contato — e-mail em destaque, telefone abaixo */}
+                  <div className="min-w-0 self-center space-y-0.5">
+                    {f.email ? (
+                      <div className="flex items-center gap-1.5 text-[12px] text-foreground/80 truncate">
+                        <Mail size={10} className="text-muted-foreground shrink-0" />
+                        <span className="truncate">{f.email}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground/60">
+                        <Mail size={10} className="text-muted-foreground/40 shrink-0" />
+                        <span>sem e-mail</span>
+                      </div>
+                    )}
+                    {f.telefone && (
+                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <Phone size={10} className="text-muted-foreground/60 shrink-0" />
+                        {f.telefone}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Localização */}
+                  <div className="self-center">
+                    {f.cidade ? (
+                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <MapPin size={10} className="text-muted-foreground/60 shrink-0" />
+                        <span className="truncate">
+                          {f.cidade}
+                          {f.uf && `, ${f.uf}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-[12px] text-muted-foreground/60">—</span>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
