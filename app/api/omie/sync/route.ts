@@ -13,6 +13,7 @@
  * Resposta: { ok: true, results: SyncResult[], unidades: string[], duracaoTotal: number }
  */
 
+import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -216,7 +217,38 @@ export async function GET(req: NextRequest) {
     const supabase = createServiceClient();
 
     try {
+      // Passo 1: sync do catálogo (rápido — ~5 s para todas as unidades)
       const { results, unidades } = await syncTodasUnidades(supabase);
+
+      // Passo 2: atualiza CMC em background via after().
+      // A resposta 200 é enviada imediatamente; a função continua viva
+      // até maxDuration:300 no vercel.json para completar o CMC.
+      after(async () => {
+        try {
+          const { data: rows } = await createServiceClient()
+            .from("unidades")
+            .select("id, omie_app_key, omie_app_secret")
+            .eq("ativa", true)
+            .not("omie_app_key", "is", null)
+            .not("omie_app_secret", "is", null);
+
+          if (!rows?.length) return;
+
+          for (const u of rows) {
+            const creds: OmieCredentials = {
+              appKey:    u.omie_app_key as string,
+              appSecret: u.omie_app_secret as string,
+            };
+            await syncCMCProdutos(createServiceClient(), creds, u.id);
+          }
+
+          console.info("[omie/sync cron] CMC atualizado em background.");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error("[omie/sync cron after] Erro no CMC background:", msg);
+        }
+      });
+
       return NextResponse.json({
         ok: true,
         results,

@@ -27,7 +27,7 @@ interface Message {
 interface Sessao {
   id:         string;
   title:      string;
-  updated_at: string;
+  updated_at: string | null;
 }
 
 interface Props {
@@ -176,7 +176,7 @@ function SessaoItem({
   onClick: () => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
-  const diff  = Date.now() - new Date(sessao.updated_at).getTime();
+  const diff  = Date.now() - new Date(sessao.updated_at ?? new Date().toISOString()).getTime();
   const days  = Math.floor(diff / 86_400_000);
   const hours = Math.floor(diff / 3_600_000);
   const label = days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : "agora";
@@ -382,7 +382,7 @@ export function ChatClient({ userId, userName, contexto, sessoesIniciais }: Prop
           s.id === currentSessionId
             ? { ...s, updated_at: new Date().toISOString() }
             : s,
-        ).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()));
+        ).sort((a, b) => new Date(b.updated_at ?? "").getTime() - new Date(a.updated_at ?? "").getTime()));
       }
     } catch (err) {
       const errorText = err instanceof Error ? err.message : "Erro desconhecido";
