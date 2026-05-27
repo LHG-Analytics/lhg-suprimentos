@@ -18,6 +18,8 @@ import { DashboardHeader } from "./_components/dashboard-header";
 import { OrcamentoWidgetSkeleton } from "./_components/orcamento-widget";
 import { OrcamentoSection } from "./_components/orcamento-section";
 import { OmieSyncStatus } from "./_components/omie-sync-status";
+import { OmieResumoSection } from "./_components/omie-resumo-section";
+import { OmieResumoWidgetSkeleton } from "./_components/omie-resumo-widget";
 import { type OrcamentoSheet } from "@/lib/sheets/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 // getUnidadeSheetConfig foi movido para OrcamentoSection (carregado via Suspense)
@@ -514,6 +516,11 @@ export default async function DashboardPage() {
           mono
         />
       </div>
+
+      {/* ── Resumo de Compras Omie — carrega via Suspense (chamada Omie) ── */}
+      <Suspense fallback={<OmieResumoWidgetSkeleton />}>
+        <OmieResumoSection />
+      </Suspense>
 
       {/* ── Gráfico + Ações + Status Omie ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[420px]">

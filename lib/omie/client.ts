@@ -1034,6 +1034,57 @@ export function extractCMC(pos: OmiePosicaoEstoqueResponse): number | null {
   return cmc > 0 ? cmc : null;
 }
 
+// ── ObterResumoCompras ─────────────────────────────────────────────────────────
+
+/**
+ * Retorna um resumo agregado do painel de compras do Omie.
+ * Endpoint: POST /produtos/compras-resumo/ — call: ObterResumoCompras
+ *
+ * Uma única chamada traz: pedidos em aberto, em aprovação, faturar hoje,
+ * NFs recebidas e requisições abertas para o período informado.
+ *
+ * Ideal para widgets de dashboard — muito mais leve que listar todos os pedidos.
+ */
+
+export interface OmieResumoComprasResponse {
+  pedidoCompra?: {
+    emAberto?:    { nTotal: number; vTotal: number };
+    emAprovacao?: { nTotal: number; vTotal: number };
+    faturarHoje?: { nTotal: number; vTotal: number };
+    compras?:     { nTotal: number; vTotal: number };
+  };
+  faturamentoResumo?: {
+    nFaturadas?:  number;
+    vFaturadas?:  number;
+    nPendentes?:  number;
+    vPendentes?:  number;
+    nTotal?:      number;
+    vTotal?:      number;
+    nCanceladas?: number;
+    nRejeitadas?: number;
+  };
+  requisicaoCompra?: {
+    emAberto?: { nTotal: number; vTotal: number };
+  };
+  [key: string]: unknown;
+}
+
+export async function obterResumoCompras(
+  creds:       OmieCredentials,
+  dDataInicio: string,   // "DD/MM/YYYY"
+  dDataFim:    string,   // "DD/MM/YYYY"
+): Promise<OmieResumoComprasResponse> {
+  return omiePost<
+    { dDataInicio: string; dDataFim: string },
+    OmieResumoComprasResponse
+  >(
+    "/produtos/compras-resumo/",
+    "ObterResumoCompras",
+    creds,
+    { dDataInicio, dDataFim },
+  );
+}
+
 // ── AlterarProduto ─────────────────────────────────────────────────────────────
 
 interface AlterarProdutoParam {
