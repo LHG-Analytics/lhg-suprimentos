@@ -158,7 +158,7 @@ import { GeistMono } from "geist/font/mono";
   $types = Get-LhgTypes
   $types | Out-File lib/supabase/types.ts -Encoding utf8
   ```
-  ⚠️ Última migration aplicada: **0010** (`pedido_id` nullable em `notas_fiscais`)
+  ⚠️ Última migration aplicada: **0017** (`cotacoes.omie_codigo` + `notas_fiscais.omie_receb_id/omie_concluido`)
 
 ### ⚠️ MCP Supabase no Cursor — Workaround obrigatório
 
@@ -332,7 +332,7 @@ pnpm lint         # eslint
 ## 14. GitHub / Vercel / Linear
 
 - **Repositório:** `LHG-Analytics/lhg-suprimentos` (público)
-- **Linear:** workspace `LHG Moteis` · projeto "LHG Suprimentos" · 26 issues · prefixo `LHG-`
+- **Linear:** workspace `LHG Moteis` · projeto "LHG Suprimentos" · 36 issues · prefixo `LHG-`
 - **Vercel CLI:** instalar com `npm i -g vercel` (ainda não instalado)
 - **Branch principal:** `main` · **dev:** `dev` · **features:** `feat/lhg-<numero>-<descricao>`
 - **Domínio produção:** `supplies.lhgmoteis.com.br` (CNAME → `cname.vercel-dns.com`, Cloudflare DNS-only)
@@ -496,3 +496,16 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
   - ✅ Fix `aprovador` = mesmo acesso que `comprador`: textos descritivos em `admin-client.tsx`, `invite-dialog.tsx` e `admin/usuarios/page.tsx` atualizados; funcionalmente já não havia guards separando os dois papéis
   - ✅ LHG-231: Sync pedidos de compra Omie — migration 0016 (`omie_pedidos_compra`); `lib/omie/client.ts` com `listAllPedidosCompra`; `lib/omie/sync.ts` com `syncPedidosCompra`; cron dedicado `*/5 * * * *` em `/api/omie/sync-pedidos`; aba "Pedidos Omie" em `/pedidos` com tabela completa (situação, etapa, aprovação, nº fornecedor), filtro por unidade, busca e botão "Sincronizar agora"
   - ⚠️ Migration 0016 pendente de execução manual no SQL Editor do Supabase (ver SQL abaixo)
+
+### ✅ M9 — Sprint 8 (Omie Sync Bidirecional Completo)
+- ✅ LHG-232: Omie Sync Bidirecional Completo — CRUD completo LHG ↔ Omie ERP
+  - `lib/omie/requisicao.ts`: `incluirReq`, `upsertReq`, `excluirReq` (Cotação ↔ Requisição de Compra)
+  - `lib/omie/pedidos.ts`: `incluirPedCompra`, `alterarPedCompra`, `excluirPedCompra` — endpoint correto `/produtos/pedidocompra/` (fix do legado `/compras/pedidocompras/`)
+  - `lib/omie/recebimento.ts`: `listarRecebimentos`, `associarPedidoRecebimento`, `concluirRecebimento`
+  - `lib/omie/client.ts`: add `incluirCliente` (fornecedor) + `incluirProduto`
+  - Cotações: `editarCotacao` + sync automático IncluirReq/UpsertReq/ExcluirReq + `EditarCotacaoModal` na lista
+  - Pedidos: fix `pushPedidoOmie` + `editarPedido` + `excluirPedidoOmie`
+  - NF: auto-associar recebimento após `lancarNFOmie` + `concluirRecebimentoOmie` + botão "Concluir no Omie"
+  - Fornecedores: `criarFornecedor` atômico (Omie first) + modal "+ Novo Fornecedor"
+  - Produtos: `criarProduto` atômico (NCM obrigatório, Omie first) + modal "+ Novo Produto"
+  - Migrations 0017: `cotacoes.omie_codigo`, `cotacoes.omie_sincronizado_em`, `notas_fiscais.omie_receb_id`, `notas_fiscais.omie_concluido`
