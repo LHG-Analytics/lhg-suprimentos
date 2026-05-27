@@ -33,22 +33,19 @@ export function SyncOmieProdutosButton() {
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      // Resultado 1: sync do catálogo; Resultado 2: sync do CMC
+      // CMC roda em background (after()) — só o catálogo retorna na resposta
       const rCatalogo = data.results?.[0];
-      const rCMC      = data.results?.[1];
-      const total  = rCatalogo?.total ?? 0;
-      const erros  = rCatalogo?.erros ?? 0;
-      const cmcAtualizados = rCMC?.novos ?? 0;
+      const total = rCatalogo?.total ?? 0;
+      const erros = rCatalogo?.erros ?? 0;
 
       const catalogoMsg = erros === 0
         ? `${total} produto${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""}`
         : `${total - erros}/${total} sincronizados — ${erros} erro${erros !== 1 ? "s" : ""}`;
 
-      const cmcMsg = cmcAtualizados > 0
-        ? ` · ${cmcAtualizados} CMC atualizado${cmcAtualizados !== 1 ? "s" : ""}`
-        : "";
-
-      toast.success(`${catalogoMsg}${cmcMsg}`, { id: toastId });
+      toast.success(
+        `${catalogoMsg} · preços de custo sendo atualizados…`,
+        { id: toastId, duration: 6000 },
+      );
 
       router.refresh();
     } catch (err) {

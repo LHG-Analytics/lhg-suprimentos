@@ -168,20 +168,49 @@ export async function POST(req: NextRequest) {
         const r = await syncPedidosCompra(supabase, creds, unidade.id);
         results.push(r);
       } else if (entidade === "cmc" && !produtosSincronizados) {
-        // Só CMC — sem sync de catálogo. Útil para testes manuais e diagnóstico.
-        // Processa lote de 200 produtos (fila por cmc_updated_at ASC NULLS FIRST).
-        const rCMC = await syncCMCProdutos(supabase, creds, unidade.id);
-        results.push(rCMC);
-        produtosSincronizados = true; // CMC é global (produtos compartilhados)
+        // Só CMC em background — responde imediatamente, evita timeout.
+        // Com 3 locais de estoque por produto: 200×3×280ms ≈ 168s (acima dos 300s do handler).
+        const unidadeId = unidade.id as string;
+        const cmcCreds  = { ...creds };
+        after(async () => {
+          try {
+            const r = await syncCMCProdutos(createServiceClient(), cmcCreds, unidadeId);
+            console.info(`[omie/sync] CMC manual background: ${r.novos} atualizados — unidade=${unidadeId}`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("[omie/sync] CMC manual background erro:", msg);
+          }
+        });
+        // Retorna placeholder — resultado real chega nos logs da Vercel
+        results.push({
+          entidade: "cmc_produtos",
+          status: "ok",
+          total: 0,
+          novos: 0,
+          erros: 0,
+          duracaoMs: 0,
+          detalhe: { info: "CMC iniciado em background — ver logs Vercel" },
+        });
+        produtosSincronizados = true;
       } else if (entidade === "produtos" && !produtosSincronizados) {
-        // Passo 1: Sync do catálogo (rápido — batch upsert)
+        // Passo 1: Sync do catálogo (rápido — ~15s, resposta imediata)
         const rCatalogo = await syncProdutos(supabase, creds, unidade.id);
         results.push(rCatalogo);
 
-        // Passo 2: Atualiza preco_custo com CMC real do estoque Omie (lento — 1 req/produto)
-        // Só executa no sync manual — não no cron (syncTodasUnidades) para evitar timeout.
-        const rCMC = await syncCMCProdutos(supabase, creds, unidade.id);
-        results.push(rCMC);
+        // Passo 2: CMC em background via after() — evita timeout de 300s.
+        // Com múltiplos locais de estoque, o CMC pode levar 2-3 min; after() tem
+        // seu próprio budget de 300s independente da resposta HTTP.
+        const unidadeId = unidade.id as string;
+        const cmcCreds  = { ...creds };
+        after(async () => {
+          try {
+            const r = await syncCMCProdutos(createServiceClient(), cmcCreds, unidadeId);
+            console.info(`[omie/sync] CMC background: ${r.novos} atualizados — unidade=${unidadeId}`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("[omie/sync] CMC background erro:", msg);
+          }
+        });
 
         produtosSincronizados = true; // produtos são globais
       }
