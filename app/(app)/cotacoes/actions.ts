@@ -119,8 +119,13 @@ export async function deletarCotacao(id: string) {
   await supabase.from("cotacao_fornecedores").delete().eq("cotacao_id", id);
   await supabase.from("cotacao_unidades").delete().eq("cotacao_id", id);
 
-  const { error } = await supabase.from("cotacoes").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: deleteErr } = await (supabase
+    .from("cotacoes") as any)
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (deleteErr) throw new Error(`Erro ao excluir cotação: ${(deleteErr as { message: string }).message}`);
 
   revalidatePath("/cotacoes");
   return { numero: cot.numero };

@@ -31,6 +31,7 @@ export default async function CotacoesPage() {
          cotacao_itens(id),
          cotacao_fornecedores(fornecedor_id)`,
       )
+      .is("deleted_at", null)
       .order("created_at", { ascending: false }),
 
     supabase

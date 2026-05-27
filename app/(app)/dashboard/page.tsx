@@ -81,11 +81,11 @@ async function fetchKpis(supabase: SupabaseClient) {
     { count: pendAprovPrev },
     { count: nfsPendentes },
   ] = await Promise.all([
-    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS),
-    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso),
-    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS),
-    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).gte("created_at", prevStart.toISOString()).lte("created_at", prevEnd.toISOString()),
-    supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso),
+    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null),
+    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null),
+    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).is("deleted_at", null),
+    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).gte("created_at", prevStart.toISOString()).lte("created_at", prevEnd.toISOString()).is("deleted_at", null),
+    supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null),
     supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao"),
     supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso),
     supabase.from("notas_fiscais").select("*", { count: "exact", head: true }).eq("status", "conferencia"),
@@ -183,6 +183,7 @@ async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
       .from("cotacoes")
       .select("id, numero, titulo, valor_estimado, created_at")
       .eq("status", "cotacao")
+      .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(4),
 
@@ -286,6 +287,7 @@ async function fetchCotacoes(supabase: SupabaseClient): Promise<{ rows: CotacaoR
       { count: "exact" },
     )
     .in("status", ["rascunho", "cotacao", "pendente"] as const)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(8);
 
