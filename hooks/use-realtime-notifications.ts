@@ -61,6 +61,24 @@ export function useRealtimeNotifications(): {
       key.replace(/^﻿/, ""),
     );
 
+    // ── Auth explícito para Realtime ───────────────────────────────────────────
+    // createBrowserClient pode estabelecer o WebSocket com o JWT 'anon' antes
+    // de ler os cookies de sessão. Se a tabela tem RLS com policy somente para
+    // 'authenticated', o Realtime filtraria os eventos silenciosamente.
+    // setAuth() força o access_token correto depois que a sessão carrega.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+    });
+
+    // Mantém o token atualizado quando a sessão renova (ex.: após 1h)
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        supabase.realtime.setAuth(session?.access_token ?? null);
+      },
+    );
+
     const channel = supabase
       .channel("lhg-shell-notifications")
 
@@ -226,6 +244,7 @@ export function useRealtimeNotifications(): {
       });
 
     return () => {
+      authSub.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [push]);
