@@ -986,24 +986,22 @@ export async function listAllPedidosCompra(
 // ── PosicaoEstoque ─────────────────────────────────────────────────────────────
 
 /**
- * Um local de estoque retornado por PosicaoEstoque.
- * Os nomes de campo seguem o padrão real da API Omie (observado em produção).
+ * Resposta real do endpoint PosicaoEstoque (documentação oficial Omie):
+ * POST /estoque/consulta/ — call: PosicaoEstoque
+ *
+ * O CMC vem diretamente na raiz da resposta, não em um array aninhado.
+ * Fonte: https://app.omie.com.br/api/v1/estoque/consulta/
  */
-export interface OmieEstoqueLocalItem {
-  nCodLocal?:   number;
-  cCodLocal?:   string;    // ex: "PADRAO", "1 - ALMOXARIFADO"
-  cDescLocal?:  string;
-  nQtde?:       number;    // quantidade disponível
-  nCMC?:        number;    // Custo Médio Contábil unitário
-  nTotal?:      number;    // nQtde × nCMC
-  [key: string]: unknown;
-}
-
 export interface OmiePosicaoEstoqueResponse {
-  nCodProd?:        number;
-  cCodInt?:         string;
-  cDescricao?:      string;
-  posicao_estoque?: OmieEstoqueLocalItem[];
+  codigo_status?:       string;   // "0" = ok, outro = erro
+  descricao_status?:    string;
+  saldo?:               number;   // saldo disponível
+  cmc?:                 number;   // Custo Médio Contábil ← campo real
+  pendente?:            number;
+  estoque_minimo?:      number;
+  reservado?:           number;
+  fisico?:              number;   // estoque físico total
+  codigo_local_estoque?: number;
   [key: string]: unknown;
 }
 
@@ -1011,61 +1009,29 @@ export interface OmiePosicaoEstoqueResponse {
  * Consulta a posição de estoque (CMC) de um produto via PosicaoEstoque.
  * Endpoint: POST /estoque/consulta/ — call: PosicaoEstoque
  *
- * O CMC (Custo Médio Contábil) é calculado pelo Omie a partir dos movimentos
- * reais de entrada e saída de estoque. É a fonte mais precisa de custo —
- * superior ao valor_custo/valor_unitario do cadastro do produto, que pode ficar
- * desatualizado ou zerado para produtos comprados com frequência.
- *
- * Conforme suporte Omie: informe id_prod + dData (ex: "27/05/2026").
+ * Parâmetro de data: "data" (não "dData") conforme documentação oficial.
  */
 export async function consultarPosicaoEstoque(
   creds: OmieCredentials,
   id_prod: number,
-  dData?: string,
+  data?: string,
 ): Promise<OmiePosicaoEstoqueResponse> {
-  const data = dData ?? formatOmieDate(new Date());
-  return omiePost<{ id_prod: number; dData: string }, OmiePosicaoEstoqueResponse>(
+  const dData = data ?? formatOmieDate(new Date());
+  return omiePost<{ id_prod: number; data: string }, OmiePosicaoEstoqueResponse>(
     "/estoque/consulta/",
     "PosicaoEstoque",
     creds,
-    { id_prod, dData: data },
+    { id_prod, data: dData },
   );
 }
 
 /**
- * Extrai o CMC médio ponderado de uma resposta PosicaoEstoque.
- *
- * Estratégia:
- *   1. Média ponderada por quantidade — usa todos os locais com nQtde > 0 e nCMC > 0.
- *   2. Se não houver estoque mas existir CMC, retorna o primeiro nCMC > 0 (produto
- *      com estoque zerado mas com histórico de custo).
- *   3. Retorna null se não houver nenhum dado de CMC.
+ * Extrai o CMC de uma resposta PosicaoEstoque.
+ * O campo "cmc" fica na raiz da resposta (não em array aninhado).
  */
 export function extractCMC(pos: OmiePosicaoEstoqueResponse): number | null {
-  const items = (pos.posicao_estoque as OmieEstoqueLocalItem[] | undefined) ?? [];
-
-  // Prioridade 1: média ponderada por quantidade
-  let totalQtde = 0;
-  let totalValor = 0;
-
-  for (const item of items) {
-    const qtde = Number(item.nQtde ?? 0);
-    const cmc  = Number(item.nCMC  ?? 0);
-    if (qtde > 0 && cmc > 0) {
-      totalQtde  += qtde;
-      totalValor += qtde * cmc;
-    }
-  }
-
-  if (totalQtde > 0) return totalValor / totalQtde;
-
-  // Prioridade 2: primeiro local com CMC > 0 (sem estoque físico no momento)
-  for (const item of items) {
-    const cmc = Number(item.nCMC ?? 0);
-    if (cmc > 0) return cmc;
-  }
-
-  return null;
+  const cmc = Number(pos.cmc ?? 0);
+  return cmc > 0 ? cmc : null;
 }
 
 // ── AlterarProduto ─────────────────────────────────────────────────────────────
