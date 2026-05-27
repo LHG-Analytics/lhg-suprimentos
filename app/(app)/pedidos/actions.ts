@@ -304,82 +304,30 @@ export async function enviarEmailFornecedor(
       const { Resend } = await import("resend");
       const resend = new Resend(resendKey);
 
-      const itensLinhas = itens
-        .map(
-          (i) =>
-            `<tr>
-              <td style="padding:6px 12px;border-bottom:1px solid #27272a;font-size:13px;color:#e4e4e7">${i.produtos?.nome ?? "Produto"} (${i.produtos?.unidade_med ?? "UN"})</td>
-              <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.quantidade}</td>
-              <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#a1a1aa">${fBRL(i.preco_unitario)}</td>
-              <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#e4e4e7;font-weight:600">${fBRL(i.quantidade * i.preco_unitario)}</td>
-            </tr>`,
-        )
-        .join("");
+      // ── Renderiza o template React Email ──────────────────────────────────────
+      const { render } = await import("@react-email/components");
+      const { PedidoCompraFornecedorEmail } = await import(
+        "@/emails/pedido-compra-fornecedor"
+      );
 
-      const htmlBody = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#09090b;font-family:Arial,sans-serif">
-  <div style="max-width:600px;margin:40px auto;background:#18181b;border:1px solid #27272a;border-radius:12px;overflow:hidden">
-    <!-- Header -->
-    <div style="background:#10b981;padding:24px 32px">
-      <p style="margin:0;font-size:12px;color:#d1fae5;letter-spacing:0.1em;text-transform:uppercase">LHG Motéis · Compras</p>
-      <h1 style="margin:4px 0 0;font-size:22px;color:#fff;font-weight:700">Pedido de Compra ${pedido.numero}</h1>
-    </div>
-    <!-- Body -->
-    <div style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:14px;color:#a1a1aa">
-        Prezado(a) <strong style="color:#e4e4e7">${forn.nome_fantasia ?? forn.razao_social}</strong>,
-      </p>
-      ${
-        mensagem
-          ? `<div style="background:#27272a;border-left:3px solid #10b981;border-radius:4px;padding:12px 16px;margin-bottom:20px">
-               <p style="margin:0;font-size:13px;color:#d4d4d8">${mensagem}</p>
-             </div>`
-          : ""
-      }
-      <p style="margin:0 0 20px;font-size:14px;color:#a1a1aa">
-        Segue o pedido de compra para sua confirmação e atendimento.
-      </p>
-      <!-- Tabela de itens -->
-      <table style="width:100%;border-collapse:collapse;background:#09090b;border-radius:8px;overflow:hidden;border:1px solid #27272a">
-        <thead>
-          <tr style="background:#27272a">
-            <th style="padding:8px 12px;text-align:left;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Produto</th>
-            <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Qtd</th>
-            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Unit.</th>
-            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Total</th>
-          </tr>
-        </thead>
-        <tbody>${itensLinhas}</tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3" style="padding:10px 12px;text-align:right;font-size:13px;color:#71717a;font-weight:600">TOTAL DO PEDIDO</td>
-            <td style="padding:10px 12px;text-align:right;font-size:15px;color:#10b981;font-weight:700">${fBRL(pedido.valor_total)}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <!-- Detalhes de entrega -->
-      <div style="margin-top:20px;display:flex;gap:24px">
-        <div>
-          <p style="margin:0;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Previsão de Entrega</p>
-          <p style="margin:4px 0 0;font-size:14px;color:#e4e4e7;font-weight:600">${entregaLabel}</p>
-        </div>
-        ${pedido.condicao_pgto ? `<div>
-          <p style="margin:0;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Condição de Pagamento</p>
-          <p style="margin:4px 0 0;font-size:14px;color:#e4e4e7;font-weight:600">${pedido.condicao_pgto}</p>
-        </div>` : ""}
-      </div>
-    </div>
-    <!-- Footer -->
-    <div style="padding:16px 32px;border-top:1px solid #27272a;text-align:center">
-      <p style="margin:0;font-size:11px;color:#52525b">
-        Para dúvidas, entre em contato com o setor de compras da LHG Motéis.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`;
+      const emailItens = itens.map((i) => ({
+        nome:          i.produtos?.nome ?? "Produto",
+        unidade:       i.produtos?.unidade_med ?? "UN",
+        quantidade:    i.quantidade,
+        precoUnitario: i.preco_unitario,
+      }));
+
+      const htmlBody = await render(
+        PedidoCompraFornecedorEmail({
+          numero:       pedido.numero,
+          fornNome:     forn.nome_fantasia ?? forn.razao_social,
+          itens:        emailItens,
+          valorTotal:   pedido.valor_total,
+          entregaLabel,
+          condicaoPgto: pedido.condicao_pgto ?? null,
+          mensagem:     mensagem || null,
+        }),
+      );
 
       await resend.emails.send({
         from:    "Compras LHG Motéis <compras@lhgmoteis.com.br>",
