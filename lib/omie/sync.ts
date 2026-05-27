@@ -124,6 +124,26 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
   };
 }
 
+/**
+ * Mapper para upsert de catálogo: idêntico a mapProduto mas sem preco_custo.
+ *
+ * Por que excluir preco_custo?
+ * O upsert do catálogo roda com ignoreDuplicates: false — em conflito ele faz
+ * UPDATE de todos os campos presentes no payload. Se incluirmos preco_custo,
+ * o valor_custo do cadastro Omie (menos preciso) sobrescreveria o CMC real
+ * calculado por syncCMCProdutos a cada re-sincronização.
+ *
+ * Para produtos NOVOS (INSERT): preco_custo fica null → preenchido em minutos
+ * pelo syncCMCProdutos que roda logo após em after().
+ * Para produtos EXISTENTES (UPDATE): preco_custo preservado — o Supabase
+ * não atualiza colunas ausentes do payload no ON CONFLICT DO UPDATE.
+ */
+function mapProdutoUpsert(item: OmieProdutoItem, unidadeId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { preco_custo: _, ...rest } = mapProduto(item, unidadeId);
+  return rest;
+}
+
 // ── Sync: Fornecedores ─────────────────────────────────────────────────────────
 
 export async function syncFornecedores(
@@ -236,62 +256,26 @@ export async function syncProdutos(
     const BATCH = 50;
 
     for (let i = 0; i < items.length; i += BATCH) {
-      const batch = items.slice(i, i + BATCH).map((item) => mapProduto(item, unidadeId));
+      // mapProdutoUpsert exclui preco_custo → preserva o CMC em produtos existentes
+      // e deixa null em novos (preenchido pelo syncCMCProdutos em after()).
+      const batch = items.slice(i, i + BATCH).map((item) => mapProdutoUpsert(item, unidadeId));
 
-      // ── Estratégia de upsert em 2 passos ─────────────────────────────────────
-      //
-      // Passo 1 — INSERT novos produtos para esta unidade (ignora duplicatas
-      //           por omie_codigo + omie_unidade_id).
-      const { error: insertErr } = await supabase
+      // Upsert em batch: INSERT em novos, UPDATE de metadados em existentes.
+      // ignoreDuplicates: false → atualiza todos os campos do payload em conflito.
+      // preco_custo ausente do payload → não é tocado pelo ON CONFLICT DO UPDATE.
+      const { error } = await supabase
         .from("produtos")
         .upsert(batch, {
           onConflict: "omie_codigo,omie_unidade_id",
-          ignoreDuplicates: true,
+          ignoreDuplicates: false,
         });
 
-      if (insertErr) {
-        console.error("[omie/sync] Erro insert produtos:", insertErr.message);
+      if (error) {
+        console.error("[omie/sync] Erro upsert produtos:", error.message);
         erros += batch.length;
-        continue;
+      } else {
+        novos += batch.length;
       }
-
-      // Passo 2 — UPDATE dos campos de metadados Omie em produtos EXISTENTES desta unidade.
-      //
-      // ⚠️  preco_custo NÃO é atualizado aqui intencionalmente.
-      //     O syncProdutos popula o catálogo com valor_custo do Omie apenas no INSERT
-      //     inicial (quando o produto é novo). Após isso, syncCMCProdutos é a única
-      //     fonte de verdade para preco_custo — ele usa o CMC real (PosicaoEstoque),
-      //     que é mais preciso. Incluir preco_custo no UPDATE sobrescreveria o CMC
-      //     toda vez que o catálogo fosse re-sincronizado.
-      //
-      // Política de categoria no re-sync:
-      //   - sempre atualiza categoria derivada de familia_omie.
-      //   - se familia_omie for null, categoria fica "Outros" (fallback).
-      for (const p of batch) {
-        const { error: updateErr } = await supabase
-          .from("produtos")
-          .update({
-            nome:                 p.nome,
-            unidade_med:          p.unidade_med,
-            familia_omie:         p.familia_omie,
-            categoria:            categoriaParaFamilia(p.familia_omie),
-            ncm:                  p.ncm,
-            ean:                  p.ean,
-            omie_descricao:       p.omie_descricao,
-            omie_sincronizado_em: p.omie_sincronizado_em,
-            ativo:                p.ativo,
-            // preco_custo: omitido — gerenciado exclusivamente por syncCMCProdutos
-          })
-          .eq("omie_codigo", p.omie_codigo)
-          .eq("omie_unidade_id", unidadeId);
-
-        if (updateErr) {
-          console.error("[omie/sync] Erro update produto:", updateErr.message);
-          erros++;
-        }
-      }
-
-      novos += batch.length;
     }
 
     const result: SyncResult = {
@@ -339,11 +323,15 @@ export async function syncProdutos(
  * @returns SyncResult com novos = quantidade de produtos com CMC atualizado.
  */
 // Budget de tempo (ms) para o loop de CMC dentro do after().
-// after() tem 300s de budget independente da resposta HTTP.
-// Usamos 240s para ter 60s de margem de segurança antes do hard-limit.
-// Com short-circuit (para no 1º local com CMC > 0), a média real é ~1.5 calls/produto
-// × 280ms = ~420ms/produto → ~570 produtos em 240s. Suficiente para cobrir todo o catálogo.
-const CMC_TIME_BUDGET_MS = 240_000;
+//
+// ⚠️  O budget do after() NÃO é independente — ele faz parte do maxDuration da
+//     função (300s total). O catalog sync leva ~15s com o upsert em batch;
+//     sobram ~285s para o CMC. Usamos 200s para ter 85s de folga.
+//
+// Com short-circuit (~1.5 calls/produto × 280ms ≈ 420ms/produto):
+//   200_000ms / 420ms ≈ 476 produtos — suficiente para cobrir catálogos de até ~500.
+//   Acima disso, o cron diário cobre o restante na próxima rodada.
+const CMC_TIME_BUDGET_MS = 200_000;
 
 export async function syncCMCProdutos(
   supabase: SupabaseClient,
