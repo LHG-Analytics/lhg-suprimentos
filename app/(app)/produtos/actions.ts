@@ -31,10 +31,10 @@ export async function editarProduto(
   if (dados.preco_custo <= 0)     return { erro: "Preço deve ser maior que zero" };
   if (!dados.familia_omie?.trim()) return { erro: "Família é obrigatória" };
 
-  // Busca produto + credenciais Omie da unidade
+  // Busca produto + credenciais Omie da unidade (inclui unidade_med e ncm — obrigatórios na API)
   const { data: produto, error: fetchErr } = await supabase
     .from("produtos")
-    .select("id, omie_codigo, omie_unidade_id, unidades(omie_app_key, omie_app_secret)")
+    .select("id, omie_codigo, omie_unidade_id, unidade_med, ncm, unidades(omie_app_key, omie_app_secret)")
     .eq("id", produtoId)
     .single();
 
@@ -46,6 +46,12 @@ export async function editarProduto(
     return { erro: "Credenciais Omie não configuradas para esta unidade" };
   }
 
+  // Campos extras necessários pela API Omie (unidade obrigatória, ncm opcional mas recomendado)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const produtoExtra = produto as any;
+  const unidadeMed = (produtoExtra.unidade_med as string | null) ?? "UN";
+  const ncm        = (produtoExtra.ncm as string | null) ?? undefined;
+
   // Chama AlterarProduto no Omie
   try {
     await alterarProduto(
@@ -55,6 +61,8 @@ export async function editarProduto(
         nome:         dados.nome.trim(),
         preco_custo:  dados.preco_custo,
         familia_omie: dados.familia_omie.trim(),
+        unidade:      unidadeMed,
+        ncm,
       },
     );
   } catch (err) {

@@ -15,6 +15,10 @@ import {
   listAllPedidosCompra,
   buildClienteNomeMap,
   consultarCliente,
+  consultarPosicaoEstoque,
+  extractCMC,
+  isOmieEmptyError,
+  formatOmieDate,
   OmieError,
   type OmieCredentials,
   type OmieClienteItem,
@@ -304,6 +308,123 @@ export async function syncProdutos(
       detalhe: { erro: msg },
     };
     await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_full" });
+    return result;
+  }
+}
+
+// ── Sync: CMC de Produtos ──────────────────────────────────────────────────────
+
+/**
+ * Atualiza preco_custo dos produtos usando o CMC do Omie (PosicaoEstoque).
+ *
+ * O CMC (Custo Médio Contábil) é calculado pelo Omie a partir dos movimentos
+ * reais de compra — mais preciso que valor_custo/valor_unitario do cadastro.
+ *
+ * Processo: para cada produto com omie_codigo, chama PosicaoEstoque e atualiza
+ * preco_custo quando CMC > 0. Erros individuais são logados mas não bloqueiam
+ * os demais produtos.
+ *
+ * ⚠️ LENTO: ~280ms por produto (rate limit Omie). Não usar no cron — apenas
+ *    no sync manual acionado pelo usuário.
+ *
+ * @returns SyncResult com novos = quantidade de produtos com CMC atualizado.
+ */
+export async function syncCMCProdutos(
+  supabase: SupabaseClient,
+  creds: OmieCredentials,
+  unidadeId: string,
+): Promise<SyncResult> {
+  const inicio = Date.now();
+  let total      = 0;
+  let atualizados = 0;
+  let erros       = 0;
+
+  try {
+    // Busca todos os produtos desta unidade que têm omie_codigo
+    const { data: produtos, error: fetchErr } = await supabase
+      .from("produtos")
+      .select("id, omie_codigo, nome")
+      .eq("omie_unidade_id", unidadeId)
+      .not("omie_codigo", "is", null);
+
+    if (fetchErr) throw fetchErr;
+    if (!produtos?.length) {
+      return {
+        entidade: "cmc_produtos",
+        status: "ok",
+        total: 0,
+        novos: 0,
+        erros: 0,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+
+    total = produtos.length;
+    const dHoje = formatOmieDate(new Date());
+
+    console.log(`[omie/sync] CMC: iniciando para ${total} produto(s) — unidade=${unidadeId}`);
+
+    for (const produto of produtos) {
+      const omieId = Number(produto.omie_codigo);
+      if (!omieId) continue;
+
+      try {
+        const pos = await consultarPosicaoEstoque(creds, omieId, dHoje);
+        const cmc = extractCMC(pos);
+
+        if (cmc !== null && cmc > 0) {
+          const { error: updateErr } = await supabase
+            .from("produtos")
+            .update({ preco_custo: cmc })
+            .eq("id", produto.id);
+
+          if (updateErr) {
+            console.warn(`[omie/sync] CMC update falhou produto=${omieId}:`, updateErr.message);
+            erros++;
+          } else {
+            atualizados++;
+          }
+        }
+      } catch (err) {
+        // "Sem registros" = produto sem movimento de estoque — normal, não é erro
+        if (isOmieEmptyError(err)) continue;
+
+        console.warn(
+          `[omie/sync] CMC falhou produto=${omieId} (${produto.nome as string}):`,
+          err instanceof Error ? err.message : String(err),
+        );
+        erros++;
+      }
+    }
+
+    console.log(`[omie/sync] CMC: ${atualizados}/${total} atualizados, ${erros} erros — unidade=${unidadeId}`);
+
+    const result: SyncResult = {
+      entidade: "cmc_produtos",
+      status: erros === 0 ? "ok" : erros === total ? "erro" : "parcial",
+      total,
+      novos: atualizados,
+      erros,
+      duracaoMs: Date.now() - inicio,
+    };
+
+    await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_cmc" });
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[omie/sync] syncCMCProdutos erro geral:", msg);
+
+    const result: SyncResult = {
+      entidade: "cmc_produtos",
+      status: "erro",
+      total,
+      novos: atualizados ?? 0,
+      erros: 1,
+      duracaoMs: Date.now() - inicio,
+      detalhe: { erro: msg },
+    };
+
+    await registrarLog(supabase, unidadeId, { ...result, operacao: "sync_cmc" });
     return result;
   }
 }

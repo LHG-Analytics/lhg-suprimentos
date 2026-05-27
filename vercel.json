@@ -9,5 +9,13 @@
       "path": "/api/omie/sync-pedidos",
       "schedule": "0 7 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/omie/sync/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/omie/sync-pedidos/route.ts": {
+      "maxDuration": 300
+    }
+  }
 }

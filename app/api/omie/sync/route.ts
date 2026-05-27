@@ -21,6 +21,7 @@ import {
   syncTodasUnidades,
   syncFornecedores,
   syncProdutos,
+  syncCMCProdutos,
   syncPedidosCompra,
   type SyncResult,
 } from "@/lib/omie/sync";
@@ -165,8 +166,15 @@ export async function POST(req: NextRequest) {
         const r = await syncPedidosCompra(supabase, creds, unidade.id);
         results.push(r);
       } else if (entidade === "produtos" && !produtosSincronizados) {
-        const r = await syncProdutos(supabase, creds, unidade.id);
-        results.push(r);
+        // Passo 1: Sync do catálogo (rápido — batch upsert)
+        const rCatalogo = await syncProdutos(supabase, creds, unidade.id);
+        results.push(rCatalogo);
+
+        // Passo 2: Atualiza preco_custo com CMC real do estoque Omie (lento — 1 req/produto)
+        // Só executa no sync manual — não no cron (syncTodasUnidades) para evitar timeout.
+        const rCMC = await syncCMCProdutos(supabase, creds, unidade.id);
+        results.push(rCMC);
+
         produtosSincronizados = true; // produtos são globais
       }
     }

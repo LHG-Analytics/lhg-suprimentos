@@ -378,7 +378,7 @@ const OMIE_EMPTY_MSGS = [
   "nenhum registro",
 ];
 
-function isOmieEmptyError(err: unknown): boolean {
+export function isOmieEmptyError(err: unknown): boolean {
   if (!(err instanceof OmieError)) return false;
   const msg = err.message.toLowerCase();
   return OMIE_EMPTY_MSGS.some((m) => msg.includes(m));
@@ -803,7 +803,7 @@ export interface OmieListarPedidosResponse {
 }
 
 /** Formata uma Date em DD/MM/YYYY (formato Omie). */
-function formatOmieDate(d: Date): string {
+export function formatOmieDate(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = d.getFullYear();
@@ -970,18 +970,119 @@ export async function listAllPedidosCompra(
   return { items: all, totalRegistrosOmie };
 }
 
+// ── PosicaoEstoque ─────────────────────────────────────────────────────────────
+
+/**
+ * Um local de estoque retornado por PosicaoEstoque.
+ * Os nomes de campo seguem o padrão real da API Omie (observado em produção).
+ */
+export interface OmieEstoqueLocalItem {
+  nCodLocal?:   number;
+  cCodLocal?:   string;    // ex: "PADRAO", "1 - ALMOXARIFADO"
+  cDescLocal?:  string;
+  nQtde?:       number;    // quantidade disponível
+  nCMC?:        number;    // Custo Médio Contábil unitário
+  nTotal?:      number;    // nQtde × nCMC
+  [key: string]: unknown;
+}
+
+export interface OmiePosicaoEstoqueResponse {
+  nCodProd?:        number;
+  cCodInt?:         string;
+  cDescricao?:      string;
+  posicao_estoque?: OmieEstoqueLocalItem[];
+  [key: string]: unknown;
+}
+
+/**
+ * Consulta a posição de estoque (CMC) de um produto via PosicaoEstoque.
+ * Endpoint: POST /estoque/consulta/ — call: PosicaoEstoque
+ *
+ * O CMC (Custo Médio Contábil) é calculado pelo Omie a partir dos movimentos
+ * reais de entrada e saída de estoque. É a fonte mais precisa de custo —
+ * superior ao valor_custo/valor_unitario do cadastro do produto, que pode ficar
+ * desatualizado ou zerado para produtos comprados com frequência.
+ *
+ * Conforme suporte Omie: informe id_prod + dData (ex: "27/05/2026").
+ */
+export async function consultarPosicaoEstoque(
+  creds: OmieCredentials,
+  id_prod: number,
+  dData?: string,
+): Promise<OmiePosicaoEstoqueResponse> {
+  const data = dData ?? formatOmieDate(new Date());
+  return omiePost<{ id_prod: number; dData: string }, OmiePosicaoEstoqueResponse>(
+    "/estoque/consulta/",
+    "PosicaoEstoque",
+    creds,
+    { id_prod, dData: data },
+  );
+}
+
+/**
+ * Extrai o CMC médio ponderado de uma resposta PosicaoEstoque.
+ *
+ * Estratégia:
+ *   1. Média ponderada por quantidade — usa todos os locais com nQtde > 0 e nCMC > 0.
+ *   2. Se não houver estoque mas existir CMC, retorna o primeiro nCMC > 0 (produto
+ *      com estoque zerado mas com histórico de custo).
+ *   3. Retorna null se não houver nenhum dado de CMC.
+ */
+export function extractCMC(pos: OmiePosicaoEstoqueResponse): number | null {
+  const items = (pos.posicao_estoque as OmieEstoqueLocalItem[] | undefined) ?? [];
+
+  // Prioridade 1: média ponderada por quantidade
+  let totalQtde = 0;
+  let totalValor = 0;
+
+  for (const item of items) {
+    const qtde = Number(item.nQtde ?? 0);
+    const cmc  = Number(item.nCMC  ?? 0);
+    if (qtde > 0 && cmc > 0) {
+      totalQtde  += qtde;
+      totalValor += qtde * cmc;
+    }
+  }
+
+  if (totalQtde > 0) return totalValor / totalQtde;
+
+  // Prioridade 2: primeiro local com CMC > 0 (sem estoque físico no momento)
+  for (const item of items) {
+    const cmc = Number(item.nCMC ?? 0);
+    if (cmc > 0) return cmc;
+  }
+
+  return null;
+}
+
 // ── AlterarProduto ─────────────────────────────────────────────────────────────
 
 interface AlterarProdutoParam {
   codigo_produto:    number;
   descricao:         string;
+  /** Obrigatório pela API Omie — sem ele o Omie silencia o erro e não atualiza */
+  unidade:           string;
   valor_unitario:    number;
+  ncm?:              string;
   descricao_familia: string;
 }
 
+interface AlterarProdutoResponse {
+  codigo_produto?:             number;
+  codigo_produto_integracao?:  string;
+  /** "0" = sucesso; qualquer outro valor = erro */
+  codigo_status?:              string;
+  descricao_status?:           string;
+}
+
 /**
- * Atualiza descrição, preço e família de um produto no Omie.
+ * Atualiza descrição, preço, unidade e família de um produto no Omie.
  * Endpoint: POST /geral/produtos/ — call: AlterarProduto
+ *
+ * ⚠️ `unidade` é obrigatório pela API Omie. Sem ele o Omie pode retornar
+ *    `codigo_status: "error"` em vez de `faultstring`, silenciando o erro.
+ * ⚠️ Verificamos `codigo_status` na resposta pois AlterarProduto usa esse
+ *    campo para sinalizar falha — diferente de outros endpoints que usam faultstring.
  */
 export async function alterarProduto(
   creds: OmieCredentials,
@@ -990,19 +1091,33 @@ export async function alterarProduto(
     nome:         string;
     preco_custo:  number;
     familia_omie: string;
+    /** Unidade de medida (ex: "UN", "KG") — obrigatório na API Omie */
+    unidade:      string;
+    ncm?:         string;
   },
 ): Promise<void> {
-  await omiePost<AlterarProdutoParam, Record<string, unknown>>(
+  const res = await omiePost<AlterarProdutoParam, AlterarProdutoResponse>(
     "/geral/produtos/",
     "AlterarProduto",
     creds,
     {
       codigo_produto:    Number(params.omie_codigo),
       descricao:         params.nome,
+      unidade:           params.unidade || "UN",
       valor_unitario:    params.preco_custo,
+      ...(params.ncm ? { ncm: params.ncm } : {}),
       descricao_familia: params.familia_omie,
     },
   );
+
+  // AlterarProduto sinaliza falha via codigo_status em vez de faultstring.
+  // Lançamos OmieError para que o chamador possa tratar e exibir ao usuário.
+  if (res.codigo_status && res.codigo_status !== "0") {
+    throw new OmieError(
+      res.descricao_status ?? `AlterarProduto retornou codigo_status=${res.codigo_status}`,
+      res.codigo_status,
+    );
+  }
 }
 
 // ── AlterarFornecedor ──────────────────────────────────────────────────────────
