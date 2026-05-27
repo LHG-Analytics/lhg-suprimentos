@@ -384,6 +384,19 @@ export function isOmieEmptyError(err: unknown): boolean {
   return OMIE_EMPTY_MSGS.some((m) => msg.includes(m));
 }
 
+/** Detecta REDUNDANT: mesmo endpoint+params chamado nos últimos 60s. Seguro pular. */
+export function isOmieRedundantError(err: unknown): boolean {
+  if (!(err instanceof OmieError)) return false;
+  return err.message.toUpperCase().includes("REDUNDANT");
+}
+
+/** Detecta BLOQUEADA: chave inteira bloqueada por ~30 min após uso indevido. Abortar loop. */
+export function isOmieBlockedError(err: unknown): boolean {
+  if (!(err instanceof OmieError)) return false;
+  const msg = err.message.toLowerCase();
+  return msg.includes("bloqueada") || msg.includes("bloqueado") || msg.includes("consumo indevido");
+}
+
 export async function listAllFornecedores(
   creds: OmieCredentials,
   onPage?: (page: number, total: number, items: OmieClienteItem[]) => void,

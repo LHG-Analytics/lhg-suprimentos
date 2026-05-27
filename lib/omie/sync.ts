@@ -18,6 +18,8 @@ import {
   consultarPosicaoEstoque,
   extractCMC,
   isOmieEmptyError,
+  isOmieRedundantError,
+  isOmieBlockedError,
   formatOmieDate,
   OmieError,
   type OmieCredentials,
@@ -386,8 +388,25 @@ export async function syncCMCProdutos(
           }
         }
       } catch (err) {
-        // "Sem registros" = produto sem movimento de estoque — normal, não é erro
+        // "Sem registros" = produto sem movimento de estoque — normal, pular silenciosamente
         if (isOmieEmptyError(err)) continue;
+
+        // REDUNDANT = mesmo produto consultado nos últimos 60s (sync manual recente).
+        // Os dados ainda estão válidos — pular sem contar como erro.
+        if (isOmieRedundantError(err)) {
+          console.info(`[omie/sync] CMC produto=${omieId}: REDUNDANT — pulando (dados recentes).`);
+          continue;
+        }
+
+        // BLOQUEADA = chave inteira bloqueada por ~30 min. Parar imediatamente para
+        // não desperdiçar invocações e evitar agravar o bloqueio.
+        if (isOmieBlockedError(err)) {
+          console.error(
+            `[omie/sync] CMC: API BLOQUEADA após ${atualizados} atualizados — abortando sync.`,
+            err instanceof Error ? err.message : String(err),
+          );
+          break;
+        }
 
         console.warn(
           `[omie/sync] CMC falhou produto=${omieId} (${produto.nome as string}):`,

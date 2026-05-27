@@ -225,6 +225,10 @@ export async function GET(req: NextRequest) {
       // até maxDuration:300 no vercel.json para completar o CMC.
       after(async () => {
         try {
+          // Aguarda 90s para que a janela de REDUNDANT (60s) do Omie se limpe
+          // e o rate-limit do sync de catálogo/fornecedores/pedidos se dissipe.
+          await new Promise(r => setTimeout(r, 90_000));
+
           const { data: rows } = await createServiceClient()
             .from("unidades")
             .select("id, omie_app_key, omie_app_secret")
