@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { deletarRequisicao } from "../actions";
 import { NovaRequisicaoModal } from "./nova-requisicao-modal";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -102,12 +103,19 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
   const [filter, setFilter] = useState<FilterStatus>("todas");
   const [query,  setQuery]  = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmReq,  setConfirmReq]  = useState<Requisicao | null>(null);
+  const [deletingId,  setDeletingId]  = useState<string | null>(null);
   const [, startDelete] = useTransition();
 
   function handleDelete(e: React.MouseEvent, req: Requisicao) {
-    e.stopPropagation(); // evita propagar clique para a linha
-    if (!window.confirm(`Excluir a requisição ${req.numero} "${req.titulo}"? Esta ação não pode ser desfeita.`)) return;
+    e.stopPropagation();
+    setConfirmReq(req);
+  }
+
+  function confirmarDelete() {
+    if (!confirmReq) return;
+    const req = confirmReq;
+    setConfirmReq(null);
     setDeletingId(req.id);
     startDelete(async () => {
       try {
@@ -388,12 +396,22 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
         )}
       </div>
 
-      {/* ── Modal ───────────────────────────────────────────────────────────── */}
+      {/* ── Modal nova requisição ────────────────────────────────────────────── */}
       <NovaRequisicaoModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         unidades={unidades}
         produtos={produtos}
+      />
+
+      {/* ── Modal confirmar exclusão ─────────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!confirmReq}
+        titulo={`Excluir ${confirmReq?.numero}?`}
+        descricao={`A requisição "${confirmReq?.titulo}" e todos os seus itens serão removidos permanentemente.`}
+        carregando={!!deletingId}
+        onConfirmar={confirmarDelete}
+        onCancelar={() => setConfirmReq(null)}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { criarCotacao, deletarCotacao } from "../actions";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -256,12 +257,19 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const [filter,     setFilter]    = useState<FilterStatus>("todas");
   const [query,      setQuery]     = useState("");
   const [modalOpen,  setModalOpen] = useState(false);
+  const [confirmCot, setConfirmCot] = useState<Cotacao | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
 
   function handleDelete(e: React.MouseEvent, cot: Cotacao) {
     e.stopPropagation();
-    if (!window.confirm(`Excluir a cotação ${cot.numero} "${cot.titulo}"?\nTodos os itens, fornecedores e preços serão removidos.`)) return;
+    setConfirmCot(cot);
+  }
+
+  function confirmarDelete() {
+    if (!confirmCot) return;
+    const cot = confirmCot;
+    setConfirmCot(null);
     setDeletingId(cot.id);
     startDelete(async () => {
       try {
@@ -564,11 +572,21 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         )}
       </div>
 
-      {/* ── Modal ───────────────────────────────────────────────────────────── */}
+      {/* ── Modal nova cotação ──────────────────────────────────────────────── */}
       <NovaCotacaoModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         requisicoes={requisicoes}
+      />
+
+      {/* ── Modal confirmar exclusão ─────────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!confirmCot}
+        titulo={`Excluir ${confirmCot?.numero}?`}
+        descricao={`A cotação "${confirmCot?.titulo}" com todos os itens, fornecedores e preços será removida permanentemente.`}
+        carregando={!!deletingId}
+        onConfirmar={confirmarDelete}
+        onCancelar={() => setConfirmCot(null)}
       />
     </div>
   );
