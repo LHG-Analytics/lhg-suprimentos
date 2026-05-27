@@ -158,7 +158,7 @@ import { GeistMono } from "geist/font/mono";
   $types = Get-LhgTypes
   $types | Out-File lib/supabase/types.ts -Encoding utf8
   ```
-  ⚠️ Última migration aplicada: **0017** (`cotacoes.omie_codigo` + `notas_fiscais.omie_receb_id/omie_concluido`)
+  ⚠️ Última migration aplicada: **0018** (soft delete `cotacoes.deleted_at`) — ⚠️ migration 0018 ainda **pendente de execução manual** no SQL Editor
 
 ### ⚠️ MCP Supabase no Cursor — Workaround obrigatório
 
@@ -293,9 +293,12 @@ app/
     produtos/
     cotacoes/
     pedidos/
+    notas-fiscais/
+    auditoria/     # linha do tempo de pedido_eventos
     admin/
   api/
-    omie/sync/     # POST — sincronização com Omie ERP
+    omie/sync/            # POST — sincronização fornecedores/produtos
+    omie/sync-pedidos/    # POST — sync pedidos de compra + validarAcessoUnidade()
   auth/callback/   # Route Handler PKCE callback
   login/
   globals.css
@@ -304,13 +307,17 @@ components/
   ui/              # componentes shadcn
   lhg/             # componentes customizados LHG
     shell/         # nav-config.ts, cmd-k.tsx, sidebar, topbar
+    tour/          # tour-steps.ts, TourProvider, balão comic book
 hooks/
+  use-debounce.ts  # useDebounce<T>(value, delay=300) — debounce genérico
 lib/
   supabase/        # clientes Supabase (client, server, service)
+  csv.ts           # downloadCsv() — BOM UTF-8, CRLF, células com vírgula quoted
   utils.ts         # cn(), formatBRL(), formatDate(), etc.
 emails/            # templates React Email
 supabase/
   migrations/      # SQL migrations
+tests/             # Vitest — setup.ts + hooks/ + lib/
 docs/              # handoff de design (LOCAL — gitignore)
 prototype/         # React vanilla reference (LOCAL — gitignore)
 proxy.ts           # middleware Next.js 16
@@ -325,6 +332,8 @@ pnpm dev          # localhost:3001
 pnpm build        # next build
 pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
+pnpm test         # vitest run (7 testes: useDebounce + csv)
+pnpm test:watch   # vitest (modo watch)
 ```
 
 ---
@@ -509,3 +518,17 @@ Deletar `app/favicon.ico` se existir para evitar conflito.
   - Fornecedores: `criarFornecedor` atômico (Omie first) + modal "+ Novo Fornecedor"
   - Produtos: `criarProduto` atômico (NCM obrigatório, Omie first) + modal "+ Novo Produto"
   - Migrations 0017: `cotacoes.omie_codigo`, `cotacoes.omie_sincronizado_em`, `notas_fiscais.omie_receb_id`, `notas_fiscais.omie_concluido`
+
+### ✅ M10 — Sprint 9 (Melhorias Pós-Auditoria)
+- ✅ LHG-233: Melhorias Pós-Auditoria Técnica — segurança, UX, testes e qualidade
+  - **Segurança:** `validarAcessoUnidade(supabase, slug)` em `/api/omie/sync-pedidos` — verifica `user_unidades` para roles que não são `admin`/`comprador`; mensagem genérica ao cliente, detalhes apenas no `console.warn`
+  - **useDebounce:** hook `hooks/use-debounce.ts` (300 ms) aplicado em pedidos, cotações, fornecedores e produtos — evita re-renders por digitação
+  - **14 aria-labels** em botões icon-only (✕, paginação prev/next, email, rejeitar, editar, excluir) — WCAG 2.1 AA
+  - **Soft delete cotações:** migration 0018 (`cotacoes.deleted_at TIMESTAMPTZ`) + índice parcial `WHERE deleted_at IS NULL` + `.is("deleted_at", null)` em 8 queries (cotações, dashboard) + `deletarCotacao` usa `UPDATE` em vez de `DELETE`
+  - **Filtro data range:** `dataInicio`/`dataFim` Calendar inputs em pedidos, cotações e NF
+  - **Exportação CSV:** `lib/csv.ts` com BOM UTF-8 + CRLF + células com vírgula quoted; botões "Exportar CSV" em pedidos e cotações
+  - **OmieSyncStatus:** Server Component no dashboard mostrando última sync (`omie_pedidos_compra`) e pendentes por entidade
+  - **Página /auditoria:** linha do tempo de `pedido_eventos` com ícones por tipo (criação, aprovação, rejeição, email, recebimento, omie); link direto para o pedido; breadcrumb em `nav-config.ts`
+  - **Refatoração pedidos-client.tsx:** `modal-email.tsx` + `modal-rejeitar.tsx` extraídos (~200 linhas removidas do arquivo original)
+  - **Vitest setup:** `vitest.config.ts` + `tests/setup.ts` + 7 testes passando (4 useDebounce + 3 csv); `pnpm test` / `pnpm test:watch`
+  - ⚠️ Migration 0018 **pendente de execução manual** no SQL Editor — depois rodar `Get-LhgTypes` para remover `as any` em `cotacoes/actions.ts`
