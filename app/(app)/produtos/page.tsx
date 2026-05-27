@@ -39,6 +39,12 @@ export default async function ProdutosPage() {
   const selectFields =
     "id, codigo, nome, unidade_med, categoria, familia_omie, ativo, preco_custo, omie_codigo, omie_sincronizado_em";
 
+  const { data: unidades } = await supabase
+    .from("unidades")
+    .select("id, nome")
+    .not("omie_app_key", "is", null)
+    .order("nome");
+
   const [{ data: produtos }, { data: lastLog }] = await Promise.all([
     unidadeId
       ? supabase
@@ -66,6 +72,7 @@ export default async function ProdutosPage() {
     <ProdutosClient
       produtos={produtos ?? []}
       lastLog={lastLog ?? null}
+      unidades={unidades ?? []}
     />
   );
 }

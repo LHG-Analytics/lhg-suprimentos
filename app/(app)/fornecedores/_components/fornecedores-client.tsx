@@ -7,10 +7,12 @@
  *           e OMIE (redundante); email destacado na coluna CONTATO.
  */
 import { useState, useMemo } from "react";
-import { Search, Building2, MapPin, Phone, Mail, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Building2, MapPin, Phone, Mail, RefreshCw, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SyncOmieButton } from "./sync-omie-button";
 import { EditarFornecedorModal } from "./editar-fornecedor-modal";
+import { CriarFornecedorModal } from "./criar-fornecedor-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,7 @@ interface LastLog {
 interface FornecedoresClientProps {
   fornecedores: Fornecedor[];
   lastLog: LastLog | null;
+  unidades: Array<{ id: string; nome: string }>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -88,12 +91,14 @@ const PAGE_SIZE = 50;
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClientProps) {
+export function FornecedoresClient({ fornecedores, lastLog, unidades }: FornecedoresClientProps) {
+  const router = useRouter();
   const [query,               setQuery]               = useState("");
   // Padrão: "ativos" espelha o comportamento do sync Omie (inativo: "N")
   const [filtroChip,          setFiltroChip]          = useState<FiltroKey>("ativos");
   const [fornecedorEditando,  setFornecedorEditando]  = useState<Fornecedor | null>(null);
   const [page,                setPage]                = useState(0);
+  const [criarOpen,           setCriarOpen]           = useState(false);
 
   // Helpers que resetam a página ANTES do próximo render (mesmo batch do React 18)
   function handleQuery(v: string)      { setQuery(v);       setPage(0); }
@@ -162,6 +167,13 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
               </div>
             </div>
           )}
+          <button
+            onClick={() => setCriarOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-700/60 bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+          >
+            <Plus size={14} />
+            Novo Fornecedor
+          </button>
           <SyncOmieButton />
         </div>
       </div>
@@ -393,6 +405,14 @@ export function FornecedoresClient({ fornecedores, lastLog }: FornecedoresClient
         key={fornecedorEditando?.id ?? "closed"}
         fornecedor={fornecedorEditando}
         onClose={() => setFornecedorEditando(null)}
+      />
+
+      {/* Modal de criação */}
+      <CriarFornecedorModal
+        open={criarOpen}
+        onClose={() => setCriarOpen(false)}
+        onCreated={() => router.refresh()}
+        unidades={unidades}
       />
     </div>
   );

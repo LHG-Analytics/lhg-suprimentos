@@ -39,6 +39,12 @@ export default async function FornecedoresPage() {
   const selectFields =
     "id, razao_social, nome_fantasia, cnpj, email, telefone, contato, endereco, cep, cidade, uf, ativo, omie_codigo, omie_sincronizado_em";
 
+  const { data: unidades } = await supabase
+    .from("unidades")
+    .select("id, nome")
+    .not("omie_app_key", "is", null)
+    .order("nome");
+
   const [{ data: fornecedores }, { data: lastLog }] = await Promise.all([
     unidadeId
       ? supabase
@@ -64,6 +70,7 @@ export default async function FornecedoresPage() {
     <FornecedoresClient
       fornecedores={fornecedores ?? []}
       lastLog={lastLog ?? null}
+      unidades={unidades ?? []}
     />
   );
 }

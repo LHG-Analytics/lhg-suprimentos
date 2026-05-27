@@ -1065,3 +1065,127 @@ export async function alterarFornecedor(
     },
   );
 }
+
+// ── IncluirCliente ─────────────────────────────────────────────────────────────
+
+interface IncluirClienteParam {
+  razao_social:   string;
+  cnpj_cpf:       string;
+  nome_fantasia:  string;
+  email?:         string;
+  telefone1_ddd?: string;
+  telefone1_numero?: string;
+  contato?:       string;
+  endereco?:      string;
+  cep?:           string;
+  cidade?:        string;
+  estado?:        string;
+  tags?:          Array<{ tag: string }>;
+  codigo_cliente_integracao?: string;
+}
+
+interface IncluirClienteResponse {
+  codigo_cliente_omie: number;
+  codigo_cliente_integracao?: string;
+}
+
+/**
+ * Cria um novo cliente/fornecedor no Omie.
+ * Sempre inclui tag "Fornecedor" para o sync reverso funcionar.
+ * Endpoint: POST /geral/clientes/ — call: IncluirCliente
+ * Retorna codigo_cliente_omie para salvar em fornecedores.omie_codigo.
+ */
+export async function incluirCliente(
+  creds: OmieCredentials,
+  params: {
+    razao_social:   string;
+    cnpj_cpf:       string;
+    nome_fantasia:  string;
+    email?:         string;
+    telefone?:      string;
+    contato?:       string;
+    endereco?:      string;
+    cep?:           string;
+    cidade?:        string;
+    uf?:            string;
+    codigo_integracao?: string;
+  },
+): Promise<number> {
+  const digits  = (params.telefone ?? "").replace(/\D/g, "");
+  const ddd     = digits.length >= 10 ? digits.slice(0, 2) : "";
+  const numero  = digits.length >= 10 ? digits.slice(2)    : digits;
+
+  const res = await omiePost<IncluirClienteParam, IncluirClienteResponse>(
+    "/geral/clientes/",
+    "IncluirCliente",
+    creds,
+    {
+      razao_social:              params.razao_social,
+      cnpj_cpf:                  params.cnpj_cpf.replace(/\D/g, ""),
+      nome_fantasia:             params.nome_fantasia,
+      email:                     params.email ?? "",
+      telefone1_ddd:             ddd,
+      telefone1_numero:          numero,
+      contato:                   params.contato ?? "",
+      endereco:                  params.endereco ?? "",
+      cep:                       (params.cep ?? "").replace(/\D/g, ""),
+      cidade:                    params.cidade ?? "",
+      estado:                    params.uf ?? "",
+      tags:                      [{ tag: "Fornecedor" }],
+      codigo_cliente_integracao: params.codigo_integracao ?? "",
+    },
+  );
+  return res.codigo_cliente_omie;
+}
+
+// ── IncluirProduto ─────────────────────────────────────────────────────────────
+
+interface IncluirProdutoParam {
+  codigo_produto_integracao: string;
+  descricao:                 string;
+  unidade:                   string;
+  ncm:                       string;
+  valor_unitario:            number;
+  descricao_familia?:        string;
+  codigo?:                   string;
+}
+
+interface IncluirProdutoResponse {
+  codigo_produto:             number;
+  codigo_produto_integracao?: string;
+}
+
+/**
+ * Cria um novo produto no Omie.
+ * NCM é obrigatório pela API Omie.
+ * Endpoint: POST /geral/produtos/ — call: IncluirProduto
+ * Retorna codigo_produto para salvar em produtos.omie_codigo.
+ */
+export async function incluirProduto(
+  creds: OmieCredentials,
+  params: {
+    nome:            string;
+    unidade:         string;
+    ncm:             string;
+    valor_unitario:  number;
+    familia_omie?:   string;
+    codigo_interno?: string;
+    codigo_integracao: string;   // LHG-{uuid.slice(0,8)}
+  },
+): Promise<number> {
+  const res = await omiePost<IncluirProdutoParam, IncluirProdutoResponse>(
+    "/geral/produtos/",
+    "IncluirProduto",
+    creds,
+    {
+      codigo_produto_integracao: params.codigo_integracao,
+      descricao:                 params.nome,
+      unidade:                   params.unidade,
+      ncm:                       params.ncm.replace(/\D/g, ""),
+      valor_unitario:            params.valor_unitario,
+      descricao_familia:         params.familia_omie ?? "",
+      codigo:                    params.codigo_interno ?? "",
+    },
+  );
+  return res.codigo_produto;
+}

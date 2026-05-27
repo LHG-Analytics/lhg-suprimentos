@@ -14,7 +14,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
-import { criarPedidoCompra, OmieError } from "@/lib/omie/client";
+import { OmieError } from "@/lib/omie/client";
+import { incluirPedCompra, alterarPedCompra, excluirPedCompra } from "@/lib/omie/pedidos";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -133,17 +134,8 @@ export async function rejeitarPedido(pedidoId: string, motivo: string) {
   revalidatePath("/pedidos");
 }
 
-// ── pushPedidoOmie (LHG-214) ──────────────────────────────────────────────────
+// ── pushPedidoOmie (LHG-214) — FIXED: /produtos/pedidocompra/ ─────────────────
 
-/**
- * Envia o pedido de compra ao Omie ERP.
- * Requer:
- *   - Unidade com credenciais Omie (omie_app_key / omie_app_secret)
- *   - Fornecedor com omie_codigo
- *   - Produtos com omie_codigo
- *
- * Atualiza omie_status e omie_codigo no banco após execução.
- */
 export async function pushPedidoOmie(
   pedidoId: string,
 ): Promise<{ omie_codigo?: string; erro?: string }> {
@@ -151,7 +143,6 @@ export async function pushPedidoOmie(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Busca pedido com todas as dependências
   const { data: pedido, error: pedErr } = await supabase
     .from("pedidos")
     .select(`
@@ -172,7 +163,6 @@ export async function pushPedidoOmie(
     return { erro: pedErr?.message ?? "Pedido não encontrado" };
   }
 
-  // Credenciais da unidade
   type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
   const pus     = pedido.pedido_unidades as PedidoUnidade[] | null;
   const unidade = pus?.[0]?.unidades;
@@ -186,7 +176,6 @@ export async function pushPedidoOmie(
 
   const creds = { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret };
 
-  // Fornecedor
   const forn = pedido.fornecedores as { omie_codigo: string | null; razao_social: string; nome_fantasia: string | null } | null;
   if (!forn?.omie_codigo) {
     const msg = "Fornecedor sem código Omie. Sincronize os fornecedores primeiro.";
@@ -195,7 +184,6 @@ export async function pushPedidoOmie(
     return { erro: msg };
   }
 
-  // Itens
   type PedidoItemRaw = {
     id: string;
     quantidade: number;
@@ -204,46 +192,38 @@ export async function pushPedidoOmie(
   };
   const itens = pedido.pedido_itens as PedidoItemRaw[] | null;
 
-  const det = (itens ?? [])
+  const produtosIncluir = (itens ?? [])
     .filter((item) => item.produtos?.omie_codigo)
     .map((item, i) => ({
-      ide:     { codigo_item_integracao: `${pedidoId.slice(0, 8)}-${i + 1}` },
-      produto: {
-        codigo_produto: parseInt(item.produtos!.omie_codigo!, 10),
-        cfop:           "1556",   // compra para uso/consumo (mesmo estado)
-        quantidade:     item.quantidade,
-        valor_unitario: item.preco_unitario,
-      },
+      cCodIntItem: `${pedidoId.slice(0, 8)}-${i + 1}`,
+      nCodProd:    Number(item.produtos!.omie_codigo!),
+      nQtde:       item.quantidade,
+      nValUnit:    item.preco_unitario,
     }));
 
-  if (det.length === 0) {
-    const msg = "Nenhum item com código Omie encontrado. Sincronize os produtos primeiro.";
+  if (produtosIncluir.length === 0) {
+    const msg = "Nenhum item com código Omie. Sincronize os produtos primeiro.";
     await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { erro: msg };
   }
 
-  // Data de previsão de entrega (DD/MM/YYYY)
   const dataPrevisao = pedido.entrega_prev
     ? new Date(pedido.entrega_prev).toLocaleDateString("pt-BR")
     : new Date(Date.now() + 7 * 86_400_000).toLocaleDateString("pt-BR");
 
   try {
-    const result = await criarPedidoCompra(creds, {
-      cabecalho: {
-        numero_pedido:   pedido.numero,
-        codigo_parceiro: parseInt(forn.omie_codigo, 10),
-        data_previsao:   dataPrevisao,
-        obs_venda:       "Pedido gerado pelo sistema LHG Suprimentos",
-        etapa:           "10",
+    const nCodPed = await incluirPedCompra(creds, {
+      cabecalho_incluir: {
+        cCodIntPed:  pedidoId,
+        nCodFor:     Number(forn.omie_codigo),
+        dDtPrevisao: dataPrevisao,
+        cObs:        `Pedido gerado pelo sistema LHG Suprimentos — ${pedido.numero}`,
       },
-      det,
-      informacoes_adicionais: { enviar_email: "N", consumidor_final: "N" },
+      produtos_incluir: produtosIncluir,
     });
 
-    const omieRef = result.codigo_pedido
-      ? String(result.codigo_pedido)
-      : result.numero_pedido;
+    const omieRef = String(nCodPed);
 
     await supabase
       .from("pedidos")
@@ -253,7 +233,7 @@ export async function pushPedidoOmie(
     await supabase.from("pedido_eventos").insert({
       pedido_id: pedidoId,
       tipo:      "omie",
-      texto:     `Pedido enviado ao Omie (ref: ${omieRef})`,
+      texto:     `Pedido enviado ao Omie (/produtos/pedidocompra/) — nCodPed: ${omieRef}`,
       autor_id:  user.id,
     });
 
@@ -262,15 +242,9 @@ export async function pushPedidoOmie(
   } catch (err) {
     const msg = err instanceof OmieError
       ? `Omie: ${err.message}`
-      : err instanceof Error
-      ? err.message
-      : "Erro desconhecido ao enviar ao Omie";
+      : err instanceof Error ? err.message : "Erro desconhecido ao enviar ao Omie";
 
-    await supabase
-      .from("pedidos")
-      .update({ omie_status: "erro", omie_erro: msg })
-      .eq("id", pedidoId);
-
+    await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { erro: msg };
   }
@@ -464,4 +438,136 @@ export async function marcarRecebido(pedidoId: string) {
   });
 
   revalidatePath("/pedidos");
+}
+
+// ── editarPedido ───────────────────────────────────────────────────────────────
+
+export async function editarPedido(
+  pedidoId: string,
+  dados: { entrega_prev?: string | null; condicao_pgto?: string | null },
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: pedido, error: fetchErr } = await supabase
+    .from("pedidos")
+    .select(`
+      id, omie_codigo, omie_status, status,
+      pedido_itens(id, quantidade, preco_unitario, produtos(omie_codigo)),
+      pedido_unidades(unidades(omie_app_key, omie_app_secret))
+    `)
+    .eq("id", pedidoId)
+    .single();
+
+  if (fetchErr || !pedido) return { erro: "Pedido não encontrado" };
+  if (["recebido", "finalizado"].includes(pedido.status)) {
+    return { erro: "Pedidos recebidos ou finalizados não podem ser editados" };
+  }
+
+  await supabase
+    .from("pedidos")
+    .update({
+      entrega_prev:  dados.entrega_prev ?? null,
+      condicao_pgto: dados.condicao_pgto ?? null,
+    })
+    .eq("id", pedidoId);
+
+  if (pedido.omie_status === "sincronizado" && pedido.omie_codigo) {
+    type PedUnid = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
+    const unid = (pedido.pedido_unidades as PedUnid[])?.[0]?.unidades;
+
+    if (unid?.omie_app_key && unid?.omie_app_secret) {
+      try {
+        type ItemRaw = { id: string; quantidade: number; preco_unitario: number; produtos: { omie_codigo: string | null } | null };
+        const produtosAlterar = (pedido.pedido_itens as ItemRaw[])
+          .filter(i => i.produtos?.omie_codigo)
+          .map((i, idx) => ({
+            cCodIntItem: `${pedidoId.slice(0, 8)}-${idx + 1}`,
+            nCodProd:    Number(i.produtos!.omie_codigo!),
+            nQtde:       i.quantidade,
+            nValUnit:    i.preco_unitario,
+          }));
+
+        const dataPrevisao = dados.entrega_prev
+          ? new Date(dados.entrega_prev).toLocaleDateString("pt-BR")
+          : undefined;
+
+        await alterarPedCompra(
+          { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
+          {
+            cabecalho_alterar: {
+              nCodPed:      Number(pedido.omie_codigo),
+              dDtPrevisao:  dataPrevisao,
+            },
+            produtos_alterar: produtosAlterar,
+          },
+        );
+
+        await supabase
+          .from("pedidos")
+          .update({ omie_status: "sincronizado" })
+          .eq("id", pedidoId);
+      } catch (err) {
+        console.warn("[editarPedido] AlteraPedCompra falhou:", err instanceof Error ? err.message : err);
+        await supabase
+          .from("pedidos")
+          .update({ omie_status: "erro", omie_erro: err instanceof Error ? err.message : "Erro Omie" })
+          .eq("id", pedidoId);
+      }
+    }
+  }
+
+  revalidatePath("/pedidos");
+  return { ok: true };
+}
+
+// ── excluirPedidoOmie ──────────────────────────────────────────────────────────
+
+export async function excluirPedidoOmie(
+  pedidoId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: pedido, error: fetchErr } = await supabase
+    .from("pedidos")
+    .select(`
+      id, omie_codigo, omie_status, status,
+      pedido_unidades(unidades(omie_app_key, omie_app_secret))
+    `)
+    .eq("id", pedidoId)
+    .single();
+
+  if (fetchErr || !pedido) return { erro: "Pedido não encontrado" };
+  if (!["enviado", "cancelado"].includes(pedido.status)) {
+    return { erro: "Apenas pedidos enviados ou cancelados podem ser excluídos no Omie" };
+  }
+  if (pedido.omie_status !== "sincronizado" || !pedido.omie_codigo) {
+    return { erro: "Pedido não está sincronizado com o Omie" };
+  }
+
+  type PedUnid = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
+  const unid = (pedido.pedido_unidades as PedUnid[])?.[0]?.unidades;
+  if (!unid?.omie_app_key || !unid?.omie_app_secret) {
+    return { erro: "Credenciais Omie não encontradas" };
+  }
+
+  try {
+    await excluirPedCompra(
+      { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
+      Number(pedido.omie_codigo),
+    );
+  } catch (err) {
+    return { erro: err instanceof OmieError ? err.message : "Erro ao excluir no Omie" };
+  }
+
+  await supabase
+    .from("pedidos")
+    .update({ omie_status: "pendente", omie_erro: null })
+    .eq("id", pedidoId);
+
+  revalidatePath("/pedidos");
+  return { ok: true };
 }

@@ -6,14 +6,15 @@
  * Remove o fluxo de upload de XML.
  */
 import { useState, useTransition, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   ReceiptText, Search, Loader2, X, ChevronDown,
   CheckCircle2, AlertTriangle, Sparkles, Package,
-  ArrowRight, Check,
+  ArrowRight, Check, CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { registrarNF, lancarNFOmie } from "../actions";
+import { registrarNF, lancarNFOmie, concluirRecebimentoOmie } from "../actions";
 
 // ── Famílias Omie ─────────────────────────────────────────────────────────────
 // Valores brutos como cadastrados no Omie ERP (migration 0006).
@@ -82,6 +83,8 @@ interface NotaFiscal {
   status: string;
   lancada_no_omie: boolean | null;
   lancada_em: string | null;
+  omie_receb_id: number | null;
+  omie_concluido: boolean | null;
   created_at: string;
   fornecedores: { razao_social: string; nome_fantasia: string | null } | null;
   pedidos: { numero: string } | null;
@@ -399,7 +402,9 @@ function PainelEntradaNF({
 // ── Card de NF registrada ─────────────────────────────────────────────────────
 
 function NFCard({ nf }: { nf: NotaFiscal }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
+  const [concluindo, startConcluir] = useTransition();
   const [expandida, setExpandida] = useState(false);
 
   function handleLancarOmie() {
@@ -409,6 +414,22 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
         toast.success("NF lançada no Omie com sucesso");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao lançar no Omie");
+      }
+    });
+  }
+
+  function handleConcluirOmie() {
+    startConcluir(async () => {
+      try {
+        const res = await concluirRecebimentoOmie(nf.id);
+        if ("erro" in res) {
+          toast.error(res.erro);
+        } else {
+          toast.success("Recebimento concluído no Omie!");
+          router.refresh();
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao concluir");
       }
     });
   }
@@ -467,6 +488,16 @@ function NFCard({ nf }: { nf: NotaFiscal }) {
             >
               {pending ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
               {pending ? "Lançando…" : "Lançar Omie"}
+            </button>
+          )}
+          {nf.lancada_no_omie && nf.omie_receb_id && !nf.omie_concluido && (
+            <button
+              onClick={e => { e.stopPropagation(); handleConcluirOmie(); }}
+              disabled={concluindo}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-500/10 px-3 py-1.5 text-[12px] font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+            >
+              {concluindo ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              Concluir no Omie
             </button>
           )}
           <ArrowRight size={13} className={cn("text-muted-foreground/60 transition-transform", expandida && "rotate-90")} />
