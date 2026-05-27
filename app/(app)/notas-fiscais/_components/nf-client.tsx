@@ -5,12 +5,12 @@
  * Entrada de NF via número → consulta Omie → classificação por Família de Produto.
  * Remove o fluxo de upload de XML.
  */
-import { useState, useTransition, useCallback } from "react";
+import { useState, useMemo, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReceiptText, Search, Loader2, X, ChevronDown,
   CheckCircle2, AlertTriangle, Sparkles, Package,
-  ArrowRight, Check, CheckCircle,
+  ArrowRight, Check, CheckCircle, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -548,17 +548,31 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
   const [notas, setNotas]   = useState(notasInit);
   const [busca, setBusca]   = useState("");
   const [aba, setAba]       = useState<"notas" | "entrada">("notas");
+  const [dataInicio, setDataInicio] = useState<string>("");
+  const [dataFim,    setDataFim]    = useState<string>("");
 
-  const notasFiltradas = notas.filter(n => {
-    const q = busca.toLowerCase().trim();
-    if (!q) return true;
-    const num = n.numero ?? n.omie_num_nf ?? "";
-    return (
-      num.toLowerCase().includes(q) ||
-      (n.fornecedores?.razao_social?.toLowerCase().includes(q) ?? false) ||
-      (n.fornecedores?.nome_fantasia?.toLowerCase().includes(q) ?? false)
-    );
-  });
+  const notasFiltradas = useMemo(() => {
+    let lista = notas.filter(n => {
+      const q = busca.toLowerCase().trim();
+      if (!q) return true;
+      const num = n.numero ?? n.omie_num_nf ?? "";
+      return (
+        num.toLowerCase().includes(q) ||
+        (n.fornecedores?.razao_social?.toLowerCase().includes(q) ?? false) ||
+        (n.fornecedores?.nome_fantasia?.toLowerCase().includes(q) ?? false)
+      );
+    });
+    // Filtro por data (created_at)
+    if (dataInicio) {
+      const inicio = new Date(dataInicio + "T00:00:00");
+      lista = lista.filter(n => new Date(n.created_at) >= inicio);
+    }
+    if (dataFim) {
+      const fim = new Date(dataFim + "T23:59:59");
+      lista = lista.filter(n => new Date(n.created_at) <= fim);
+    }
+    return lista;
+  }, [notas, busca, dataInicio, dataFim]);
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-4 pb-10">
@@ -613,16 +627,47 @@ export function NFClient({ notas: notasInit, unidades }: Props) {
         </div>
 
         {aba === "notas" && (
-          <div className="relative flex-1 max-w-[300px]">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
-            <input
-              type="text"
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar por número ou fornecedor…"
-              className="w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-border transition-all"
-            />
-          </div>
+          <>
+            <div className="relative flex-1 max-w-[300px]">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+              <input
+                type="text"
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar por número ou fornecedor…"
+                className="w-full rounded-lg border border-border bg-muted/40 pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-border transition-all"
+              />
+            </div>
+
+            {/* Filtro por data */}
+            <div className="flex items-center gap-1.5">
+              <Calendar size={13} className="text-muted-foreground shrink-0" />
+              <input
+                type="date"
+                aria-label="Data inicial"
+                value={dataInicio}
+                onChange={e => { setDataInicio(e.target.value); }}
+                className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <span className="text-xs text-muted-foreground">até</span>
+              <input
+                type="date"
+                aria-label="Data final"
+                value={dataFim}
+                onChange={e => { setDataFim(e.target.value); }}
+                className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              {(dataInicio || dataFim) && (
+                <button
+                  aria-label="Limpar filtro de data"
+                  onClick={() => { setDataInicio(""); setDataFim(""); }}
+                  className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
 

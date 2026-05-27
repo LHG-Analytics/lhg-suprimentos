@@ -8,7 +8,7 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Scale, Plus, ChevronRight, Sparkles,
-  AlertTriangle, Calendar, Loader2, Trash2, Pencil,
+  AlertTriangle, Calendar, Loader2, Trash2, Pencil, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -265,6 +265,8 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
   const [editCot, setEditCot] = useState<Cotacao | null>(null);
+  const [dataInicio, setDataInicio] = useState<string>("");
+  const [dataFim,    setDataFim]    = useState<string>("");
 
   function handleDelete(e: React.MouseEvent, cot: Cotacao) {
     e.stopPropagation();
@@ -310,7 +312,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   // ── Filtrar + buscar ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = queryDebounced.toLowerCase().trim();
-    return cotacoes.filter((c) => {
+    let lista = cotacoes.filter((c) => {
       if (filter !== "todas" && c.status !== filter) return false;
       if (!q) return true;
       return (
@@ -320,7 +322,17 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         c.cotacao_unidades.some(cu => cu.unidades?.nome.toLowerCase().includes(q))
       );
     });
-  }, [cotacoes, filter, queryDebounced]);
+    // Filtro por data (created_at)
+    if (dataInicio) {
+      const inicio = new Date(dataInicio + "T00:00:00");
+      lista = lista.filter(c => new Date(c.created_at) >= inicio);
+    }
+    if (dataFim) {
+      const fim = new Date(dataFim + "T23:59:59");
+      lista = lista.filter(c => new Date(c.created_at) <= fim);
+    }
+    return lista;
+  }, [cotacoes, filter, queryDebounced, dataInicio, dataFim]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-4 pb-8">
@@ -404,24 +416,55 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       </div>
 
       {/* ── Busca ───────────────────────────────────────────────────────────── */}
-      <div className="relative w-full max-w-sm">
-        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Buscar por nº, título, comprador…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={cn(
-            "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2",
-            "text-sm text-foreground placeholder:text-muted-foreground/50",
-            "focus:outline-none focus:border-border transition-colors",
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar por nº, título, comprador…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className={cn(
+              "w-full rounded-lg border border-border bg-muted/60 pl-9 pr-4 py-2",
+              "text-sm text-foreground placeholder:text-muted-foreground/50",
+              "focus:outline-none focus:border-border transition-colors",
+            )}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} aria-label="Limpar busca" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground text-xs">
+              ✕
+            </button>
           )}
-        />
-        {query && (
-          <button onClick={() => setQuery("")} aria-label="Limpar busca" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-muted-foreground text-xs">
-            ✕
-          </button>
-        )}
+        </div>
+
+        {/* Filtro por data */}
+        <div className="flex items-center gap-1.5">
+          <Calendar size={13} className="text-muted-foreground shrink-0" />
+          <input
+            type="date"
+            aria-label="Data inicial"
+            value={dataInicio}
+            onChange={e => { setDataInicio(e.target.value); }}
+            className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <input
+            type="date"
+            aria-label="Data final"
+            value={dataFim}
+            onChange={e => { setDataFim(e.target.value); }}
+            className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          {(dataInicio || dataFim) && (
+            <button
+              aria-label="Limpar filtro de data"
+              onClick={() => { setDataInicio(""); setDataFim(""); }}
+              className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}

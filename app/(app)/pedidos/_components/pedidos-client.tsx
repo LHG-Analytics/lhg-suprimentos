@@ -13,7 +13,7 @@ import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
   Star, ReceiptText, Sparkles, RefreshCw, Plus,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -667,6 +667,8 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
   const [selectedLhg,  setSelectedLhg]  = useState<Pedido | null>(null);
   const [selectedOmie, setSelectedOmie] = useState<OmiePedido | null>(null);
   const [page,         setPage]         = useState(0);
+  const [dataInicio,   setDataInicio]   = useState<string>("");
+  const [dataFim,      setDataFim]      = useState<string>("");
 
   // counts retornados pelo Omie para cada filtro (após sync individual)
   const [filtroSyncCounts,  setFiltroSyncCounts]  = useState<Record<string, number>>({});
@@ -740,8 +742,30 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
       })
       .map(p => ({ kind: "omie", data: p }));
 
+    // Filtro por data (created_at / data_pedido)
+    const inicio = dataInicio ? new Date(dataInicio + "T00:00:00") : null;
+    const fim    = dataFim    ? new Date(dataFim    + "T23:59:59") : null;
+
+    const lhgFiltrados = inicio || fim
+      ? lhgRows.filter(r => {
+          const d = new Date(r.data.created_at);
+          if (inicio && d < inicio) return false;
+          if (fim    && d > fim)    return false;
+          return true;
+        })
+      : lhgRows;
+
+    const omieFiltrados = inicio || fim
+      ? omieRows.filter(r => {
+          const d = new Date(r.data.data_pedido ?? r.data.omie_sincronizado_em);
+          if (inicio && d < inicio) return false;
+          if (fim    && d > fim)    return false;
+          return true;
+        })
+      : omieRows;
+
     // Ordena por data desc
-    return [...lhgRows, ...omieRows].sort((a, b) => {
+    return [...lhgFiltrados, ...omieFiltrados].sort((a, b) => {
       const dateA = a.kind === "lhg"
         ? new Date(a.data.created_at).getTime()
         : new Date(a.data.data_pedido ?? a.data.omie_sincronizado_em).getTime();
@@ -750,7 +774,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
         : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
       return dateB - dateA;
     });
-  }, [pedidosIniciais, omie_pedidos, buscaDebounced]);
+  }, [pedidosIniciais, omie_pedidos, buscaDebounced, dataInicio, dataFim]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
@@ -854,6 +878,35 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
             Digite mais um caractere para buscar…
           </p>
         )}
+
+        {/* Filtro por data */}
+        <div className="flex items-center gap-1.5">
+          <Calendar size={13} className="text-muted-foreground shrink-0" />
+          <input
+            type="date"
+            aria-label="Data inicial"
+            value={dataInicio}
+            onChange={e => { setDataInicio(e.target.value); setPage(0); }}
+            className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <input
+            type="date"
+            aria-label="Data final"
+            value={dataFim}
+            onChange={e => { setDataFim(e.target.value); setPage(0); }}
+            className="h-8 rounded-md border border-border bg-muted/40 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          {(dataInicio || dataFim) && (
+            <button
+              aria-label="Limpar filtro de data"
+              onClick={() => { setDataInicio(""); setDataFim(""); setPage(0); }}
+              className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
 
