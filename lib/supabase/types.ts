@@ -377,6 +377,8 @@ export type Database = {
           economia_pct: number | null
           id: string
           numero: string
+          omie_codigo: string | null
+          omie_sincronizado_em: string | null
           prazo: string | null
           requisicao_id: string | null
           status: Database["public"]["Enums"]["cot_status"]
@@ -393,6 +395,8 @@ export type Database = {
           economia_pct?: number | null
           id?: string
           numero: string
+          omie_codigo?: string | null
+          omie_sincronizado_em?: string | null
           prazo?: string | null
           requisicao_id?: string | null
           status?: Database["public"]["Enums"]["cot_status"]
@@ -409,6 +413,8 @@ export type Database = {
           economia_pct?: number | null
           id?: string
           numero?: string
+          omie_codigo?: string | null
+          omie_sincronizado_em?: string | null
           prazo?: string | null
           requisicao_id?: string | null
           status?: Database["public"]["Enums"]["cot_status"]
