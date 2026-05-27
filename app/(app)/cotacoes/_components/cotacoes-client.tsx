@@ -8,12 +8,13 @@ import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Scale, Plus, ChevronRight, Sparkles,
-  AlertTriangle, Calendar, Loader2, Trash2,
+  AlertTriangle, Calendar, Loader2, Trash2, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { criarCotacao, deletarCotacao } from "../actions";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { EditarCotacaoModal } from "./editar-cotacao-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ interface Cotacao {
   titulo:         string;
   status:         CotStatus;
   urgente:        boolean | null;
+  omie_codigo?:   string | null;
   valor_estimado: number | null;
   economia:       number | null;
   economia_pct:   number | null;
@@ -260,6 +262,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const [confirmCot, setConfirmCot] = useState<Cotacao | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
+  const [editCot, setEditCot] = useState<Cotacao | null>(null);
 
   function handleDelete(e: React.MouseEvent, cot: Cotacao) {
     e.stopPropagation();
@@ -422,7 +425,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
+        <div className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3 border-b border-border/80">
           {["Nº", "TÍTULO", "UNIDADE", "ITENS", "FORN.", "VALOR EST.", "ECONOMIA IA", "STATUS", "PRAZO", ""].map(h => (
             <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{h}</div>
           ))}
@@ -457,7 +460,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                 <li
                   key={c.id}
                   onClick={() => router.push(`/cotacoes/${c.id}`)}
-                  className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_32px] gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer group"
+                  className="grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer group"
                 >
                   {/* Nº */}
                   <div className="self-center font-mono text-[11px] text-muted-foreground">{c.numero}</div>
@@ -538,19 +541,27 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                   </div>
 
                   {/* Ações */}
-                  <div className="self-center flex justify-end">
-                    {c.status !== "aprovado" ? (
-                      <button
-                        onClick={(e) => handleDelete(e, c)}
-                        disabled={deletingId === c.id}
-                        title="Excluir cotação"
-                        className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
-                      >
-                        {deletingId === c.id
-                          ? <Loader2 size={13} className="animate-spin" />
-                          : <Trash2 size={13} />}
-                      </button>
-                    ) : (
+                  <div className="self-center flex justify-end gap-1">
+                    {c.status !== "aprovado" && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
+                          title="Editar cotação"
+                          className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, c)}
+                          disabled={deletingId === c.id}
+                          title="Excluir cotação"
+                          className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                        >
+                          {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        </button>
+                      </>
+                    )}
+                    {c.status === "aprovado" && (
                       <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                     )}
                   </div>
@@ -587,6 +598,14 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         carregando={!!deletingId}
         onConfirmar={confirmarDelete}
         onCancelar={() => setConfirmCot(null)}
+      />
+
+      {/* ── Modal editar cotação ─────────────────────────────────────────────────── */}
+      <EditarCotacaoModal
+        open={!!editCot}
+        cotacao={editCot}
+        onClose={() => setEditCot(null)}
+        onSaved={() => router.refresh()}
       />
     </div>
   );
