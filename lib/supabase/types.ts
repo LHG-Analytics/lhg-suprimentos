@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_chat_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          role: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          role: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          role?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_chat_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          title?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           chave: string
@@ -60,142 +119,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "audit_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_chat_messages: {
-        Row: {
-          id: string
-          session_id: string
-          user_id: string
-          role: string
-          content: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          session_id: string
-          user_id: string
-          role: string
-          content: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          session_id?: string
-          user_id?: string
-          role?: string
-          content?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_chat_messages_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "ai_chat_sessions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_chat_messages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      omie_pedidos_compra: {
-        Row: {
-          id:                   string
-          unidade_id:           string
-          omie_codigo:          number
-          numero:               number | null
-          data_pedido:          string | null
-          data_previsao:        string | null
-          fornecedor_codigo:    number | null
-          fornecedor_nome:      string | null
-          valor_total:          number | null
-          situacao:             string | null
-          situacao_aprovacao:   string | null
-          etapa:                string | null
-          numero_pedido_forn:   string | null
-          omie_sincronizado_em: string
-          created_at:           string
-        }
-        Insert: {
-          id?:                  string
-          unidade_id:           string
-          omie_codigo:          number
-          numero?:              number | null
-          data_pedido?:         string | null
-          data_previsao?:       string | null
-          fornecedor_codigo?:   number | null
-          fornecedor_nome?:     string | null
-          valor_total?:         number | null
-          situacao?:            string | null
-          situacao_aprovacao?:  string | null
-          etapa?:               string | null
-          numero_pedido_forn?:  string | null
-          omie_sincronizado_em?: string
-          created_at?:          string
-        }
-        Update: {
-          id?:                  string
-          unidade_id?:          string
-          omie_codigo?:         number
-          numero?:              number | null
-          data_pedido?:         string | null
-          data_previsao?:       string | null
-          fornecedor_codigo?:   number | null
-          fornecedor_nome?:     string | null
-          valor_total?:         number | null
-          situacao?:            string | null
-          situacao_aprovacao?:  string | null
-          etapa?:               string | null
-          numero_pedido_forn?:  string | null
-          omie_sincronizado_em?: string
-          created_at?:          string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "omie_pedidos_compra_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "unidades"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_chat_sessions: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          title?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_chat_sessions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "user_profiles"
@@ -373,6 +296,7 @@ export type Database = {
           ai_resumo: string | null
           comprador_id: string | null
           created_at: string
+          deleted_at: string | null
           economia: number | null
           economia_pct: number | null
           id: string
@@ -391,6 +315,7 @@ export type Database = {
           ai_resumo?: string | null
           comprador_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           economia?: number | null
           economia_pct?: number | null
           id?: string
@@ -409,6 +334,7 @@ export type Database = {
           ai_resumo?: string | null
           comprador_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           economia?: number | null
           economia_pct?: number | null
           id?: string
@@ -593,6 +519,39 @@ export type Database = {
           },
         ]
       }
+      invites: {
+        Row: {
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          role: string
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: string
+          token?: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: string
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       nf_itens: {
         Row: {
           decisao: string | null
@@ -650,47 +609,6 @@ export type Database = {
           },
         ]
       }
-      invites: {
-        Row: {
-          id: string
-          email: string
-          role: string
-          token: string
-          invited_by: string | null
-          expires_at: string
-          used_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          email: string
-          role?: string
-          token?: string
-          invited_by?: string | null
-          expires_at?: string
-          used_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          email?: string
-          role?: string
-          token?: string
-          invited_by?: string | null
-          expires_at?: string
-          used_at?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invites_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       notas_fiscais: {
         Row: {
           chave_acesso: string | null
@@ -701,7 +619,7 @@ export type Database = {
           lancada_em: string | null
           lancada_no_omie: boolean | null
           numero: string | null
-          omie_concluido: boolean
+          omie_concluido: boolean | null
           omie_num_nf: string | null
           omie_receb_id: number | null
           pedido_id: string | null
@@ -720,7 +638,7 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          omie_concluido?: boolean
+          omie_concluido?: boolean | null
           omie_num_nf?: string | null
           omie_receb_id?: number | null
           pedido_id?: string | null
@@ -739,7 +657,7 @@ export type Database = {
           lancada_em?: string | null
           lancada_no_omie?: boolean | null
           numero?: string | null
-          omie_concluido?: boolean
+          omie_concluido?: boolean | null
           omie_num_nf?: string | null
           omie_receb_id?: number | null
           pedido_id?: string | null
@@ -766,6 +684,74 @@ export type Database = {
           },
           {
             foreignKeyName: "notas_fiscais_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      omie_pedidos_compra: {
+        Row: {
+          created_at: string
+          data_pedido: string | null
+          data_previsao: string | null
+          etapa: string | null
+          filtro_omie: string | null
+          fornecedor_codigo: number | null
+          fornecedor_nome: string | null
+          id: string
+          itens: Json | null
+          numero: number | null
+          numero_pedido_forn: string | null
+          omie_codigo: number
+          omie_sincronizado_em: string
+          situacao: string | null
+          situacao_aprovacao: string | null
+          unidade_id: string
+          valor_total: number | null
+        }
+        Insert: {
+          created_at?: string
+          data_pedido?: string | null
+          data_previsao?: string | null
+          etapa?: string | null
+          filtro_omie?: string | null
+          fornecedor_codigo?: number | null
+          fornecedor_nome?: string | null
+          id?: string
+          itens?: Json | null
+          numero?: number | null
+          numero_pedido_forn?: string | null
+          omie_codigo: number
+          omie_sincronizado_em?: string
+          situacao?: string | null
+          situacao_aprovacao?: string | null
+          unidade_id: string
+          valor_total?: number | null
+        }
+        Update: {
+          created_at?: string
+          data_pedido?: string | null
+          data_previsao?: string | null
+          etapa?: string | null
+          filtro_omie?: string | null
+          fornecedor_codigo?: number | null
+          fornecedor_nome?: string | null
+          id?: string
+          itens?: Json | null
+          numero?: number | null
+          numero_pedido_forn?: string | null
+          omie_codigo?: number
+          omie_sincronizado_em?: string
+          situacao?: string | null
+          situacao_aprovacao?: string | null
+          unidade_id?: string
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_pedidos_compra_unidade_id_fkey"
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "unidades"

@@ -119,9 +119,8 @@ export async function deletarCotacao(id: string) {
   await supabase.from("cotacao_fornecedores").delete().eq("cotacao_id", id);
   await supabase.from("cotacao_unidades").delete().eq("cotacao_id", id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: deleteErr } = await (supabase
-    .from("cotacoes") as any)
+  const { error: deleteErr } = await supabase
+    .from("cotacoes")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
 
