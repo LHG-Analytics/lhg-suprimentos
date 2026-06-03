@@ -57,27 +57,45 @@ export async function GET(_req: NextRequest) {
   const results: object[] = [];
 
   const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
-  // IDs de 20 chars (exatamente como toOmieId faz)
+  const hoje = new Date();
+  const dtHoje = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
   const shortId     = testId.replace(/-/g, "").slice(0, 20);
-  const shortItemId = (testId + "item1").replace(/-/g, "").slice(0, 20);
+  const shortItemId = (testId + "i1").replace(/-/g, "").slice(0, 20);
 
-  // Teste 1: UpsertReq com a estrutura que implementamos (deve funcionar)
+  // Teste 1: UpsertReq SEM itens (só header) — verifica se dtSugestao é obrigatório
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
+    rcCadastro: {
+      codIntReqCompra: shortId + "h",
+      dtSugestao:      dtHoje,
+      obsReqCompra:    "Teste header sem itens",
+    },
+  }));
+
+  // Teste 2: UpsertReq COM itens e COM dtSugestao
   results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
     rcCadastro: {
       codIntReqCompra: shortId,
-      obsReqCompra:    "Teste debug LHG - UpsertReq",
+      dtSugestao:      dtHoje,
+      obsReqCompra:    "Teste com itens e data",
       ItensReqCompra:  [{ codIntItem: shortItemId, codProd, qtde: 1, precoUnit: 0 }],
     },
   }));
 
-  // Teste 2: PesquisarReq — verifica se criou
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
-    rcListarRequest: { nPagina: 1, nRegPorPagina: 3 },
+  // Teste 3: ConsultarReq direto (sem wrapper rcChave)
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+    codIntReqCompra: shortId,
+    codReqCompra:    0,
   }));
 
-  // Teste 3: ConsultarReq pelo código de integração
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
-    rcChave: { codIntReqCompra: shortId },
+  // Teste 4: PesquisarReq com campos alternativos
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
+    rcListarRequest: { pagina: 1, registros_por_pagina: 3 },
+  }));
+
+  // Teste 5: PesquisarReq com campos sem wrapper
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
+    pagina: 1,
+    registros_por_pagina: 3,
   }));
 
   return NextResponse.json({
