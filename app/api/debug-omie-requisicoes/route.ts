@@ -56,49 +56,28 @@ export async function GET(_req: NextRequest) {
 
   const results: object[] = [];
 
-  const hoje = new Date();
-  const dtReq = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
-
   const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
+  // IDs de 20 chars (exatamente como toOmieId faz)
+  const shortId     = testId.replace(/-/g, "").slice(0, 20);
+  const shortItemId = (testId + "item1").replace(/-/g, "").slice(0, 20);
 
-  // Candidato A: campos originais do código (codIntReqCompra, obsReqCompra, ItensReqCompra)
-  // com o wrapper correto rcCadastro
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    rcCadastro: {
-      codIntReqCompra: testId + "-a",
-      obsReqCompra:    "Teste A - campos originais",
-      ItensReqCompra:  [{ codIntItem: testId + "-a-i1", codProd, qtde: 1, precoUnit: 0 }],
-    },
-  }));
-
-  // Candidato B: campos snake_case com datas
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    rcCadastro: {
-      cCodIntReqCompra: testId + "-b",
-      dDtRequisicao:    dtReq,
-      cObs:             "Teste B - cCodIntReqCompra",
-      det: [{ cCodIntItem: testId + "-b-i1", nCodProd: codProd, nQtde: 1, nValUnit: 0 }],
-    },
-  }));
-
-  // Candidato C: campos mistos que às vezes o Omie usa
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    rcCadastro: {
-      cCodInt:      testId + "-c",
-      dDtReq:       dtReq,
-      nCodFornecedor: 0,
-      cObsReq:      "Teste C",
-      itens: [{ cCodInt: testId + "-c-i1", nCodProd: codProd, nQtde: 1, nValUnit: 0 }],
-    },
-  }));
-
-  // Candidato D: UpsertReq com campos originais
+  // Teste 1: UpsertReq com a estrutura que implementamos (deve funcionar)
   results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
     rcCadastro: {
-      codIntReqCompra: testId + "-d",
-      obsReqCompra:    "Teste D - UpsertReq",
-      ItensReqCompra:  [{ codIntItem: testId + "-d-i1", codProd, qtde: 1, precoUnit: 0 }],
+      codIntReqCompra: shortId,
+      obsReqCompra:    "Teste debug LHG - UpsertReq",
+      ItensReqCompra:  [{ codIntItem: shortItemId, codProd, qtde: 1, precoUnit: 0 }],
     },
+  }));
+
+  // Teste 2: PesquisarReq — verifica se criou
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
+    rcListarRequest: { nPagina: 1, nRegPorPagina: 3 },
+  }));
+
+  // Teste 3: ConsultarReq pelo código de integração
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+    rcChave: { codIntReqCompra: shortId },
   }));
 
   return NextResponse.json({
