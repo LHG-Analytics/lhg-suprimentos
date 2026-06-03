@@ -59,42 +59,47 @@ export async function GET(_req: NextRequest) {
   const hoje = new Date();
   const dtReq = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
 
-  // Estrutura rcCadastro conforme erro do Omie
-  const rcCadastro = {
-    cCodInt:  testId,
-    dDtReq:   dtReq,
-    cObsReq:  "Teste debug LHG",
-    det: [
-      {
-        nCodProd: prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined,
-        nQtde:    1,
-        nValUnit: 0,
-        cCodInt:  `${testId}-item1`,
-      },
-    ],
-  };
+  const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
 
-  // 1. Listar — testar vários nomes de call
-  for (const call of ["ListarRequisicaoCompra", "ListarReqCompra", "PesquisarReqCompra", "ObterReqCompra"]) {
-    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
-      pagina: 1,
-      registros_por_pagina: 3,
-    }));
-  }
+  // Candidato A: campos originais do código (codIntReqCompra, obsReqCompra, ItensReqCompra)
+  // com o wrapper correto rcCadastro
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+    rcCadastro: {
+      codIntReqCompra: testId + "-a",
+      obsReqCompra:    "Teste A - campos originais",
+      ItensReqCompra:  [{ codIntItem: testId + "-a-i1", codProd, qtde: 1, precoUnit: 0 }],
+    },
+  }));
 
-  // 2. Criar — testar nomes de call com estrutura rcCadastro
-  for (const call of ["IncluirRequisicaoCompra", "IncluirReqCompra", "IncluirReq"]) {
-    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
-      rcCadastro,
-    }));
-  }
+  // Candidato B: campos snake_case com datas
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+    rcCadastro: {
+      cCodIntReqCompra: testId + "-b",
+      dDtRequisicao:    dtReq,
+      cObs:             "Teste B - cCodIntReqCompra",
+      det: [{ cCodIntItem: testId + "-b-i1", nCodProd: codProd, nQtde: 1, nValUnit: 0 }],
+    },
+  }));
 
-  // 3. Upsert — testar nomes de call
-  for (const call of ["UpsertRequisicaoCompra", "UpsertReqCompra", "UpsertReq"]) {
-    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
-      rcCadastro: { ...rcCadastro, cCodInt: testId + "-up" },
-    }));
-  }
+  // Candidato C: campos mistos que às vezes o Omie usa
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+    rcCadastro: {
+      cCodInt:      testId + "-c",
+      dDtReq:       dtReq,
+      nCodFornecedor: 0,
+      cObsReq:      "Teste C",
+      itens: [{ cCodInt: testId + "-c-i1", nCodProd: codProd, nQtde: 1, nValUnit: 0 }],
+    },
+  }));
+
+  // Candidato D: UpsertReq com campos originais
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
+    rcCadastro: {
+      codIntReqCompra: testId + "-d",
+      obsReqCompra:    "Teste D - UpsertReq",
+      ItensReqCompra:  [{ codIntItem: testId + "-d-i1", codProd, qtde: 1, precoUnit: 0 }],
+    },
+  }));
 
   return NextResponse.json({
     unidade: nome,
