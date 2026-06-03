@@ -29,6 +29,10 @@ import {
   type OmiePedidoFiltro,
 } from "./client";
 import { categoriaParaFamilia } from "./familia-map";
+import {
+  listAllRequisicoes,
+  type OmieRequisicaoItem,
+} from "./requisicao";
 
 // ── Tipos internos ─────────────────────────────────────────────────────────────
 
@@ -769,6 +773,197 @@ export interface UnidadeComCreds {
   omie_app_secret: string;
 }
 
+// ── syncRequisicoes ─────────────────────────────────────────────────────────────
+
+/**
+ * Pull bidirecional: busca Requisições de Compra abertas no Omie
+ * e upserta em omie_requisicoes. Para cada requisição do Omie sem
+ * correspondente local, cria um registro em requisicoes com origem='omie'.
+ *
+ * Requer service client (bypass de RLS).
+ */
+export async function syncRequisicoes(
+  supabase: SupabaseClient,
+  creds: OmieCredentials,
+  unidadeId: string,
+): Promise<SyncResult> {
+  const start = Date.now();
+  let total = 0, novos = 0, erros = 0;
+
+  try {
+    const itens = await listAllRequisicoes(creds);
+    total = itens.length;
+
+    for (const item of itens) {
+      try {
+        // 1. Upsert na tabela espelho
+        const { data: espelho, error: espErr } = await supabase
+          .from("omie_requisicoes")
+          .upsert(
+            {
+              unidade_id:           unidadeId,
+              omie_codigo:          item.nCodReqCompra,
+              numero:               item.cNumReq ?? null,
+              data_requisicao:      item.dDtRequisicao ? parseDateBR(item.dDtRequisicao) : null,
+              data_necessidade:     item.dDtNecessidade ? parseDateBR(item.dDtNecessidade) : null,
+              observacao:           item.cObs ?? null,
+              situacao:             item.cSituacao ?? null,
+              departamento:         item.cDepartamento ?? null,
+              solicitante_nome:     item.cSolicitante ?? null,
+              itens:                item.det ?? null,
+              omie_sincronizado_em: new Date().toISOString(),
+            },
+            { onConflict: "omie_codigo,unidade_id", ignoreDuplicates: false },
+          )
+          .select("id, requisicao_id")
+          .single();
+
+        if (espErr) {
+          console.error("[sync/req] upsert espelho:", espErr.message);
+          erros++;
+          continue;
+        }
+
+        // 2. Se ainda não tem requisicao_id local, criar requisição interna
+        if (!espelho?.requisicao_id) {
+          // Verificar se cCodIntReqCompra aponta para uma requisição nossa
+          let reqId: string | null = null;
+
+          if (item.cCodIntReqCompra) {
+            const { data: existing } = await supabase
+              .from("requisicoes")
+              .select("id")
+              .eq("id", item.cCodIntReqCompra)
+              .maybeSingle();
+            reqId = existing?.id ?? null;
+          }
+
+          if (!reqId) {
+            // Criar requisição interna originada do Omie
+            const year = new Date().getFullYear();
+            const { data: last } = await supabase
+              .from("requisicoes")
+              .select("numero")
+              .like("numero", `REQ-${year}-%`)
+              .order("numero", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const lastNum = last
+              ? parseInt(last.numero.split("-")[2] ?? "0", 10)
+              : 0;
+            const numero = `REQ-${year}-${String(lastNum + 1).padStart(4, "0")}`;
+
+            const { data: req, error: reqErr } = await supabase
+              .from("requisicoes")
+              .insert({
+                numero,
+                titulo:              item.cObs ?? `Requisição Omie ${item.cNumReq ?? item.nCodReqCompra}`,
+                urgencia:            "normal",
+                status:              "aguardando_cotacao",
+                origem:              "omie",
+                omie_codigo:         item.nCodReqCompra,
+                omie_unidade_id:     unidadeId,
+                omie_sincronizado_em: new Date().toISOString(),
+              })
+              .select("id")
+              .single();
+
+            if (reqErr || !req) {
+              console.error("[sync/req] criar req local:", reqErr?.message);
+              erros++;
+              continue;
+            }
+
+            reqId = req.id;
+
+            // Criar itens da requisição
+            if (item.det?.length) {
+              const itensMapped = await Promise.all(
+                item.det.map(async (d) => {
+                  let produtoId: string | null = null;
+                  if (d.nCodProd) {
+                    const { data: prod } = await supabase
+                      .from("produtos")
+                      .select("id")
+                      .eq("omie_codigo", String(d.nCodProd))
+                      .eq("omie_unidade_id", unidadeId)
+                      .maybeSingle();
+                    produtoId = prod?.id ?? null;
+                  }
+
+                  return {
+                    requisicao_id:       reqId,
+                    produto_id:          produtoId,
+                    produto_nome_livre:  produtoId ? null : d.cDescricao,
+                    produto_unidade_med: d.cUnid ?? null,
+                    produto_novo:        !produtoId,
+                    quantidade:          d.nQtde,
+                    observacao:          d.cObsItem ?? null,
+                  };
+                }),
+              );
+
+              await supabase.from("requisicao_itens").insert(itensMapped);
+
+              const temProdutoNovo = itensMapped.some((i) => i.produto_novo);
+              if (temProdutoNovo) {
+                await supabase
+                  .from("requisicoes")
+                  .update({ status: "pendente_produto" })
+                  .eq("id", reqId);
+              }
+            }
+
+            novos++;
+          }
+
+          // Vincular espelho à requisição
+          await supabase
+            .from("omie_requisicoes")
+            .update({ requisicao_id: reqId })
+            .eq("id", espelho!.id);
+        }
+      } catch (err) {
+        console.error("[sync/req] item:", (err as Error).message);
+        erros++;
+      }
+    }
+  } catch (err) {
+    const msg = (err as Error).message;
+    const result: SyncResult = {
+      entidade: "requisicoes",
+      status: "erro",
+      total: 0,
+      novos: 0,
+      erros: 1,
+      duracaoMs: Date.now() - start,
+      detalhe: { erro: msg },
+    };
+    await registrarLog(supabase, unidadeId, { ...result, operacao: "sync" });
+    return result;
+  }
+
+  const result: SyncResult = {
+    entidade: "requisicoes",
+    status: erros > 0 && novos === 0 ? "erro" : erros > 0 ? "parcial" : "ok",
+    total,
+    novos,
+    erros,
+    duracaoMs: Date.now() - start,
+  };
+
+  await registrarLog(supabase, unidadeId, { ...result, operacao: "sync" });
+  return result;
+}
+
+// ── Helper: parsear data BR (DD/MM/YYYY → ISO) ────────────────────────────────
+
+function parseDateBR(dateBR: string): string {
+  const [d, m, y] = dateBR.split("/");
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Sincroniza fornecedores e produtos de TODAS as unidades ativas.
  * Cada unidade tem seu próprio catálogo de fornecedores e produtos.
@@ -818,6 +1013,10 @@ export async function syncTodasUnidades(
     // Sincroniza pedidos de compra por unidade
     const resPed = await syncPedidosCompra(supabase, creds, unidade.id);
     results.push(resPed);
+
+    // Sincroniza requisições de compra por unidade
+    const resReq = await syncRequisicoes(supabase, creds, unidade.id);
+    results.push(resReq);
   }
 
   return {
