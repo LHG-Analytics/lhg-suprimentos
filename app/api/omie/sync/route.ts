@@ -24,6 +24,7 @@ import {
   syncProdutos,
   syncCMCProdutos,
   syncPedidosCompra,
+  syncRequisicoes,
   type SyncResult,
 } from "@/lib/omie/sync";
 import type { OmieCredentials } from "@/lib/omie/client";
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse do body (opcional)
-  let entidade: "fornecedores" | "produtos" | "cmc" | "pedidos" | "todos" = "todos";
+  let entidade: "fornecedores" | "produtos" | "cmc" | "pedidos" | "requisicoes" | "todos" = "todos";
   try {
     const body = await req.json().catch(() => ({}));
     if (
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
       body?.entidade === "produtos" ||
       body?.entidade === "cmc" ||
       body?.entidade === "pedidos" ||
+      body?.entidade === "requisicoes" ||
       body?.entidade === "todos"
     ) {
       entidade = body.entidade;
@@ -166,6 +168,9 @@ export async function POST(req: NextRequest) {
         results.push(r);
       } else if (entidade === "pedidos") {
         const r = await syncPedidosCompra(supabase, creds, unidade.id);
+        results.push(r);
+      } else if (entidade === "requisicoes") {
+        const r = await syncRequisicoes(supabase, creds, unidade.id);
         results.push(r);
       } else if (entidade === "cmc" && !produtosSincronizados) {
         // Só CMC em background — responde imediatamente, evita timeout.
