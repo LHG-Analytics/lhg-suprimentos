@@ -1318,7 +1318,7 @@ export async function incluirProduto(
   params: {
     nome:            string;
     unidade:         string;
-    ncm:             string;
+    ncm?:            string;
     valor_unitario:  number;
     familia_omie?:   string;
     codigo_interno?: string;
@@ -1333,7 +1333,7 @@ export async function incluirProduto(
       codigo_produto_integracao: params.codigo_integracao,
       descricao:                 params.nome,
       unidade:                   params.unidade,
-      ncm:                       params.ncm.replace(/\D/g, ""),
+      ncm:                       (params.ncm ?? "").replace(/\D/g, ""),
       valor_unitario:            params.valor_unitario,
       descricao_familia:         params.familia_omie ?? "",
       codigo:                    params.codigo_interno ?? "",
