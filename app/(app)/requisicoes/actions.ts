@@ -211,13 +211,27 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Buscar perfil do usuário para verificar role
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
   const { data: item } = await supabase
     .from("requisicao_itens")
-    .select("id, requisicao_id")
+    .select("id, requisicao_id, requisicoes(solicitante_id)")
     .eq("id", requisicaoItemId)
     .single();
 
   if (!item) throw new Error("Item não encontrado");
+
+  // Solicitantes só podem vincular itens de suas próprias requisições
+  const req = item.requisicoes as { solicitante_id: string } | null;
+  const isSolicitante = profile?.role === "solicitante";
+  if (isSolicitante && req?.solicitante_id !== user.id) {
+    throw new Error("Sem permissão para modificar esta requisição");
+  }
 
   await supabase
     .from("requisicao_itens")
@@ -247,6 +261,22 @@ export async function criarProdutoOmie(unidadeId: string, data: ProdutoOmieInput
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Verificar que o usuário tem acesso à unidade (comprador/admin: todas; solicitante: só as suas)
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role === "solicitante") {
+    const { count } = await supabase
+      .from("user_unidades")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("unidade_id", unidadeId);
+    if ((count ?? 0) === 0) throw new Error("Sem permissão para esta unidade");
+  }
 
   const parsed = ProdutoOmieSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
