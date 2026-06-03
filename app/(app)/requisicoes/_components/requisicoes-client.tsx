@@ -45,7 +45,7 @@ interface RequisicoesClientProps {
   produtos:    Produto[];
 }
 
-type ReqStatus = "rascunho" | "cotacao" | "pendente" | "aprovado" | "rejeitado" | "cancelado";
+type ReqStatus = "rascunho" | "cotacao" | "pendente" | "aprovado" | "rejeitado" | "cancelado" | "pendente_produto" | "aguardando_cotacao";
 type FilterStatus = "todas" | ReqStatus;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,26 +74,30 @@ function getInitials(nome: string) {
 // ── Badge de status ───────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<ReqStatus, { label: string; cls: string }> = {
-  rascunho:  { label: "Rascunho",     cls: "bg-muted text-muted-foreground ring-1 ring-border/50" },
-  cotacao:   { label: "Em cotação",   cls: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20" },
-  pendente:  { label: "Pendente",     cls: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20" },
-  aprovado:  { label: "Aprovado",     cls: "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" },
-  rejeitado: { label: "Rejeitado",    cls: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20" },
-  cancelado: { label: "Cancelado",    cls: "bg-muted/50 text-muted-foreground/70 ring-1 ring-border/30" },
+  rascunho:          { label: "Rascunho",          cls: "bg-muted text-muted-foreground ring-1 ring-border/50" },
+  cotacao:           { label: "Em cotação",         cls: "bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20" },
+  pendente:          { label: "Pendente",           cls: "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20" },
+  aprovado:          { label: "Aprovado",           cls: "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" },
+  rejeitado:         { label: "Rejeitado",          cls: "bg-red-500/10 text-red-400 ring-1 ring-red-500/20" },
+  cancelado:         { label: "Cancelado",          cls: "bg-muted/50 text-muted-foreground/70 ring-1 ring-border/30" },
+  pendente_produto:  { label: "Prod. pendente",     cls: "bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20" },
+  aguardando_cotacao:{ label: "Ag. cotação",        cls: "bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20" },
 };
 
 const FILTER_ORDER: FilterStatus[] = [
-  "todas", "rascunho", "cotacao", "pendente", "aprovado", "rejeitado", "cancelado",
+  "todas", "rascunho", "pendente_produto", "aguardando_cotacao", "cotacao", "pendente", "aprovado", "rejeitado", "cancelado",
 ];
 
 const FILTER_LABELS: Record<FilterStatus, string> = {
-  todas:     "Todas",
-  rascunho:  "Rascunho",
-  cotacao:   "Em cotação",
-  pendente:  "Pendente",
-  aprovado:  "Aprovado",
-  rejeitado: "Rejeitado",
-  cancelado: "Cancelado",
+  todas:              "Todas",
+  rascunho:           "Rascunho",
+  cotacao:            "Em cotação",
+  pendente:           "Pendente",
+  aprovado:           "Aprovado",
+  rejeitado:          "Rejeitado",
+  cancelado:          "Cancelado",
+  pendente_produto:   "Prod. pendente",
+  aguardando_cotacao: "Ag. cotação",
 };
 
 // ── Componente ────────────────────────────────────────────────────────────────

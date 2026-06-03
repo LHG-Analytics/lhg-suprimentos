@@ -1079,21 +1079,30 @@ export type Database = {
         Row: {
           id: string
           observacao: string | null
-          produto_id: string
+          produto_id: string | null
+          produto_nome_livre: string | null
+          produto_novo: boolean
+          produto_unidade_med: string | null
           quantidade: number
           requisicao_id: string
         }
         Insert: {
           id?: string
           observacao?: string | null
-          produto_id: string
+          produto_id?: string | null
+          produto_nome_livre?: string | null
+          produto_novo?: boolean
+          produto_unidade_med?: string | null
           quantidade: number
           requisicao_id: string
         }
         Update: {
           id?: string
           observacao?: string | null
-          produto_id?: string
+          produto_id?: string | null
+          produto_nome_livre?: string | null
+          produto_novo?: boolean
+          produto_unidade_med?: string | null
           quantidade?: number
           requisicao_id?: string
         }
@@ -1150,6 +1159,10 @@ export type Database = {
           id: string
           justificativa: string | null
           numero: string
+          omie_codigo: number | null
+          omie_sincronizado_em: string | null
+          omie_unidade_id: string | null
+          origem: string
           solicitante_id: string
           status: Database["public"]["Enums"]["req_status"]
           titulo: string
@@ -1162,6 +1175,10 @@ export type Database = {
           id?: string
           justificativa?: string | null
           numero: string
+          omie_codigo?: number | null
+          omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
+          origem?: string
           solicitante_id: string
           status?: Database["public"]["Enums"]["req_status"]
           titulo: string
@@ -1174,6 +1191,10 @@ export type Database = {
           id?: string
           justificativa?: string | null
           numero?: string
+          omie_codigo?: number | null
+          omie_sincronizado_em?: string | null
+          omie_unidade_id?: string | null
+          origem?: string
           solicitante_id?: string
           status?: Database["public"]["Enums"]["req_status"]
           titulo?: string
@@ -1343,6 +1364,8 @@ export type Database = {
         | "aprovado"
         | "rejeitado"
         | "cancelado"
+        | "pendente_produto"
+        | "aguardando_cotacao"
       urgencia: "normal" | "urgente"
       user_role: "admin" | "comprador" | "aprovador" | "solicitante"
     }
@@ -1499,6 +1522,8 @@ export const Constants = {
         "aprovado",
         "rejeitado",
         "cancelado",
+        "pendente_produto",
+        "aguardando_cotacao",
       ],
       urgencia: ["normal", "urgente"],
       user_role: ["admin", "comprador", "aprovador", "solicitante"],

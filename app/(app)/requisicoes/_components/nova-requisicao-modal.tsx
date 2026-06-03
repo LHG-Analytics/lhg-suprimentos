@@ -322,6 +322,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
           justificativa: form.justificativa.trim() || undefined,
           unidade_ids:   form.unidade_ids,
           itens:         itensValidos.map(i => ({
+            tipo:       "catalogo" as const,
             produto_id: i.produto_id,
             quantidade: i.quantidade,
             observacao: i.observacao.trim() || undefined,

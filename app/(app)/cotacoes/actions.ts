@@ -191,13 +191,16 @@ export async function criarCotacao(input: z.infer<typeof NovaCotacaoSchema>) {
     ]);
 
     if (reqItens?.length) {
-      await supabase.from("cotacao_itens").insert(
-        reqItens.map(i => ({
-          cotacao_id: cot.id,
-          produto_id: i.produto_id,
-          quantidade: i.quantidade,
-        })),
-      );
+      const itensComProduto = reqItens.filter((i): i is typeof i & { produto_id: string } => i.produto_id != null);
+      if (itensComProduto.length) {
+        await supabase.from("cotacao_itens").insert(
+          itensComProduto.map(i => ({
+            cotacao_id: cot.id,
+            produto_id: i.produto_id,
+            quantidade: i.quantidade,
+          })),
+        );
+      }
     }
 
     if (reqUnidades?.length) {
