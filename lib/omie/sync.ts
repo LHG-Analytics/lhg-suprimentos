@@ -802,15 +802,15 @@ export async function syncRequisicoes(
           .upsert(
             {
               unidade_id:           unidadeId,
-              omie_codigo:          item.nCodReqCompra,
-              numero:               item.cNumReq ?? null,
-              data_requisicao:      omieDataParaISO(item.dDtRequisicao),
-              data_necessidade:     omieDataParaISO(item.dDtNecessidade),
-              observacao:           item.cObs ?? null,
+              omie_codigo:          item.codReqCompra,
+              numero:               item.codIntReqCompra ?? null,
+              data_requisicao:      omieDataParaISO(item.dtSugestao),
+              data_necessidade:     null,
+              observacao:           item.obsReqCompra ?? null,
               situacao:             item.cSituacao ?? null,
-              departamento:         item.cDepartamento ?? null,
-              solicitante_nome:     item.cSolicitante ?? null,
-              itens:                item.det ?? null,
+              departamento:         null,
+              solicitante_nome:     null,
+              itens:                item.ItensReqCompra ?? null,
               omie_sincronizado_em: new Date().toISOString(),
             },
             { onConflict: "omie_codigo,unidade_id", ignoreDuplicates: false },
@@ -831,11 +831,11 @@ export async function syncRequisicoes(
           // Verificar se cCodIntReqCompra aponta para uma requisição nossa
           let reqId: string | null = null;
 
-          if (item.cCodIntReqCompra) {
+          if (item.codIntReqCompra) {
             const { data: existing } = await supabase
               .from("requisicoes")
               .select("id")
-              .eq("id", item.cCodIntReqCompra)
+              .eq("id", item.codIntReqCompra)
               .maybeSingle();
             reqId = existing?.id ?? null;
           }
@@ -860,11 +860,11 @@ export async function syncRequisicoes(
               .from("requisicoes")
               .insert({
                 numero,
-                titulo:              item.cObs ?? `Requisição Omie ${item.cNumReq ?? item.nCodReqCompra}`,
+                titulo:              item.obsReqCompra ?? `Requisição Omie ${item.codIntReqCompra ?? item.codReqCompra}`,
                 urgencia:            "normal",
                 status:              "aguardando_cotacao",
                 origem:              "omie",
-                omie_codigo:         item.nCodReqCompra,
+                omie_codigo:         item.codReqCompra,
                 omie_unidade_id:     unidadeId,
                 omie_sincronizado_em: new Date().toISOString(),
               })
@@ -880,15 +880,15 @@ export async function syncRequisicoes(
             reqId = req.id;
 
             // Criar itens da requisição
-            if (item.det?.length) {
+            if (item.ItensReqCompra?.length) {
               const itensMapped = await Promise.all(
-                item.det.map(async (d) => {
+                item.ItensReqCompra.map(async (d) => {
                   let produtoId: string | null = null;
-                  if (d.nCodProd) {
+                  if (d.codProd) {
                     const { data: prod } = await supabase
                       .from("produtos")
                       .select("id")
-                      .eq("omie_codigo", String(d.nCodProd))
+                      .eq("omie_codigo", String(d.codProd))
                       .eq("omie_unidade_id", unidadeId)
                       .maybeSingle();
                     produtoId = prod?.id ?? null;
@@ -897,11 +897,11 @@ export async function syncRequisicoes(
                   return {
                     requisicao_id:       reqId,
                     produto_id:          produtoId,
-                    produto_nome_livre:  produtoId ? null : d.cDescricao,
-                    produto_unidade_med: d.cUnid ?? null,
+                    produto_nome_livre:  produtoId ? null : (d.obsItem ?? "Produto Omie"),
+                    produto_unidade_med: null,
                     produto_novo:        !produtoId,
-                    quantidade:          d.nQtde,
-                    observacao:          d.cObsItem ?? null,
+                    quantidade:          d.qtde,
+                    observacao:          d.obsItem ?? null,
                   };
                 }),
               );

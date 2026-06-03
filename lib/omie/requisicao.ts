@@ -1,163 +1,181 @@
 /**
  * lib/omie/requisicao.ts
  * Operações Omie para Requisição de Compra.
- * LHG "Cotação" = Omie "Requisição de Compra" (/produtos/requisicaocompra/).
+ * Endpoint: /produtos/requisicaocompra/
  *
- * codIntReqCompra = cotacao.id (UUID)
- * Fornecedor registrado em obsReqCompra: "Fornecedor: {nome_fantasia}"
+ * Estrutura confirmada pela documentação Omie:
+ *   - Wrapper do param: rcCadastro (não requisicaoCadastro)
+ *   - codIntReqCompra: máx 20 chars
+ *   - codIntItem: máx 20 chars
+ *   - Calls: IncluirReq, UpsertReq, AlterarReq, ExcluirReq, ConsultarReq, PesquisarReq
+ *
+ * Helper: toOmieId(uuid) → primeiros 20 chars do UUID sem hifens
  */
 import { omiePost, OmieCredentials, isOmieEmptyError } from "./client";
 
-// ── Tipos ──────────────────────────────────────────────────────────────────────
+// ── Helper: UUID → ID curto (max 20 chars, sem hifens) ────────────────────────
+
+export function toOmieId(id: string): string {
+  return id.replace(/-/g, "").slice(0, 20);
+}
+
+// ── Tipos: criação/edição ─────────────────────────────────────────────────────
 
 export interface OmieReqItem {
-  codIntItem:  string;   // UUID do cotacao_item
-  codProd?:    number;   // produto.omie_codigo (se existir)
+  /** Código de integração do item — máx 20 chars. Use toOmieId(uuid). */
+  codIntItem:  string;
+  /** Código do produto no Omie (omie_codigo). Opcional. */
+  codProd?:    number;
   qtde:        number;
-  precoUnit:   number;   // 0 se não houver preço ainda
+  precoUnit:   number;
   obsItem?:    string;
 }
 
 export interface OmieReqParam {
-  codIntReqCompra:  string;           // cotacao.id
-  dtSugestao?:      string;           // DD/MM/YYYY
-  obsReqCompra?:    string;           // "Fornecedor: {nome}"
+  /** Código de integração da requisição — máx 20 chars. Use toOmieId(uuid). */
+  codIntReqCompra:  string;
+  dtSugestao?:      string;   // DD/MM/YYYY
+  obsReqCompra?:    string;
   ItensReqCompra:   OmieReqItem[];
 }
 
-interface IncluirReqResponse {
-  nCodReqCompra?: number;
-  cCodIntReqCompra?: string;
-}
-
-// ── incluirReq ─────────────────────────────────────────────────────────────────
-
-/**
- * Cria uma Requisição de Compra no Omie.
- * Retorna o nCodReqCompra gerado pelo Omie (salvar em cotacoes.omie_codigo).
- */
-export async function incluirReq(
-  creds: OmieCredentials,
-  param: OmieReqParam,
-): Promise<number> {
-  const res = await omiePost<
-    { requisicaoCadastro: OmieReqParam },
-    IncluirReqResponse
-  >(
-    "/produtos/requisicaocompra/",
-    "IncluirReq",
-    creds,
-    { requisicaoCadastro: param },
-  );
-  return res.nCodReqCompra ?? 0;
+interface ReqStatus {
+  codReqCompra?:    number;
+  codIntReqCompra?: string;
+  cStatus?:         string;
+  cDescStatus?:     string;
 }
 
 // ── upsertReq ─────────────────────────────────────────────────────────────────
 
 /**
  * Cria ou atualiza (idempotente) uma Requisição de Compra no Omie.
- * Preferir sobre incluirReq para evitar REDUNDANT em retries.
- * Retorna nCodReqCompra quando disponível na resposta.
+ * Preferir sempre sobre incluirReq — evita erro REDUNDANT em retries.
+ * Retorna codReqCompra gerado pelo Omie.
  */
 export async function upsertReq(
   creds: OmieCredentials,
   param: OmieReqParam,
 ): Promise<number> {
   const res = await omiePost<
-    { requisicaoCadastro: OmieReqParam },
-    { nCodReqCompra?: number; cCodIntReqCompra?: string }
+    { rcCadastro: OmieReqParam },
+    ReqStatus
   >(
     "/produtos/requisicaocompra/",
     "UpsertReq",
     creds,
-    { requisicaoCadastro: param },
+    { rcCadastro: param },
   );
-  return res.nCodReqCompra ?? 0;
+  return res.codReqCompra ?? 0;
 }
 
-// ── excluirReq ─────────────────────────────────────────────────────────────────
+// ── incluirReq ────────────────────────────────────────────────────────────────
 
 /**
- * Exclui uma Requisição de Compra no Omie pelo código de integração.
+ * Cria uma nova Requisição de Compra no Omie.
+ * Use upsertReq se puder — é idempotente e mais seguro em retries.
+ */
+export async function incluirReq(
+  creds: OmieCredentials,
+  param: OmieReqParam,
+): Promise<number> {
+  const res = await omiePost<
+    { rcCadastro: OmieReqParam },
+    ReqStatus
+  >(
+    "/produtos/requisicaocompra/",
+    "IncluirReq",
+    creds,
+    { rcCadastro: param },
+  );
+  return res.codReqCompra ?? 0;
+}
+
+// ── excluirReq ────────────────────────────────────────────────────────────────
+
+/**
+ * Exclui uma Requisição de Compra pelo código de integração.
+ * Usa rcChave conforme documentação Omie.
  */
 export async function excluirReq(
   creds: OmieCredentials,
   codIntReqCompra: string,
 ): Promise<void> {
   await omiePost<
-    { requisicaoCadastro: { codIntReqCompra: string } },
+    { rcChave: { codIntReqCompra: string } },
     Record<string, unknown>
   >(
     "/produtos/requisicaocompra/",
     "ExcluirReq",
     creds,
-    { requisicaoCadastro: { codIntReqCompra } },
+    { rcChave: { codIntReqCompra: toOmieId(codIntReqCompra) } },
   );
 }
 
-// ── Tipos: Listagem de Requisições ─────────────────────────────────────────────
+// ── Tipos: listagem ────────────────────────────────────────────────────────────
 
 export interface OmieRequisicaoItemDetalhe {
-  nItem:       number;
-  nCodProd?:   number;   // pode estar vazio se produto não mapeado
-  cDescricao:  string;
-  nQtde:       number;
-  cUnid?:      string;
-  nValUnit?:   number;
-  cObsItem?:   string;
+  codItem?:    number;
+  codIntItem?: string;
+  codProd?:    number;
+  codIntProd?: string;
+  qtde:        number;
+  precoUnit?:  number;
+  obsItem?:    string;
 }
 
 export interface OmieRequisicaoItem {
-  nCodReqCompra:      number;
-  cNumReq?:           string;
-  cCodIntReqCompra?:  string;   // UUID de integração (nosso ID se criamos por aqui)
-  dDtRequisicao?:     string;   // "DD/MM/YYYY"
-  dDtNecessidade?:    string;
-  cSituacao?:         string;   // "Aberta", "Em Cotação", "Aprovada", "Cancelada"
-  cDepartamento?:     string;
-  cSolicitante?:      string;
-  cObs?:              string;
-  det?:               OmieRequisicaoItemDetalhe[];
+  codReqCompra:     number;
+  codIntReqCompra?: string;
+  dtSugestao?:      string;   // "DD/MM/YYYY"
+  obsReqCompra?:    string;
+  cSituacao?:       string;
+  ItensReqCompra?:  OmieRequisicaoItemDetalhe[];
 }
 
-interface ListarReqResponse {
-  pagina:              number;
-  total_de_paginas:    number;
-  registros:           number;
-  total_de_registros:  number;
+interface PesquisarReqResponse {
+  nPagina:             number;
+  nTotPaginas:         number;
+  nRegistros:          number;
+  nTotRegistros:       number;
+  cadastros?:          OmieRequisicaoItem[];
+  // campo alternativo — Omie às vezes retorna com nome diferente
   requisicaoCadastro?: OmieRequisicaoItem[];
 }
 
-interface ListarReqParam {
-  pagina:                number;
-  registros_por_pagina:  number;
-  filtrar_situacao?:     string;
+interface PesquisarReqParam {
+  nPagina:              number;
+  nRegPorPagina:        number;
+  cOrdenarPor?:         string;
+  cOrdemDecrescente?:   string;
+  filtrar_situacao?:    string;
 }
 
+// ── listAllRequisicoes ────────────────────────────────────────────────────────
+
 /**
- * Lista todas as Requisições de Compra do Omie de forma paginada.
- * Retorna apenas as abertas por padrão (filtrar_situacao = "Aberta").
- * Usado pelo syncRequisicoes para pull bidirecional.
+ * Lista todas as Requisições de Compra do Omie (paginado).
+ * Call: PesquisarReq com rcListarRequest.
  */
 export async function listAllRequisicoes(
   creds: OmieCredentials,
-  situacao = "Aberta",
 ): Promise<OmieRequisicaoItem[]> {
   const PER_PAGE = 50;
   const all: OmieRequisicaoItem[] = [];
   let page = 1;
 
   while (true) {
-    let res: ListarReqResponse;
+    let res: PesquisarReqResponse;
     try {
-      res = await omiePost<ListarReqParam, ListarReqResponse>(
+      res = await omiePost<{ rcListarRequest: PesquisarReqParam }, PesquisarReqResponse>(
         "/produtos/requisicaocompra/",
-        "ListarReq",
+        "PesquisarReq",
         creds,
         {
-          pagina:               page,
-          registros_por_pagina: PER_PAGE,
-          filtrar_situacao:     situacao,
+          rcListarRequest: {
+            nPagina:        page,
+            nRegPorPagina:  PER_PAGE,
+          },
         },
       );
     } catch (err) {
@@ -165,10 +183,10 @@ export async function listAllRequisicoes(
       throw err;
     }
 
-    const items = res.requisicaoCadastro ?? [];
+    const items = res.cadastros ?? res.requisicaoCadastro ?? [];
     all.push(...items);
 
-    if (page >= res.total_de_paginas || items.length === 0) break;
+    if (page >= res.nTotPaginas || items.length === 0) break;
     page++;
   }
 
