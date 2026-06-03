@@ -59,65 +59,43 @@ export async function GET(_req: NextRequest) {
   const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
   const hoje = new Date();
   const dtHoje = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
-  const shortId   = testId.replace(/-/g, "").slice(0, 20);
-  const shortItem = ("i" + testId).replace(/-/g, "").slice(0, 20);
+  const shortId    = testId.replace(/-/g, "").slice(0, 20);
+  const shortId2   = ("B" + testId).replace(/-/g, "").slice(0, 20);
+  const shortItem  = ("i" + testId).replace(/-/g, "").slice(0, 20);
+  const shortItem2 = ("j" + testId).replace(/-/g, "").slice(0, 20);
 
-  // Passo 1: buscar categorias de DESPESA ativas (não transferência)
-  // Varremos até 5 páginas procurando conta_despesa=S, conta_inativa=N, transferencia=N
-  let primeiraCateg = "";
-  for (let pg = 1; pg <= 5 && !primeiraCateg; pg++) {
-    const categRes = await omieRaw(key, secret, "/geral/categorias/", "ListarCategorias", {
-      pagina: pg, registros_por_pagina: 50,
-    });
-    if (categRes.httpStatus !== 200) break;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cats = (categRes.body as any)?.categoria_cadastro ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const despesa = cats.find((c: any) =>
-      c.conta_despesa === "S" &&
-      c.conta_inativa === "N" &&
-      c.transferencia === "N" &&
-      c.totalizadora === "N"
-    );
-    if (despesa) {
-      primeiraCateg = despesa.codigo;
-      results.push({ info: `Categoria despesa encontrada na página ${pg}: "${despesa.codigo}" - ${despesa.descricao}` } as object);
-    }
-    if (pg === categRes.body && cats.length < 50) break;
-  }
+  // codCateg confirmado: 2.02.87 = Alimentos
+  const codCateg = "2.02.87";
 
-  if (!primeiraCateg) {
-    results.push({ info: "Nenhuma categoria de despesa ativa encontrada nas primeiras 5 páginas" } as object);
-  }
+  // Teste A: sem wrapper — campos direto no param
+  const criarA = await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+    codCateg,
+    codIntReqCompra: shortId,
+    dtSugestao:      dtHoje,
+    obsReqCompra:    "Teste A sem wrapper",
+    ItensReqCompra:  [{ codIntItem: shortItem, codProd, qtde: 1, precoUnit: 0 }],
+  });
+  results.push({ ...criarA, variante: "A - sem wrapper, codCateg direto" });
 
-  results.push({
-    info: `Primeira categoria disponível: "${primeiraCateg}"`,
-  } as object);
+  // Teste B: rcCadastro wrapper com codCateg DENTRO
+  const criarB = await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+    rcCadastro: {
+      codCateg,
+      codIntReqCompra: shortId2,
+      dtSugestao:      dtHoje,
+      obsReqCompra:    "Teste B rcCadastro com codCateg",
+      ItensReqCompra:  [{ codIntItem: shortItem2, codProd, qtde: 1, precoUnit: 0 }],
+    },
+  });
+  results.push({ ...criarB, variante: "B - rcCadastro com codCateg dentro" });
 
-  if (primeiraCateg) {
-    // Passo 2: criar requisição COM codCateg válido
-    const criarRes = await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-      rcCadastro: {
-        codCateg:        primeiraCateg,
-        codIntReqCompra: shortId,
-        dtSugestao:      dtHoje,
-        obsReqCompra:    "Teste LHG Suprimentos",
-        ItensReqCompra:  [{
-          codIntItem: shortItem,
-          codProd,
-          qtde:       1,
-          precoUnit:  0,
-        }],
-      },
-    });
-    results.push(criarRes);
-
-    // Passo 3: confirmar que criou
-    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
-      codIntReqCompra: shortId,
-      codReqCompra:    0,
-    }));
-  }
+  // Consultar ambos
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+    codIntReqCompra: shortId, codReqCompra: 0,
+  }));
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+    codIntReqCompra: shortId2, codReqCompra: 0,
+  }));
 
   return NextResponse.json({
     unidade: nome,
