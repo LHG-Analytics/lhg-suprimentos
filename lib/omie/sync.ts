@@ -804,8 +804,8 @@ export async function syncRequisicoes(
               unidade_id:           unidadeId,
               omie_codigo:          item.nCodReqCompra,
               numero:               item.cNumReq ?? null,
-              data_requisicao:      item.dDtRequisicao ? parseDateBR(item.dDtRequisicao) : null,
-              data_necessidade:     item.dDtNecessidade ? parseDateBR(item.dDtNecessidade) : null,
+              data_requisicao:      omieDataParaISO(item.dDtRequisicao),
+              data_necessidade:     omieDataParaISO(item.dDtNecessidade),
               observacao:           item.cObs ?? null,
               situacao:             item.cSituacao ?? null,
               departamento:         item.cDepartamento ?? null,
@@ -823,6 +823,8 @@ export async function syncRequisicoes(
           erros++;
           continue;
         }
+
+        novos++; // conta todo registro upsertado com sucesso no espelho
 
         // 2. Se ainda não tem requisicao_id local, criar requisição interna
         if (!espelho?.requisicao_id) {
@@ -904,7 +906,10 @@ export async function syncRequisicoes(
                 }),
               );
 
-              await supabase.from("requisicao_itens").insert(itensMapped);
+              const { error: itensErr } = await supabase.from("requisicao_itens").insert(itensMapped);
+              if (itensErr) {
+                console.error("[sync/req] inserir itens:", itensErr.message);
+              }
 
               const temProdutoNovo = itensMapped.some((i) => i.produto_novo);
               if (temProdutoNovo) {
@@ -915,7 +920,6 @@ export async function syncRequisicoes(
               }
             }
 
-            novos++;
           }
 
           // Vincular espelho à requisição
@@ -955,13 +959,6 @@ export async function syncRequisicoes(
 
   await registrarLog(supabase, unidadeId, { ...result, operacao: "sync" });
   return result;
-}
-
-// ── Helper: parsear data BR (DD/MM/YYYY → ISO) ────────────────────────────────
-
-function parseDateBR(dateBR: string): string {
-  const [d, m, y] = dateBR.split("/");
-  return `${y}-${m}-${d}`;
 }
 
 /**
