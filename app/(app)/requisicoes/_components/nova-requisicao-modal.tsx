@@ -29,11 +29,17 @@ interface Produto  {
   familia_omie: string | null; preco_custo: number | null;
 }
 interface ItemRow {
-  _key:        string;
-  produto_id:  string;
-  produto:     Produto | null;
-  quantidade:  number;
-  observacao:  string;
+  _key:                string;
+  tipo:                "catalogo" | "livre";
+  // catalogo
+  produto_id:          string;
+  produto:             Produto | null;
+  // livre
+  produto_nome_livre:  string;
+  produto_unidade_med: string;
+  // comum
+  quantidade:          number;
+  observacao:          string;
 }
 interface FormState {
   titulo:        string;
@@ -55,7 +61,7 @@ interface Props {
 function nanoId() { return Math.random().toString(36).slice(2, 10); }
 
 function emptyItem(): ItemRow {
-  return { _key: nanoId(), produto_id: "", produto: null, quantidade: 1, observacao: "" };
+  return { _key: nanoId(), tipo: "catalogo", produto_id: "", produto: null, produto_nome_livre: "", produto_unidade_med: "UN", quantidade: 1, observacao: "" };
 }
 
 function formatBRL(v: number | null) {
@@ -286,7 +292,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
   function validateStep2() {
     const e: Record<string, string> = {};
-    const itensValidos = form.itens.filter(i => i.produto_id);
+    const itensValidos = form.itens.filter(i =>
+      i.tipo === "catalogo" ? !!i.produto_id : !!i.produto_nome_livre
+    );
     if (itensValidos.length === 0)
       e.itens = "Adicione ao menos um item";
     const semQtd = itensValidos.find(i => !i.quantidade || i.quantidade <= 0);
@@ -313,7 +321,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
   }
 
   function handleSubmit() {
-    const itensValidos = form.itens.filter(i => i.produto_id);
+    const itensValidos = form.itens.filter(i =>
+      i.tipo === "catalogo" ? !!i.produto_id : !!i.produto_nome_livre
+    );
     startTransition(async () => {
       try {
         const result = await criarRequisicao({
@@ -321,12 +331,11 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
           urgencia:      form.urgencia,
           justificativa: form.justificativa.trim() || undefined,
           unidade_ids:   form.unidade_ids,
-          itens:         itensValidos.map(i => ({
-            tipo:       "catalogo" as const,
-            produto_id: i.produto_id,
-            quantidade: i.quantidade,
-            observacao: i.observacao.trim() || undefined,
-          })),
+          itens: itensValidos.map(i =>
+            i.tipo === "catalogo"
+              ? { tipo: "catalogo" as const, produto_id: i.produto_id, quantidade: i.quantidade, observacao: i.observacao.trim() || undefined }
+              : { tipo: "livre" as const, produto_nome_livre: i.produto_nome_livre, produto_unidade_med: i.produto_unidade_med, quantidade: i.quantidade, observacao: i.observacao.trim() || undefined }
+          ),
         });
         toast.success(`Requisição ${result.numero} criada`, {
           description: `${itensValidos.length} item${itensValidos.length !== 1 ? "s" : ""} adicionado${itensValidos.length !== 1 ? "s" : ""}`,
@@ -338,7 +347,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     });
   }
 
-  const itensValidos  = form.itens.filter(i => i.produto_id);
+  const itensValidos  = form.itens.filter(i =>
+    i.tipo === "catalogo" ? !!i.produto_id : !!i.produto_nome_livre
+  );
   const totalEstimado = estimarTotal(itensValidos);
   const unidadesSel   = unidades.filter(u => form.unidade_ids.includes(u.id));
 
@@ -619,12 +630,60 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
 
                       {/* ── Mobile: layout empilhado ── */}
                       <div className="sm:hidden px-3 py-2 space-y-1.5">
-                        <ProdutoCombobox
-                          value={item.produto}
-                          onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                          produtos={produtos}
-                          familiaFiltro={familiaFiltro}
-                        />
+                        {/* Toggle tipo de item */}
+                        <div className="flex gap-1 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
+                            className={cn(
+                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              item.tipo === "catalogo"
+                                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25"
+                                : "bg-muted text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Catálogo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
+                            className={cn(
+                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              item.tipo === "livre"
+                                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25"
+                                : "bg-muted text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Texto livre
+                          </button>
+                        </div>
+                        {item.tipo === "catalogo" ? (
+                          <ProdutoCombobox
+                            value={item.produto}
+                            onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
+                            produtos={produtos}
+                            familiaFiltro={familiaFiltro}
+                          />
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Descreva o produto não encontrado no catálogo..."
+                              value={item.produto_nome_livre}
+                              onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
+                              className="flex-1 h-9 px-3 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
+                            />
+                            <select
+                              value={item.produto_unidade_med}
+                              onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
+                              className="w-20 h-9 px-2 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500"
+                            >
+                              {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -635,9 +694,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                             className="w-16 rounded border border-border bg-transparent px-2 py-1.5 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <span className="text-[11px] font-mono text-muted-foreground uppercase shrink-0">
-                            {item.produto?.unidade_med ?? "—"}
+                            {item.tipo === "catalogo" ? (item.produto?.unidade_med ?? "—") : item.produto_unidade_med}
                           </span>
-                          {item.produto?.preco_custo ? (
+                          {item.tipo === "catalogo" && item.produto?.preco_custo ? (
                             <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
                               {formatBRL(item.produto.preco_custo)}
                             </span>
@@ -666,75 +725,131 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                       </div>
 
                       {/* ── Desktop: grid original ── */}
-                      <div className="hidden sm:grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5">
-                        {/* Produto */}
-                        <ProdutoCombobox
-                          value={item.produto}
-                          onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                          produtos={produtos}
-                          familiaFiltro={familiaFiltro}
-                        />
-
-                        {/* Quantidade */}
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={item.quantidade}
-                          onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
-                          className={cn(
-                            "w-full rounded border border-transparent bg-transparent",
-                            "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
-                            "focus:outline-none focus:border-border hover:border-border transition-colors",
-                            "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
-                          )}
-                        />
-
-                        {/* Unidade de medida */}
-                        <div className="flex items-center justify-center">
-                          <span className="text-[11px] font-mono text-muted-foreground uppercase">
-                            {item.produto?.unidade_med ?? "—"}
-                          </span>
+                      <div className="hidden sm:block px-3 py-1.5">
+                        {/* Toggle tipo de item */}
+                        <div className="flex gap-1 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
+                            className={cn(
+                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              item.tipo === "catalogo"
+                                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25"
+                                : "bg-muted text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Catálogo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
+                            className={cn(
+                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              item.tipo === "livre"
+                                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25"
+                                : "bg-muted text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Texto livre
+                          </button>
                         </div>
-
-                        {/* Último custo */}
-                        <div className="flex items-center justify-end">
-                          {item.produto?.preco_custo ? (
-                            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                              {formatBRL(item.produto.preco_custo)}
-                            </span>
+                        <div className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2">
+                          {/* Produto */}
+                          {item.tipo === "catalogo" ? (
+                            <ProdutoCombobox
+                              value={item.produto}
+                              onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
+                              produtos={produtos}
+                              familiaFiltro={familiaFiltro}
+                            />
                           ) : (
-                            <span className="text-[11px] text-muted-foreground/30">—</span>
+                            <div className="flex gap-1.5 col-span-3">
+                              <input
+                                type="text"
+                                placeholder="Descreva o produto não encontrado no catálogo..."
+                                value={item.produto_nome_livre}
+                                onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
+                                className="flex-1 h-9 px-3 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
+                              />
+                              <select
+                                value={item.produto_unidade_med}
+                                onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
+                                className="w-20 h-9 px-2 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500"
+                              >
+                                {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                            </div>
                           )}
+
+                          {/* Quantidade */}
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={item.quantidade}
+                            onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
+                            className={cn(
+                              "w-full rounded border border-transparent bg-transparent",
+                              "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
+                              "focus:outline-none focus:border-border hover:border-border transition-colors",
+                              "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
+                              item.tipo === "livre" && "col-start-4",
+                            )}
+                          />
+
+                          {/* Unidade de medida */}
+                          {item.tipo === "catalogo" && (
+                            <div className="flex items-center justify-center">
+                              <span className="text-[11px] font-mono text-muted-foreground uppercase">
+                                {item.produto?.unidade_med ?? "—"}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Último custo */}
+                          {item.tipo === "catalogo" && (
+                            <div className="flex items-center justify-end">
+                              {item.produto?.preco_custo ? (
+                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                  {formatBRL(item.produto.preco_custo)}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground/30">—</span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Observação */}
+                          <input
+                            type="text"
+                            placeholder="(opcional)"
+                            value={item.observacao}
+                            onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
+                            className={cn(
+                              "w-full rounded border border-transparent bg-transparent",
+                              "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
+                              "focus:outline-none focus:border-border hover:border-border transition-colors",
+                              item.tipo === "livre" && "col-start-5",
+                            )}
+                          />
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => form.itens.length > 1 && removeItem(item._key)}
+                            disabled={form.itens.length === 1}
+                            className={cn(
+                              "flex items-center justify-center rounded p-1 transition-colors",
+                              form.itens.length === 1
+                                ? "text-muted-foreground/20 cursor-not-allowed"
+                                : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
+                            )}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
-
-                        {/* Observação */}
-                        <input
-                          type="text"
-                          placeholder="(opcional)"
-                          value={item.observacao}
-                          onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
-                          className={cn(
-                            "w-full rounded border border-transparent bg-transparent",
-                            "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
-                            "focus:outline-none focus:border-border hover:border-border transition-colors",
-                          )}
-                        />
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          onClick={() => form.itens.length > 1 && removeItem(item._key)}
-                          disabled={form.itens.length === 1}
-                          className={cn(
-                            "flex items-center justify-center rounded p-1 transition-colors",
-                            form.itens.length === 1
-                              ? "text-muted-foreground/20 cursor-not-allowed"
-                              : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
-                          )}
-                        >
-                          <Trash2 size={13} />
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -810,7 +925,16 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                               {idx + 1}
                             </span>
                             <div>
-                              <div className="text-sm text-foreground">{item.produto?.nome}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm text-foreground">
+                                  {item.tipo === "catalogo" ? item.produto?.nome : item.produto_nome_livre}
+                                </span>
+                                {item.tipo === "livre" && (
+                                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-1 py-0.5">
+                                    livre
+                                  </span>
+                                )}
+                              </div>
                               {item.observacao && (
                                 <div className="text-[11px] text-muted-foreground">{item.observacao}</div>
                               )}
@@ -818,9 +942,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                           </div>
                           <div className="text-right shrink-0 ml-4">
                             <div className="font-mono text-sm text-foreground">
-                              {item.quantidade} {item.produto?.unidade_med}
+                              {item.quantidade} {item.tipo === "catalogo" ? item.produto?.unidade_med : item.produto_unidade_med}
                             </div>
-                            {item.produto?.preco_custo && (
+                            {item.tipo === "catalogo" && item.produto?.preco_custo && (
                               <div className="text-[10px] text-muted-foreground/70">
                                 est. {formatBRL(item.produto.preco_custo * item.quantidade)}
                               </div>
