@@ -62,13 +62,16 @@ export async function GET(_req: NextRequest) {
   const shortId   = testId.replace(/-/g, "").slice(0, 20);
   const shortItem = ("i" + testId).replace(/-/g, "").slice(0, 20);
 
-  // Passo 1: buscar categorias disponíveis no Omie desta empresa
-  const categRes = await omieRaw(key, secret, "/financas/categorias/", "ListarCategorias", {
-    pagina: 1,
-    registros_por_pagina: 20,
-    filtrar_por_tipo: "D", // Despesa
+  // Passo 1: buscar categorias — testar endpoints alternativos
+  let categRes = await omieRaw(key, secret, "/geral/categorias/", "ListarCategorias", {
+    pagina: 1, registros_por_pagina: 10,
   });
-  results.push({ ...categRes, call: "ListarCategorias" });
+  if (categRes.httpStatus !== 200) {
+    categRes = await omieRaw(key, secret, "/geral/categorias/", "PesquisarCategorias", {
+      pagina: 1, registros_por_pagina: 10,
+    });
+  }
+  results.push({ ...categRes, call: "Categorias" });
 
   // Pegar o código da primeira categoria (se houver)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
