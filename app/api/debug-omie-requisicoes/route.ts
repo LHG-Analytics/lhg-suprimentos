@@ -59,43 +59,49 @@ export async function GET(_req: NextRequest) {
   const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
   const hoje = new Date();
   const dtHoje = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
-  const shortId     = testId.replace(/-/g, "").slice(0, 20);
-  const shortItemId = (testId + "i1").replace(/-/g, "").slice(0, 20);
+  const id1 = testId.replace(/-/g, "").slice(0, 20);   // exato 20 chars
+  const id2 = (testId + "B").replace(/-/g, "").slice(0, 20);
+  const itemId1 = ("item" + testId).replace(/-/g, "").slice(0, 20);
+  const itemId2 = ("ite2" + testId).replace(/-/g, "").slice(0, 20);
 
-  // Teste 1: UpsertReq SEM itens (só header) — verifica se dtSugestao é obrigatório
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
+  // Teste 1: IncluirReq SEM codProd (texto livre) + dtSugestao
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
     rcCadastro: {
-      codIntReqCompra: shortId + "h",
+      codIntReqCompra: id1,
       dtSugestao:      dtHoje,
-      obsReqCompra:    "Teste header sem itens",
+      obsReqCompra:    "Teste LHG sem produto",
+      ItensReqCompra:  [{
+        codIntItem: itemId1,
+        qtde:       1,
+        precoUnit:  0,
+        obsItem:    "Item teste sem produto",
+      }],
     },
   }));
 
-  // Teste 2: UpsertReq COM itens e COM dtSugestao
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
+  // Teste 2: IncluirReq COM codProd + dtSugestao
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
     rcCadastro: {
-      codIntReqCompra: shortId,
+      codIntReqCompra: id2,
       dtSugestao:      dtHoje,
-      obsReqCompra:    "Teste com itens e data",
-      ItensReqCompra:  [{ codIntItem: shortItemId, codProd, qtde: 1, precoUnit: 0 }],
+      obsReqCompra:    "Teste LHG com produto",
+      ItensReqCompra:  [{
+        codIntItem: itemId2,
+        codProd,
+        qtde:       1,
+        precoUnit:  0,
+      }],
     },
   }));
 
-  // Teste 3: ConsultarReq direto (sem wrapper rcChave)
+  // Teste 3: ConsultarReq dos dois IDs criados acima
   results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
-    codIntReqCompra: shortId,
+    codIntReqCompra: id1,
     codReqCompra:    0,
   }));
-
-  // Teste 4: PesquisarReq com campos alternativos
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
-    rcListarRequest: { pagina: 1, registros_por_pagina: 3 },
-  }));
-
-  // Teste 5: PesquisarReq com campos sem wrapper
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "PesquisarReq", {
-    pagina: 1,
-    registros_por_pagina: 3,
+  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+    codIntReqCompra: id2,
+    codReqCompra:    0,
   }));
 
   return NextResponse.json({
