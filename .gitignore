@@ -58,9 +58,11 @@ AGENTS.md
 # Playwright MCP — dados locais de sessão do browser
 .playwright-mcp/
 
-# Design handoff e referências locais
-docs/
+# Design handoff e referências locais (arquivos soltos na raiz)
 prototype/
+docs/*.pdf
+docs/*.fig
+# Specs e planos do superpowers são commitados (docs/superpowers/)
 lhg-suprimentos-kickoff.md
 supabase/.temp/
 
