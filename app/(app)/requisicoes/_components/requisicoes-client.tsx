@@ -25,11 +25,12 @@ interface Requisicao {
   titulo:         string;
   urgencia:       "normal" | "urgente";
   status:         ReqStatus;
+  origem:         string;
   valor_estimado: number | null;
   created_at:     string;
   solicitante:    Solicitante | null;
   requisicao_unidades: RequisicaoUnidade[];
-  requisicao_itens:    { id: string }[];
+  requisicao_itens:    { id: string; produto_novo: boolean }[];
 }
 
 interface Unidade { id: string; nome: string; slug: string; cor_hex: string | null }
@@ -286,6 +287,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                 <li
                   key={r.id}
                   className="cursor-pointer hover:bg-muted/40 transition-colors group"
+                  onClick={() => router.push(`/requisicoes/${r.id}`)}
                 >
                   {/* ── Mobile card ── */}
                   <div className="sm:hidden px-4 py-3 flex items-start justify-between gap-3">
@@ -303,6 +305,11 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", STATUS_STYLES[r.status]?.cls)}>
                           {STATUS_STYLES[r.status]?.label}
                         </span>
+                        {(r as { origem?: string }).origem === "omie" && (
+                          <span className="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded ring-1 ring-amber-500/20">
+                            Omie
+                          </span>
+                        )}
                         <span className="text-[11px] text-muted-foreground">{unidadeLabel}</span>
                         {r.valor_estimado && (
                           <span className="font-mono text-[11px] text-muted-foreground">{formatBRL(r.valor_estimado)}</span>
@@ -327,6 +334,11 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                           <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 shrink-0">
                             <AlertTriangle size={9} />
                             urgente
+                          </span>
+                        )}
+                        {(r as { origem?: string }).origem === "omie" && (
+                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 shrink-0">
+                            Omie
                           </span>
                         )}
                         <span className="text-sm font-medium text-foreground truncate">
@@ -360,6 +372,11 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
                       <span className="font-mono text-[12px] text-muted-foreground">
                         {r.requisicao_itens.length}
                       </span>
+                      {r.requisicao_itens.some(i => i.produto_novo) && (
+                        <span className="ml-1 inline-flex items-center text-[10px] text-amber-400" title="Produtos pendentes de cadastro">
+                          ⚠{r.requisicao_itens.filter(i => i.produto_novo).length}
+                        </span>
+                      )}
                     </div>
 
                     {/* Valor est. */}

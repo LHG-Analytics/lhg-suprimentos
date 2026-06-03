@@ -45,10 +45,10 @@ export default async function RequisicoesPage() {
     supabase
       .from("requisicoes")
       .select(
-        `id, numero, titulo, urgencia, status, valor_estimado, created_at,
+        `id, numero, titulo, urgencia, status, origem, valor_estimado, created_at,
          solicitante:user_profiles!solicitante_id(nome, avatar_url),
          requisicao_unidades(unidade_id, unidades(nome, slug)),
-         requisicao_itens(id)`,
+         requisicao_itens(id, produto_novo)`,
       )
       .order("created_at", { ascending: false }),
 
