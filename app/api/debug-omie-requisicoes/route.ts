@@ -59,50 +59,49 @@ export async function GET(_req: NextRequest) {
   const codProd = prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined;
   const hoje = new Date();
   const dtHoje = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
-  const id1 = testId.replace(/-/g, "").slice(0, 20);   // exato 20 chars
-  const id2 = (testId + "B").replace(/-/g, "").slice(0, 20);
-  const itemId1 = ("item" + testId).replace(/-/g, "").slice(0, 20);
-  const itemId2 = ("ite2" + testId).replace(/-/g, "").slice(0, 20);
+  const shortId   = testId.replace(/-/g, "").slice(0, 20);
+  const shortItem = ("i" + testId).replace(/-/g, "").slice(0, 20);
 
-  // Teste 1: IncluirReq SEM codProd (texto livre) + dtSugestao
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    rcCadastro: {
-      codIntReqCompra: id1,
-      dtSugestao:      dtHoje,
-      obsReqCompra:    "Teste LHG sem produto",
-      ItensReqCompra:  [{
-        codIntItem: itemId1,
-        qtde:       1,
-        precoUnit:  0,
-        obsItem:    "Item teste sem produto",
-      }],
-    },
-  }));
+  // Passo 1: buscar categorias disponíveis no Omie desta empresa
+  const categRes = await omieRaw(key, secret, "/financas/categorias/", "ListarCategorias", {
+    pagina: 1,
+    registros_por_pagina: 20,
+    filtrar_por_tipo: "D", // Despesa
+  });
+  results.push({ ...categRes, call: "ListarCategorias" });
 
-  // Teste 2: IncluirReq COM codProd + dtSugestao
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    rcCadastro: {
-      codIntReqCompra: id2,
-      dtSugestao:      dtHoje,
-      obsReqCompra:    "Teste LHG com produto",
-      ItensReqCompra:  [{
-        codIntItem: itemId2,
-        codProd,
-        qtde:       1,
-        precoUnit:  0,
-      }],
-    },
-  }));
+  // Pegar o código da primeira categoria (se houver)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const primeiraCateg: string = (categRes.body as any)?.categoria_cadastro?.[0]?.codigo ?? "";
 
-  // Teste 3: ConsultarReq dos dois IDs criados acima
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
-    codIntReqCompra: id1,
-    codReqCompra:    0,
-  }));
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
-    codIntReqCompra: id2,
-    codReqCompra:    0,
-  }));
+  results.push({
+    info: `Primeira categoria disponível: "${primeiraCateg}"`,
+  } as object);
+
+  if (primeiraCateg) {
+    // Passo 2: criar requisição COM codCateg válido
+    const criarRes = await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
+      rcCadastro: {
+        codCateg:        primeiraCateg,
+        codIntReqCompra: shortId,
+        dtSugestao:      dtHoje,
+        obsReqCompra:    "Teste LHG Suprimentos",
+        ItensReqCompra:  [{
+          codIntItem: shortItem,
+          codProd,
+          qtde:       1,
+          precoUnit:  0,
+        }],
+      },
+    });
+    results.push(criarRes);
+
+    // Passo 3: confirmar que criou
+    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ConsultarReq", {
+      codIntReqCompra: shortId,
+      codReqCompra:    0,
+    }));
+  }
 
   return NextResponse.json({
     unidade: nome,
