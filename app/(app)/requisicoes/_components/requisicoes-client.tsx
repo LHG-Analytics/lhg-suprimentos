@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { deletarRequisicao } from "../actions";
 import { NovaRequisicaoModal } from "./nova-requisicao-modal";
+import { SyncOmieRequisicoesButton } from "./sync-omie-requisicoes-button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -185,6 +186,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
           <Plus size={14} />
           Nova requisição
         </button>
+        <SyncOmieRequisicoesButton />
       </div>
 
       {/* ── Filtros por status ──────────────────────────────────────────────── */}
