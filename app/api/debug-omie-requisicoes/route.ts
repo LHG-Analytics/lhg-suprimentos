@@ -56,44 +56,45 @@ export async function GET(_req: NextRequest) {
 
   const results: object[] = [];
 
-  // 1. Listar requisições existentes
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "ListarReq", {
-    pagina: 1,
-    registros_por_pagina: 3,
-    filtrar_situacao: "Aberta",
-  }));
+  const hoje = new Date();
+  const dtReq = `${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}/${hoje.getFullYear()}`;
 
-  // 2. Tentar IncluirReq (chamada original)
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "IncluirReq", {
-    requisicaoCadastro: {
-      codIntReqCompra: testId,
-      obsReqCompra:    "Teste debug LHG",
-      ItensReqCompra:  [
-        {
-          codIntItem: `${testId}-item1`,
-          codProd:    prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined,
-          qtde:       1,
-          precoUnit:  0,
-        },
-      ],
-    },
-  }));
+  // Estrutura rcCadastro conforme erro do Omie
+  const rcCadastro = {
+    cCodInt:  testId,
+    dDtReq:   dtReq,
+    cObsReq:  "Teste debug LHG",
+    det: [
+      {
+        nCodProd: prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined,
+        nQtde:    1,
+        nValUnit: 0,
+        cCodInt:  `${testId}-item1`,
+      },
+    ],
+  };
 
-  // 3. Tentar UpsertReq com o mesmo ID
-  results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", "UpsertReq", {
-    requisicaoCadastro: {
-      codIntReqCompra: testId,
-      obsReqCompra:    "Teste debug LHG (upsert)",
-      ItensReqCompra:  [
-        {
-          codIntItem: `${testId}-item1`,
-          codProd:    prodOmie?.omie_codigo ? Number(prodOmie.omie_codigo) : undefined,
-          qtde:       1,
-          precoUnit:  0,
-        },
-      ],
-    },
-  }));
+  // 1. Listar — testar vários nomes de call
+  for (const call of ["ListarRequisicaoCompra", "ListarReqCompra", "PesquisarReqCompra", "ObterReqCompra"]) {
+    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
+      pagina: 1,
+      registros_por_pagina: 3,
+    }));
+  }
+
+  // 2. Criar — testar nomes de call com estrutura rcCadastro
+  for (const call of ["IncluirRequisicaoCompra", "IncluirReqCompra", "IncluirReq"]) {
+    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
+      rcCadastro,
+    }));
+  }
+
+  // 3. Upsert — testar nomes de call
+  for (const call of ["UpsertRequisicaoCompra", "UpsertReqCompra", "UpsertReq"]) {
+    results.push(await omieRaw(key, secret, "/produtos/requisicaocompra/", call, {
+      rcCadastro: { ...rcCadastro, cCodInt: testId + "-up" },
+    }));
+  }
 
   return NextResponse.json({
     unidade: nome,
