@@ -56,21 +56,23 @@ export async function incluirReq(
 
 /**
  * Cria ou atualiza (idempotente) uma Requisição de Compra no Omie.
- * Usar em editarCotacao.
+ * Preferir sobre incluirReq para evitar REDUNDANT em retries.
+ * Retorna nCodReqCompra quando disponível na resposta.
  */
 export async function upsertReq(
   creds: OmieCredentials,
   param: OmieReqParam,
-): Promise<void> {
-  await omiePost<
+): Promise<number> {
+  const res = await omiePost<
     { requisicaoCadastro: OmieReqParam },
-    Record<string, unknown>
+    { nCodReqCompra?: number; cCodIntReqCompra?: string }
   >(
     "/produtos/requisicaocompra/",
     "UpsertReq",
     creds,
     { requisicaoCadastro: param },
   );
+  return res.nCodReqCompra ?? 0;
 }
 
 // ── excluirReq ─────────────────────────────────────────────────────────────────
