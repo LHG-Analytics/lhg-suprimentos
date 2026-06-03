@@ -125,9 +125,13 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
     setDeletingId(req.id);
     startDelete(async () => {
       try {
-        await deletarRequisicao(req.id);
-        toast.success(`Requisição ${req.numero} excluída`);
-        router.refresh();
+        const result = await deletarRequisicao(req.id);
+        if ("erro" in result) {
+          toast.error(result.erro);
+        } else {
+          toast.success(`Requisição ${result.numero} excluída`);
+          router.refresh();
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao excluir");
       } finally {

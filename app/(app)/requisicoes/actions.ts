@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { incluirProduto, alterarProduto } from "@/lib/omie/client";
+import { incluirProduto, alterarProduto, isOmieRedundantError } from "@/lib/omie/client";
 import { incluirReq, upsertReq } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
@@ -147,7 +147,12 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
     } catch (err) {
       const msg = (err as Error).message;
       console.error("[criarRequisicao] Omie sync:", msg);
-      omieAviso = `Criada na plataforma, mas falhou no Omie: ${msg}`;
+      // REDUNDANT = omiePost retry enviou a mesma req duas vezes; Omie já registrou na 1ª tentativa
+      if (isOmieRedundantError(err)) {
+        console.info("[criarRequisicao] Omie REDUNDANT — requisição já registrada, ignorando");
+      } else {
+        omieAviso = `Criada na plataforma, mas falhou no Omie: ${msg}`;
+      }
     }
   }
 
@@ -366,24 +371,37 @@ export async function atualizarProdutoOmie(produtoId: string, data: Partial<Prod
   revalidatePath("/produtos");
 }
 
-// ── deletarRequisicao (mantida sem mudanças) ───────────────────────────────────
+// ── deletarRequisicao ─────────────────────────────────────────────────────────
+// Retorna { erro } em vez de throw para que o cliente mostre a mensagem correta
+// em produção (Server Actions que lançam throw mostram mensagem genérica no Next.js).
 
-export async function deletarRequisicao(id: string) {
+export async function deletarRequisicao(
+  id: string,
+): Promise<{ numero: string } | { erro: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: req } = await supabase.from("requisicoes").select("id, status, numero").eq("id", id).single();
-  if (!req) throw new Error("Requisição não encontrada");
-  if (req.status === "aprovado" || req.status === "aguardando_cotacao") {
-    throw new Error("Não é possível excluir uma requisição já aprovada.");
+  const { data: req } = await supabase
+    .from("requisicoes")
+    .select("id, status, numero")
+    .eq("id", id)
+    .single();
+
+  if (!req) return { erro: "Requisição não encontrada" };
+
+  // Bloqueia exclusão de requisições que já foram aprovadas ou estão em cotação
+  const bloqueado = ["aprovado", "cotacao", "pendente"].includes(req.status as string);
+  if (bloqueado) {
+    return { erro: `Não é possível excluir uma requisição com status "${req.status}". Cancele-a antes.` };
   }
 
   await supabase.from("requisicao_itens").delete().eq("requisicao_id", id);
   await supabase.from("requisicao_unidades").delete().eq("requisicao_id", id);
+
   const { error } = await supabase.from("requisicoes").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return { erro: error.message };
 
   revalidatePath("/requisicoes");
-  return { numero: req.numero };
+  return { numero: req.numero as string };
 }
