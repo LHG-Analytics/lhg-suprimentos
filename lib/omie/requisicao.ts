@@ -92,3 +92,77 @@ export async function excluirReq(
     { requisicaoCadastro: { codIntReqCompra } },
   );
 }
+
+// ── Tipos: Listagem de Requisições ─────────────────────────────────────────────
+
+export interface OmieRequisicaoItemDetalhe {
+  nItem:       number;
+  nCodProd?:   number;   // pode estar vazio se produto não mapeado
+  cDescricao:  string;
+  nQtde:       number;
+  cUnid?:      string;
+  nValUnit?:   number;
+  cObsItem?:   string;
+}
+
+export interface OmieRequisicaoItem {
+  nCodReqCompra:      number;
+  cNumReq?:           string;
+  cCodIntReqCompra?:  string;   // UUID de integração (nosso ID se criamos por aqui)
+  dDtRequisicao?:     string;   // "DD/MM/YYYY"
+  dDtNecessidade?:    string;
+  cSituacao?:         string;   // "Aberta", "Em Cotação", "Aprovada", "Cancelada"
+  cDepartamento?:     string;
+  cSolicitante?:      string;
+  cObs?:              string;
+  det?:               OmieRequisicaoItemDetalhe[];
+}
+
+interface ListarReqResponse {
+  pagina:              number;
+  total_de_paginas:    number;
+  registros:           number;
+  total_de_registros:  number;
+  requisicaoCadastro?: OmieRequisicaoItem[];
+}
+
+interface ListarReqParam {
+  pagina:                number;
+  registros_por_pagina:  number;
+  filtrar_situacao?:     string;
+}
+
+/**
+ * Lista todas as Requisições de Compra do Omie de forma paginada.
+ * Retorna apenas as abertas por padrão (filtrar_situacao = "Aberta").
+ * Usado pelo syncRequisicoes para pull bidirecional.
+ */
+export async function listAllRequisicoes(
+  creds: OmieCredentials,
+  situacao = "Aberta",
+): Promise<OmieRequisicaoItem[]> {
+  const PER_PAGE = 50;
+  const all: OmieRequisicaoItem[] = [];
+  let page = 1;
+
+  while (true) {
+    const res = await omiePost<ListarReqParam, ListarReqResponse>(
+      "/produtos/requisicaocompra/",
+      "ListarReq",
+      creds,
+      {
+        pagina:               page,
+        registros_por_pagina: PER_PAGE,
+        filtrar_situacao:     situacao,
+      },
+    );
+
+    const items = res.requisicaoCadastro ?? [];
+    all.push(...items);
+
+    if (page >= res.total_de_paginas || items.length === 0) break;
+    page++;
+  }
+
+  return all;
+}
