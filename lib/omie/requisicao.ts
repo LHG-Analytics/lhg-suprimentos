@@ -6,7 +6,7 @@
  * codIntReqCompra = cotacao.id (UUID)
  * Fornecedor registrado em obsReqCompra: "Fornecedor: {nome_fantasia}"
  */
-import { omiePost, OmieCredentials } from "./client";
+import { omiePost, OmieCredentials, isOmieEmptyError } from "./client";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -146,16 +146,22 @@ export async function listAllRequisicoes(
   let page = 1;
 
   while (true) {
-    const res = await omiePost<ListarReqParam, ListarReqResponse>(
-      "/produtos/requisicaocompra/",
-      "ListarReq",
-      creds,
-      {
-        pagina:               page,
-        registros_por_pagina: PER_PAGE,
-        filtrar_situacao:     situacao,
-      },
-    );
+    let res: ListarReqResponse;
+    try {
+      res = await omiePost<ListarReqParam, ListarReqResponse>(
+        "/produtos/requisicaocompra/",
+        "ListarReq",
+        creds,
+        {
+          pagina:               page,
+          registros_por_pagina: PER_PAGE,
+          filtrar_situacao:     situacao,
+        },
+      );
+    } catch (err) {
+      if (isOmieEmptyError(err)) break;
+      throw err;
+    }
 
     const items = res.requisicaoCadastro ?? [];
     all.push(...items);
