@@ -62,20 +62,33 @@ export async function GET(_req: NextRequest) {
   const shortId   = testId.replace(/-/g, "").slice(0, 20);
   const shortItem = ("i" + testId).replace(/-/g, "").slice(0, 20);
 
-  // Passo 1: buscar categorias — testar endpoints alternativos
-  let categRes = await omieRaw(key, secret, "/geral/categorias/", "ListarCategorias", {
-    pagina: 1, registros_por_pagina: 10,
-  });
-  if (categRes.httpStatus !== 200) {
-    categRes = await omieRaw(key, secret, "/geral/categorias/", "PesquisarCategorias", {
-      pagina: 1, registros_por_pagina: 10,
+  // Passo 1: buscar categorias de DESPESA ativas (não transferência)
+  // Varremos até 5 páginas procurando conta_despesa=S, conta_inativa=N, transferencia=N
+  let primeiraCateg = "";
+  for (let pg = 1; pg <= 5 && !primeiraCateg; pg++) {
+    const categRes = await omieRaw(key, secret, "/geral/categorias/", "ListarCategorias", {
+      pagina: pg, registros_por_pagina: 50,
     });
+    if (categRes.httpStatus !== 200) break;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cats = (categRes.body as any)?.categoria_cadastro ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const despesa = cats.find((c: any) =>
+      c.conta_despesa === "S" &&
+      c.conta_inativa === "N" &&
+      c.transferencia === "N" &&
+      c.totalizadora === "N"
+    );
+    if (despesa) {
+      primeiraCateg = despesa.codigo;
+      results.push({ info: `Categoria despesa encontrada na página ${pg}: "${despesa.codigo}" - ${despesa.descricao}` } as object);
+    }
+    if (pg === categRes.body && cats.length < 50) break;
   }
-  results.push({ ...categRes, call: "Categorias" });
 
-  // Pegar o código da primeira categoria (se houver)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const primeiraCateg: string = (categRes.body as any)?.categoria_cadastro?.[0]?.codigo ?? "";
+  if (!primeiraCateg) {
+    results.push({ info: "Nenhuma categoria de despesa ativa encontrada nas primeiras 5 páginas" } as object);
+  }
 
   results.push({
     info: `Primeira categoria disponível: "${primeiraCateg}"`,
