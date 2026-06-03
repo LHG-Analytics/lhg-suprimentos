@@ -340,6 +340,9 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
         toast.success(`Requisição ${result.numero} criada`, {
           description: `${itensValidos.length} item${itensValidos.length !== 1 ? "s" : ""} adicionado${itensValidos.length !== 1 ? "s" : ""}`,
         });
+        if (result.omieAviso) {
+          toast.warning("Atenção: Omie", { description: result.omieAviso, duration: 10_000 });
+        }
         handleClose();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao criar requisição");
@@ -706,7 +709,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                             placeholder="obs. (opcional)"
                             value={item.observacao}
                             onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
-                            className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-border hover:border-border transition-colors"
+                            className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border hover:border-border transition-colors"
                           />
                           <button
                             type="button"
@@ -829,7 +832,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                             onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
                             className={cn(
                               "w-full rounded border border-transparent bg-transparent",
-                              "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/40",
+                              "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60",
                               "focus:outline-none focus:border-border hover:border-border transition-colors",
                               item.tipo === "livre" && "col-start-5",
                             )}

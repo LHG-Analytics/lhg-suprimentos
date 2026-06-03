@@ -124,10 +124,13 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
   );
 
   // Enviar ao Omie quando não há produto novo
+  let omieAviso: string | undefined;
   if (!temProdutoNovo) {
     try {
       const creds = await getCredsUnidade(unidade_ids[0]);
-      if (creds) {
+      if (!creds) {
+        omieAviso = "Unidade sem credenciais Omie — requisição criada somente na plataforma";
+      } else {
         const { data: itensReq } = await supabase
           .from("requisicao_itens")
           .select("id, produto_id, quantidade, produtos(omie_codigo)")
@@ -142,12 +145,14 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
         await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
       }
     } catch (err) {
-      console.error("[criarRequisicao] Omie sync:", (err as Error).message);
+      const msg = (err as Error).message;
+      console.error("[criarRequisicao] Omie sync:", msg);
+      omieAviso = `Criada na plataforma, mas falhou no Omie: ${msg}`;
     }
   }
 
   revalidatePath("/requisicoes");
-  return { id: req.id, numero: req.numero as string };
+  return { id: req.id, numero: req.numero as string, omieAviso };
 }
 
 // ── aprovarRequisicao ─────────────────────────────────────────────────────────
