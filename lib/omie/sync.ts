@@ -115,7 +115,7 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
     unidade_med:           item.unidade ?? "un",
     categoria:             categoriaParaFamilia(familiaOmie),
     familia_omie:          familiaOmie,
-    codigo_familia_omie:   item.codigo_familia ?? null,
+    // codigo_familia_omie removido temporariamente — coluna adicionada mas não confirmada no PostgREST
     omie_codigo:           String(item.codigo_produto),
     omie_unidade_id:       unidadeId,
     omie_descricao:        descDetalhada,
