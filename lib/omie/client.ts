@@ -1360,12 +1360,20 @@ export interface OmieFamiliaProduto {
   descricao: string;
 }
 
+interface FamCadastroItem {
+  codigo:      number;   // Código da Família de Produto
+  codInt?:     string;   // Código de Integração
+  codFamilia?: string;   // Código interno da família
+  nomeFamilia: string;   // Nome da Família de Produto
+  inativo?:    string;   // "S" | "N"
+}
+
 interface FamListarResponse {
   pagina:             number;
   total_de_paginas:   number;
   registros:          number;
   total_de_registros: number;
-  famCadastro:        Array<{ nCodFamProd?: number; codigo?: number; cDescFamProd?: string; descricao?: string }>;
+  famCadastro:        FamCadastroItem[];
 }
 
 /**
@@ -1393,9 +1401,10 @@ export async function listFamiliasProduto(
       );
 
       const items: OmieFamiliaProduto[] = (res.famCadastro ?? [])
+        .filter(f => f.inativo !== "S")
         .map(f => ({
-          codigo:    f.nCodFamProd ?? f.codigo ?? 0,
-          descricao: f.cDescFamProd ?? f.descricao ?? "",
+          codigo:    f.codigo,
+          descricao: f.nomeFamilia,
         }))
         .filter(f => f.codigo > 0 && f.descricao.length > 0);
 
