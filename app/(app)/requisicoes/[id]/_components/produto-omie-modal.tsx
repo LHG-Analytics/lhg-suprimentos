@@ -10,20 +10,37 @@ import { toast } from "sonner";
 import { criarProdutoOmie, vincularProdutoItem } from "../../actions";
 
 interface Props {
-  open:             boolean;
-  onClose:          () => void;
-  requisicaoItemId?: string;  // undefined = modo standalone (só cria, não vincula)
-  unidadeId:        string;
-  nomeSugerido:     string;
+  open:              boolean;
+  onClose:           () => void;
+  requisicaoItemId?: string;
+  unidadeId:         string;
+  nomeSugerido:      string;
 }
 
 const UNIDADES = ["UN", "KG", "LT", "CX", "PC", "MT", "GL", "SC", "FR", "PR"];
 
+function Field({ label, required, hint, children }: {
+  label: string; required?: boolean; hint?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        {label} {required && <span className="text-red-400 normal-case">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-muted-foreground/60">{hint}</p>}
+    </div>
+  );
+}
+
+const cls = "w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring";
+
 export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, nomeSugerido }: Props) {
-  const [nome, setNome]       = useState(nomeSugerido);
+  const [nome,    setNome]    = useState(nomeSugerido);
   const [unidade, setUnidade] = useState("UN");
+  const [ncm,     setNcm]     = useState("");
+  const [custo,   setCusto]   = useState("");
   const [familia, setFamilia] = useState("");
-  const [custo, setCusto]     = useState("");
   const [pending, startTransition] = useTransition();
 
   if (!open) return null;
@@ -33,7 +50,7 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
     startTransition(async () => {
       const valorCusto = custo ? Number(custo.replace(",", ".")) : undefined;
       const result = await criarProdutoOmie(unidadeId, {
-        nome, unidade, familia: familia || undefined, valorCusto,
+        nome, unidade, ncm: ncm || undefined, familia: familia || undefined, valorCusto,
       });
 
       if ("erro" in result) {
@@ -63,57 +80,40 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome do produto *</label>
-            <input
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              required
-              className="w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring"
-              placeholder="Ex: Sabonete líquido 5L"
-            />
-          </div>
+          <Field label="Nome do produto" required>
+            <input value={nome} onChange={e => setNome(e.target.value)} required
+              className={cls} placeholder="Ex: Sabonete líquido 5L" />
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Unidade *</label>
-              <select
-                value={unidade}
-                onChange={(e) => setUnidade(e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring"
-              >
+            <Field label="Unidade" required>
+              <select value={unidade} onChange={e => setUnidade(e.target.value)} className={cls}>
                 {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preço de custo</label>
-              <input
-                value={custo}
-                onChange={(e) => setCusto(e.target.value)}
-                type="text"
-                inputMode="decimal"
-                placeholder="0,00"
-                className="w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring"
-              />
-            </div>
+            </Field>
+            <Field label="Preço de custo">
+              <input value={custo} onChange={e => setCusto(e.target.value)}
+                type="text" inputMode="decimal" placeholder="0,00" className={cls} />
+            </Field>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Família Omie (opcional)</label>
-            <input
-              value={familia}
-              onChange={(e) => setFamilia(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring"
-              placeholder="Ex: AMENITIES"
-            />
-          </div>
+          <Field label="NCM" required
+            hint="Código fiscal do produto (ex: 3304.99.00 para amenities, 3402.20.00 para limpeza)">
+            <input value={ncm} onChange={e => setNcm(e.target.value)} required
+              className={cls} placeholder="Ex: 3304.99.00" maxLength={10} />
+          </Field>
+
+          <Field label="Família Omie (opcional)">
+            <input value={familia} onChange={e => setFamilia(e.target.value)}
+              className={cls} placeholder="Ex: AMENITIES" />
+          </Field>
 
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 h-9 rounded-lg border border-border text-muted-foreground hover:text-foreground text-sm transition-colors">
               Cancelar
             </button>
-            <button type="submit" disabled={pending || !nome || !unidade}
+            <button type="submit" disabled={pending || !nome || !unidade || !ncm}
               className="flex-1 h-9 rounded-lg bg-lhg-500 hover:bg-lhg-600 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
               {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               Criar no Omie

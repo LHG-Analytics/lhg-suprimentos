@@ -45,6 +45,7 @@ export type ItemInput = z.infer<typeof ItemSchema>;
 const ProdutoOmieSchema = z.object({
   nome:       z.string().min(2, "Nome obrigatório"),
   unidade:    z.string().min(1, "Unidade obrigatória (ex: UN, KG)"),
+  ncm:        z.string().optional(),  // obrigatório no Omie mas validamos lá
   familia:    z.string().optional(),
   valorCusto: z.number().optional(),
 });
@@ -366,7 +367,7 @@ export async function criarProdutoOmie(
       valor_unitario:    parsed.data.valorCusto ?? 0,
       codigo_integracao: codigoIntegracao,
       codigo_interno:    codigoIntegracao,
-      ncm:               "00000000",  // placeholder — NCM obrigatório no Omie
+      ncm:               parsed.data.ncm || "00000000",
     });
   } catch (err) {
     return { erro: `Falhou no Omie: ${(err as Error).message}` };
