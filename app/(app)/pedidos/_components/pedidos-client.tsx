@@ -126,6 +126,38 @@ const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = 
   omie:          { color: "bg-amber-500/20",     icon: <Sparkles size={11} className="text-amber-400" /> },
 };
 
+// ── Tentar novamente (inline na lista) ────────────────────────────────────────
+
+function TentarNovamenteButton({ pedidoId }: { pedidoId: string }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation(); // não abre o modal
+    start(async () => {
+      const res = await pushPedidoOmie(pedidoId);
+      if ("erro" in res && res.erro) {
+        toast.error(res.erro ?? "Erro ao enviar ao Omie");
+      } else {
+        toast.success("Pedido enviado ao Omie com sucesso");
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={pending}
+      className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50"
+      title="Tentar enviar ao Omie novamente"
+    >
+      <RefreshCw size={11} className={pending ? "animate-spin" : ""} />
+      {pending ? "Enviando…" : "Tentar novamente"}
+    </button>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatBRL(v: number) {
@@ -901,6 +933,11 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
                       {p.cotacoes && !p.pedido_itens.length && (
                         <div className="text-[11px] text-muted-foreground/60 mt-0.5 flex items-center gap-1">
                           <ReceiptText size={9} />Cotação {p.cotacoes.numero}
+                        </div>
+                      )}
+                      {(p.omie_status === "pendente" || p.omie_status === "erro") && (
+                        <div className="mt-1">
+                          <TentarNovamenteButton pedidoId={p.id} />
                         </div>
                       )}
                     </div>
