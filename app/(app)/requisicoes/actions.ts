@@ -10,7 +10,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { incluirProduto, alterarProduto, isOmieRedundantError } from "@/lib/omie/client";
-import { upsertReq, toOmieId } from "@/lib/omie/requisicao";
+import { incluirReq, upsertReq, toOmieId } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
           return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
         });
 
-        const omieCode = await upsertReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
+        const omieCode = await incluirReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
         await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
       }
     } catch (err) {
