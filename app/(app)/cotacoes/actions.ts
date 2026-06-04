@@ -12,6 +12,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { incluirReq, upsertReq, excluirReq, type OmieReqParam } from "@/lib/omie/requisicao";
 import { OmieError } from "@/lib/omie/client";
+import { incluirPedCompra } from "@/lib/omie/pedidos";
 
 // ── Helper: monta payload da Requisição Omie a partir dos dados da cotação ──────
 
@@ -737,4 +738,260 @@ export async function atribuirFornecedorVencedor(
   if (item?.cotacao_id) revalidatePath(`/cotacoes/${item.cotacao_id}`);
 
   return { ok: true };
+}
+
+// ── aprovarCotacao ─────────────────────────────────────────────────────────────
+
+export interface PedidoCriado {
+  id:          string;
+  numero:      string;
+  fornecedor:  string;
+  omieOk:      boolean;
+  omieErro?:   string;
+}
+
+/**
+ * Aprova uma cotação:
+ * 1. Valida que todos os itens têm fornecedor vencedor (selecionado_forn)
+ * 2. Agrupa itens por fornecedor
+ * 3. Para cada grupo: cria pedido + tenta enviar ao Omie
+ * 4. Muda status da cotação para "aprovado"
+ */
+export async function aprovarCotacao(
+  cotacaoId: string,
+): Promise<{ pedidos: PedidoCriado[] } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // 1. Buscar dados completos da cotação
+  const { data: cotacao, error: cotErr } = await supabase
+    .from("cotacoes")
+    .select(`
+      id, numero, titulo, prazo,
+      cotacao_unidades(unidade_id, unidades(omie_app_key, omie_app_secret)),
+      cotacao_itens(
+        id, quantidade, selecionado_forn,
+        produtos(id, nome, omie_codigo, unidade_med),
+        cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)
+      )
+    `)
+    .eq("id", cotacaoId)
+    .single();
+
+  if (cotErr || !cotacao) return { erro: "Cotação não encontrada" };
+
+  // 2. Validar que todos os itens têm fornecedor selecionado
+  type MatrizRaw = { fornecedor_id: string; preco_unitario: number; condicao_pagamento: string | null; prazo_entrega_dias: number | null };
+  type ItemRaw = {
+    id: string;
+    quantidade: number;
+    selecionado_forn: string | null;
+    produtos: { id: string; nome: string; omie_codigo: string | null; unidade_med: string } | null;
+    cotacao_matriz: MatrizRaw[];
+  };
+
+  const itens = cotacao.cotacao_itens as ItemRaw[];
+  const semVencedor = itens.filter(i => !i.selecionado_forn);
+  if (semVencedor.length > 0) {
+    return { erro: `${semVencedor.length} item(ns) sem fornecedor vencedor atribuído` };
+  }
+
+  // 3. Agrupar itens por fornecedor vencedor
+  const grupos = new Map<string, ItemRaw[]>();
+  for (const item of itens) {
+    const fId = item.selecionado_forn!;
+    if (!grupos.has(fId)) grupos.set(fId, []);
+    grupos.get(fId)!.push(item);
+  }
+
+  // 4. Buscar dados dos fornecedores vencedores
+  const fornIds = Array.from(grupos.keys());
+  const { data: fornecedores } = await supabase
+    .from("fornecedores")
+    .select("id, razao_social, nome_fantasia, omie_codigo, email")
+    .in("id", fornIds);
+
+  const fornMap = new Map((fornecedores ?? []).map(f => [f.id, f]));
+
+  // 5. Buscar unidade para credenciais Omie
+  type UnidadeRaw = { unidade_id: string; unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
+  const unidades = cotacao.cotacao_unidades as UnidadeRaw[];
+  const unidade = unidades[0]?.unidades;
+
+  // 6. Gerar número sequencial de pedido
+  const year = new Date().getFullYear();
+  const { data: lastPed } = await supabase
+    .from("pedidos")
+    .select("numero")
+    .like("numero", `PED-${year}-%`)
+    .order("numero", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let nextNum = lastPed ? parseInt(lastPed.numero.split("-")[2] ?? "0", 10) + 1 : 1;
+
+  // 7. Criar pedidos
+  const pedidosCriados: PedidoCriado[] = [];
+
+  for (const [fornId, itensForn] of grupos) {
+    const forn = fornMap.get(fornId);
+    if (!forn) continue;
+
+    const numero = `PED-${year}-${String(nextNum++).padStart(4, "0")}`;
+
+    // Calcular valor total usando preço da matriz para este fornecedor
+    const valorTotal = itensForn.reduce((acc, item) => {
+      const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+      return acc + item.quantidade * (entrada?.preco_unitario ?? 0);
+    }, 0);
+
+    // Condição de pagamento (pega do primeiro item)
+    const primeiraEntrada = itensForn[0].cotacao_matriz.find(m => m.fornecedor_id === fornId);
+    const condicaoPgto = primeiraEntrada?.condicao_pagamento ?? null;
+
+    // Data de previsão
+    const dtPrevisao = cotacao.prazo
+      ? new Date(cotacao.prazo + "T12:00:00").toLocaleDateString("pt-BR")
+      : new Date(Date.now() + 7 * 86_400_000).toLocaleDateString("pt-BR");
+
+    // Inserir pedido
+    const { data: pedido, error: pedErr } = await supabase
+      .from("pedidos")
+      .insert({
+        numero,
+        cotacao_id:    cotacaoId,
+        fornecedor_id: fornId,
+        comprador_id:  user.id,
+        status:        "enviado",
+        omie_status:   "pendente",
+        valor_total:   valorTotal,
+        condicao_pgto: condicaoPgto,
+        entrega_prev:  cotacao.prazo ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (pedErr || !pedido) continue;
+
+    const pedidoId = pedido.id;
+
+    // Inserir itens do pedido (apenas itens que têm produto vinculado)
+    const pedidoItensPayload = itensForn
+      .filter(item => item.produtos?.id)
+      .map(item => {
+        const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+        return {
+          pedido_id:      pedidoId,
+          produto_id:     item.produtos!.id,
+          quantidade:     item.quantidade,
+          preco_unitario: entrada?.preco_unitario ?? 0,
+        };
+      });
+    if (pedidoItensPayload.length > 0) {
+      await supabase.from("pedido_itens").insert(pedidoItensPayload);
+    }
+
+    // Inserir unidades do pedido
+    if (unidades.length > 0) {
+      await supabase.from("pedido_unidades").insert(
+        unidades.map(u => ({ pedido_id: pedidoId, unidade_id: u.unidade_id }))
+      );
+    }
+
+    // Tentar enviar ao Omie
+    let omieOk = false;
+    let omieErro: string | undefined;
+
+    if (unidade?.omie_app_key && unidade?.omie_app_secret && forn.omie_codigo) {
+      try {
+        const creds = { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret };
+        const produtosOmie = itensForn
+          .filter(i => i.produtos?.omie_codigo)
+          .map((item, idx) => {
+            const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+            return {
+              cCodIntItem: `${pedidoId.slice(0, 8)}-${idx + 1}`,
+              nCodProd:    Number(item.produtos!.omie_codigo!),
+              nQtde:       item.quantidade,
+              nValUnit:    entrada?.preco_unitario ?? 0,
+            };
+          });
+
+        if (produtosOmie.length > 0) {
+          const nCodPed = await incluirPedCompra(creds, {
+            cabecalho_incluir: {
+              cCodIntPed:  pedidoId,
+              nCodFor:     Number(forn.omie_codigo),
+              dDtPrevisao: dtPrevisao,
+              cObs:        `Pedido ${numero} gerado pelo LHG Suprimentos`,
+            },
+            produtos_incluir: produtosOmie,
+          });
+
+          await supabase.from("pedidos").update({
+            omie_status: "sincronizado",
+            omie_codigo: String(nCodPed),
+            omie_erro:   null,
+          }).eq("id", pedidoId);
+
+          omieOk = true;
+        }
+      } catch (err) {
+        omieErro = err instanceof Error ? err.message : "Erro ao enviar ao Omie";
+        await supabase.from("pedidos").update({
+          omie_status: "pendente",
+          omie_erro:   omieErro,
+        }).eq("id", pedidoId);
+      }
+    }
+
+    // Registrar evento
+    await supabase.from("pedido_eventos").insert({
+      pedido_id: pedidoId,
+      tipo:      omieOk ? "omie" : "criacao",
+      texto:     omieOk
+        ? `Pedido enviado ao Omie — cotação ${cotacao.numero}`
+        : `Pedido criado localmente (Omie pendente) — cotação ${cotacao.numero}`,
+      autor_id:  user.id,
+    });
+
+    // Tentar enviar email ao fornecedor (silencioso se falhar)
+    if (forn.email) {
+      try {
+        const { Resend } = await import("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY!);
+        await resend.emails.send({
+          from: "LHG Suprimentos <suprimentos@lhgmoteis.com.br>",
+          to:   forn.email,
+          subject: `Pedido de Compra ${numero} — LHG Suprimentos`,
+          html: `
+            <h2>Pedido de Compra ${numero}</h2>
+            <p>Prezado(a) ${forn.nome_fantasia ?? forn.razao_social},</p>
+            <p>Seu fornecimento foi aprovado. Segue o pedido de compra referente à cotação <strong>${cotacao.titulo}</strong>.</p>
+            <p><strong>Valor total:</strong> R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+            <p><strong>Previsão de entrega:</strong> ${dtPrevisao}</p>
+            ${condicaoPgto ? `<p><strong>Condição de pagamento:</strong> ${condicaoPgto}</p>` : ""}
+            <p>Atenciosamente,<br/>LHG Suprimentos</p>
+          `,
+        });
+      } catch { /* silencioso */ }
+    }
+
+    pedidosCriados.push({
+      id:         pedidoId,
+      numero,
+      fornecedor: forn.nome_fantasia ?? forn.razao_social,
+      omieOk,
+      omieErro,
+    });
+  }
+
+  // 8. Atualizar status da cotação
+  await supabase.from("cotacoes").update({ status: "aprovado" }).eq("id", cotacaoId);
+
+  revalidatePath(`/cotacoes/${cotacaoId}`);
+  revalidatePath("/cotacoes");
+  revalidatePath("/pedidos");
+
+  return { pedidos: pedidosCriados };
 }
