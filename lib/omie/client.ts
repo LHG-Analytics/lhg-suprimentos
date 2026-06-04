@@ -191,8 +191,8 @@ export async function omiePost<TParam, TResponse>(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        // Timeout de 30s por request
-        signal: AbortSignal.timeout(30_000),
+        // Timeout de 60s por request (Omie pode ser lento em criar registros)
+        signal: AbortSignal.timeout(60_000),
       });
 
       const json = await res.json();

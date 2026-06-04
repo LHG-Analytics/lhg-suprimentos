@@ -178,8 +178,8 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
       console.error("[criarRequisicao] Omie sync:", msg);
 
       if (isOmieRedundantError(err)) {
-        // REDUNDANT = o retry do omiePost chegou ao Omie, mas a 1ª chamada JÁ havia criado.
-        // A requisição ESTÁ no Omie. Vamos buscar o código via ConsultarReq.
+        // REDUNDANT = o omiePost fez retry e o Omie recusou por duplicata.
+        // Pode significar que a 1ª chamada chegou ao Omie — vamos verificar.
         try {
           const unidadeCreds2 = await getCredsUnidade(unidade_ids[0]);
           if (unidadeCreds2) {
@@ -188,13 +188,16 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
             if (omieCode > 0) {
               await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
               omieOk = true;
-              console.info("[criarRequisicao] REDUNDANT resolvido — codReqCompra:", omieCode);
+              console.info("[criarRequisicao] REDUNDANT — req confirmada no Omie:", omieCode);
+            } else {
+              // ConsultarReq não encontrou nada = req NÃO está no Omie
+              omieAviso = "Omie retornou REDUNDANT mas a requisição não foi encontrada. Aguarde 60s e tente novamente.";
             }
           }
         } catch {
-          // ConsultarReq falhou; requisição está no Omie mas sem código salvo
-          omieOk = true; // Ainda assim, a req está no Omie
-          console.info("[criarRequisicao] REDUNDANT — req no Omie, ConsultarReq falhou");
+          // ConsultarReq lançou exceção = req NÃO está no Omie
+          omieAviso = "Omie retornou REDUNDANT mas a requisição não foi encontrada. Aguarde 60s e tente novamente.";
+          console.error("[criarRequisicao] REDUNDANT sem req no Omie");
         }
       } else {
         omieAviso = `Falhou no Omie: ${msg}`;

@@ -58,11 +58,14 @@ export async function incluirReq(
   creds: OmieCredentials,
   param: OmieReqParam,
 ): Promise<number> {
+  // maxRetries = 1: sem retry para evitar erro REDUNDANT do Omie.
+  // IncluirReq é uma operação de criação — se já foi criada, o retry duplica.
   const res = await omiePost<OmieReqParam, ReqStatus>(
     "/produtos/requisicaocompra/",
     "IncluirReq",
     creds,
     param,
+    1,
   );
   return res.codReqCompra ?? 0;
 }
