@@ -305,7 +305,7 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
                     const fam = familias.find(f => f.descricao === desc);
                     setFamiliaCodigo(fam?.codigo ?? null);
                   }}
-                  className={cls}
+                  className={`${cls} appearance-none pr-8`}
                 >
                   <option value="">Sem família</option>
                   {familias.map(f => (
