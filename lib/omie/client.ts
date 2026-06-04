@@ -1360,10 +1360,12 @@ export interface OmieFamiliaProduto {
   descricao: string;
 }
 
-interface ListarFamiliasResponse {
-  total_de_paginas: number;
+interface FamListarResponse {
+  pagina:             number;
+  total_de_paginas:   number;
+  registros:          number;
   total_de_registros: number;
-  famCadastro: OmieFamiliaProduto[];
+  famCadastro:        Array<{ nCodFamProd?: number; codigo?: number; cDescFamProd?: string; descricao?: string }>;
 }
 
 /**
@@ -1380,11 +1382,9 @@ export async function listFamiliasProduto(
 
   while (true) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await omiePost<
         { famListarRequest: { pagina: number; registros_por_pagina: number } },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        any
+        FamListarResponse
       >(
         "/geral/familiasproduto/",
         "PesquisarFamilias",
@@ -1392,20 +1392,16 @@ export async function listFamiliasProduto(
         { famListarRequest: { pagina: page, registros_por_pagina: PER_PAGE } },
       );
 
-      // Tenta os campos mais prováveis da resposta do Omie
-      const items: OmieFamiliaProduto[] =
-        (res.famCadastro ?? res.cadastros ?? res.famListarResponse ?? []).map(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (f: any) => ({
-            codigo:    f.nCodFamProd ?? f.codigo ?? f.codigo_familia ?? 0,
-            descricao: f.cDescFamProd ?? f.descricao ?? f.nome ?? "",
-          }),
-        ).filter((f: OmieFamiliaProduto) => f.codigo > 0 && f.descricao);
+      const items: OmieFamiliaProduto[] = (res.famCadastro ?? [])
+        .map(f => ({
+          codigo:    f.nCodFamProd ?? f.codigo ?? 0,
+          descricao: f.cDescFamProd ?? f.descricao ?? "",
+        }))
+        .filter(f => f.codigo > 0 && f.descricao.length > 0);
 
       all.push(...items);
 
-      const totalPags = res.total_de_paginas ?? res.nTotPaginas ?? 1;
-      if (page >= totalPags || items.length === 0) break;
+      if (page >= res.total_de_paginas || items.length === 0) break;
       page++;
     } catch (err) {
       if (isOmieEmptyError(err)) break;
