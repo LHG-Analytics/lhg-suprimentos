@@ -72,7 +72,8 @@ export interface OmieClienteParam extends OmiePaginacaoParam {
 }
 
 export interface OmieClienteItem {
-  codigo_cliente: number;
+  codigo_cliente:      number;   // campo principal
+  codigo_cliente_omie?: number;  // campo alternativo em algumas versões da API
   razao_social: string;
   nome_fantasia?: string;
   cnpj_cpf: string;
