@@ -737,7 +737,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
           itens={(cotacao.cotacao_itens as any[]).map((item: any) => ({
             id:               item.id,
             quantidade:       item.quantidade,
-            selecionado_forn: item.selecionado_forn ?? null,
+            selecionado_forn: (selecoes as Record<string, string | null>)[item.id] ?? item.selecionado_forn ?? null,
             produtos:         item.produtos ? { nome: item.produtos.nome } : null,
           }))}
           fornecedores={(cotacao.cotacao_fornecedores as any[])

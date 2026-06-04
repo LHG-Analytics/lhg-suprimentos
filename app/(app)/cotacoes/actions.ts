@@ -707,7 +707,16 @@ export async function aprovarCotacao(
       .select("id")
       .single();
 
-    if (pedErr || !pedido) continue;
+    if (pedErr || !pedido) {
+      pedidosCriados.push({
+        id:         "",
+        numero,
+        fornecedor: forn.nome_fantasia ?? forn.razao_social,
+        omieOk:     false,
+        omieErro:   pedErr?.message ?? "Falha ao criar pedido no banco",
+      });
+      continue;
+    }
 
     const pedidoId = pedido.id;
 
