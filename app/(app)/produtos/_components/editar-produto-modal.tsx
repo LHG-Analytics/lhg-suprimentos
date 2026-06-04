@@ -5,11 +5,11 @@
  * Modal de edição de produto com sync ao Omie (AlterarProduto).
  */
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { X, Loader2, AlertTriangle, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
-import { editarProduto } from "../actions";
+import { editarProduto, listarFamiliasOmieParaProduto, type FamiliaProdutoOmie } from "../actions";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -28,9 +28,8 @@ interface EditarProdutoModalProps {
   onClose: () => void;
 }
 
-// ── Famílias disponíveis no mapa ──────────────────────────────────────────────
-
-const FAMILIAS = Object.keys(FAMILIA_TO_CATEGORIA).sort();
+// FAMILIA_TO_CATEGORIA mantido para calcular categoria localmente
+void FAMILIA_TO_CATEGORIA;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,20 +48,37 @@ function formatBRL(v: number | null): string {
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function EditarProdutoModal({ produto, onClose }: EditarProdutoModalProps) {
-  const [nome,        setNome]        = useState(produto?.nome ?? "");
-  const [precoRaw,    setPrecoRaw]    = useState(formatBRL(produto?.preco_custo ?? null));
-  const [familia,     setFamilia]     = useState(produto?.familia_omie ?? "");
-  const [erro,        setErro]        = useState<string | null>(null);
-  const [isPending,   startTransition] = useTransition();
+  const [nome,           setNome]           = useState(produto?.nome ?? "");
+  const [precoRaw,       setPrecoRaw]       = useState(formatBRL(produto?.preco_custo ?? null));
+  const [familiaDesc,    setFamiliaDesc]    = useState(produto?.familia_omie ?? "");
+  const [familiaCodigo,  setFamiliaCodigo]  = useState<number | undefined>(undefined);
+  const [familias,       setFamilias]       = useState<FamiliaProdutoOmie[]>([]);
+  const [erro,           setErro]           = useState<string | null>(null);
+  const [isPending,      startTransition]   = useTransition();
+
+  // Carrega famílias do Omie ao abrir
+  useEffect(() => {
+    if (!produto?.id || familias.length > 0) return;
+    listarFamiliasOmieParaProduto(produto.id)
+      .then(res => {
+        if ("familias" in res) {
+          setFamilias(res.familias);
+          // Pré-seleciona a família atual pelo nome
+          const atual = res.familias.find(
+            f => f.descricao.toUpperCase() === (produto.familia_omie ?? "").toUpperCase()
+          );
+          if (atual) setFamiliaCodigo(atual.codigo);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produto?.id]);
 
   // Reset quando o produto muda (modal fecha e abre com outro produto)
   const produtoId = produto?.id;
   if (!produto) return null;
 
   const semOmie = !produto.omie_codigo;
-  const categoriaPreview = familia
-    ? (FAMILIA_TO_CATEGORIA[familia.toUpperCase()] ?? "Outros")
-    : produto.categoria;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,13 +88,14 @@ export function EditarProdutoModal({ produto, onClose }: EditarProdutoModalProps
     const preco = parseBRL(precoRaw);
     if (preco <= 0) { setErro("Preço deve ser maior que zero"); return; }
     if (!nome.trim()) { setErro("Nome é obrigatório"); return; }
-    if (!familia)      { setErro("Selecione uma família"); return; }
+    if (!familiaDesc) { setErro("Selecione uma família"); return; }
 
     startTransition(async () => {
       const res = await editarProduto(produtoId!, {
-        nome:         nome.trim(),
-        preco_custo:  preco,
-        familia_omie: familia,
+        nome:           nome.trim(),
+        preco_custo:    preco,
+        familia_omie:   familiaDesc,
+        familia_codigo: familiaCodigo,
       });
       if ("erro" in res) {
         setErro(res.erro);
@@ -176,14 +193,19 @@ export function EditarProdutoModal({ produto, onClose }: EditarProdutoModalProps
             />
           </div>
 
-          {/* Família Omie */}
+          {/* Família Omie — carregada do Omie com codigo_familia */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               Família Omie
             </label>
             <select
-              value={familia}
-              onChange={(e) => setFamilia(e.target.value)}
+              value={familiaDesc}
+              onChange={(e) => {
+                const desc = e.target.value;
+                setFamiliaDesc(desc);
+                const fam = familias.find(f => f.descricao === desc);
+                setFamiliaCodigo(fam?.codigo);
+              }}
               disabled={semOmie || isPending}
               className={cn(
                 "w-full rounded-lg border border-border bg-muted/60 px-3 py-2.5",
@@ -192,17 +214,18 @@ export function EditarProdutoModal({ produto, onClose }: EditarProdutoModalProps
                 "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
             >
-              <option value="">Selecione uma família…</option>
-              {FAMILIAS.map((f) => (
-                <option key={f} value={f}>{f}</option>
+              <option value="">
+                {familias.length === 0 ? "Carregando famílias…" : "Selecione uma família…"}
+              </option>
+              {familias.map((f) => (
+                <option key={f.codigo} value={f.descricao}>
+                  {f.descricao}
+                </option>
               ))}
             </select>
-
-            {/* Preview da categoria */}
-            {familia && (
-              <p className="text-[11px] text-muted-foreground">
-                Categoria de orçamento:{" "}
-                <strong className="text-foreground">{categoriaPreview}</strong>
+            {familiaCodigo && (
+              <p className="text-[11px] text-muted-foreground/60">
+                código Omie: {familiaCodigo}
               </p>
             )}
           </div>

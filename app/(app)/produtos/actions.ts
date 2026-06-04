@@ -8,13 +8,14 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { alterarProduto, incluirProduto } from "@/lib/omie/client";
+import { alterarProduto, incluirProduto, listFamiliasProduto } from "@/lib/omie/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 
 export interface EditarProdutoInput {
-  nome:         string;
-  preco_custo:  number;
-  familia_omie: string;
+  nome:           string;
+  preco_custo:    number;
+  familia_omie:   string;
+  familia_codigo?: number;  // código numérico da família (preferido pelo Omie)
 }
 
 export async function editarProduto(
@@ -57,11 +58,12 @@ export async function editarProduto(
     await alterarProduto(
       { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret },
       {
-        omie_codigo:  produto.omie_codigo,
-        nome:         dados.nome.trim(),
-        preco_custo:  dados.preco_custo,
-        familia_omie: dados.familia_omie.trim(),
-        unidade:      unidadeMed,
+        omie_codigo:    produto.omie_codigo,
+        nome:           dados.nome.trim(),
+        preco_custo:    dados.preco_custo,
+        familia_omie:   dados.familia_omie.trim(),
+        familia_codigo: dados.familia_codigo,
+        unidade:        unidadeMed,
         ncm,
       },
     );
@@ -85,6 +87,41 @@ export async function editarProduto(
 
   revalidatePath("/produtos");
   return { ok: true };
+}
+
+// ── listarFamiliasOmieParaProduto ──────────────────────────────────────────────
+
+export interface FamiliaProdutoOmie { codigo: number; descricao: string; }
+
+/**
+ * Busca famílias de produto do Omie usando as credenciais da unidade do produto.
+ * Usado no modal de edição para popular o select com codigo_familia correto.
+ */
+export async function listarFamiliasOmieParaProduto(
+  produtoId: string,
+): Promise<{ familias: FamiliaProdutoOmie[] } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autorizado" };
+
+  const { data: produto } = await supabase
+    .from("produtos")
+    .select("omie_unidade_id, unidades(omie_app_key, omie_app_secret)")
+    .eq("id", produtoId)
+    .single();
+
+  const unidade = produto?.unidades as { omie_app_key: string; omie_app_secret: string } | null;
+  if (!unidade?.omie_app_key) return { erro: "Unidade sem credenciais Omie" };
+
+  try {
+    const familias = await listFamiliasProduto({
+      appKey:    unidade.omie_app_key.replace(/^﻿/, ""),
+      appSecret: unidade.omie_app_secret.replace(/^﻿/, ""),
+    });
+    return { familias: familias.map(f => ({ codigo: f.codigo, descricao: f.descricao })) };
+  } catch (err) {
+    return { erro: `Falhou no Omie: ${(err as Error).message}` };
+  }
 }
 
 // ── criarProduto ───────────────────────────────────────────────────────────────

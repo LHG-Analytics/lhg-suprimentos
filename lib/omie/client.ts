@@ -1094,13 +1094,14 @@ export async function obterResumoCompras(
 // ── AlterarProduto ─────────────────────────────────────────────────────────────
 
 interface AlterarProdutoParam {
-  codigo_produto:    number;
-  descricao:         string;
+  codigo_produto:     number;
+  descricao:          string;
   /** Obrigatório pela API Omie — sem ele o Omie silencia o erro e não atualiza */
-  unidade:           string;
-  valor_unitario:    number;
-  ncm?:              string;
-  descricao_familia: string;
+  unidade:            string;
+  valor_unitario:     number;
+  ncm?:               string;
+  descricao_familia?: string;
+  codigo_familia?:    number;
 }
 
 interface AlterarProdutoResponse {
@@ -1123,13 +1124,14 @@ interface AlterarProdutoResponse {
 export async function alterarProduto(
   creds: OmieCredentials,
   params: {
-    omie_codigo:  string;
-    nome:         string;
-    preco_custo:  number;
-    familia_omie: string;
+    omie_codigo:   string;
+    nome:          string;
+    preco_custo:   number;
+    familia_omie?: string;    // texto (fallback)
+    familia_codigo?: number;  // código numérico (preferido)
     /** Unidade de medida (ex: "UN", "KG") — obrigatório na API Omie */
-    unidade:      string;
-    ncm?:         string;
+    unidade:       string;
+    ncm?:          string;
   },
 ): Promise<void> {
   const res = await omiePost<AlterarProdutoParam, AlterarProdutoResponse>(
@@ -1137,12 +1139,17 @@ export async function alterarProduto(
     "AlterarProduto",
     creds,
     {
-      codigo_produto:    Number(params.omie_codigo),
-      descricao:         params.nome,
-      unidade:           params.unidade || "UN",
-      valor_unitario:    params.preco_custo,
+      codigo_produto: Number(params.omie_codigo),
+      descricao:      params.nome,
+      unidade:        params.unidade || "UN",
+      valor_unitario: params.preco_custo,
       ...(params.ncm ? { ncm: params.ncm } : {}),
-      descricao_familia: params.familia_omie,
+      // Usa codigo_familia (integer) quando disponível — Omie prefere o código
+      ...(params.familia_codigo
+        ? { codigo_familia: params.familia_codigo }
+        : params.familia_omie
+          ? { descricao_familia: params.familia_omie }
+          : {}),
     },
   );
 
