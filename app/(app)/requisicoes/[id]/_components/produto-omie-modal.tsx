@@ -199,9 +199,16 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
   const [pending, startTransition] = useTransition();
 
   // Busca famílias ao abrir
+  const [familiasErro, setFamiliasErro] = useState("");
+
   useEffect(() => {
     if (open && familias.length === 0) {
-      listarFamiliasOmie(unidadeId).then(setFamilias).catch(() => {});
+      listarFamiliasOmie(unidadeId)
+        .then(data => {
+          setFamilias(data);
+          if (data.length === 0) setFamiliasErro("Nenhuma família encontrada no Omie");
+        })
+        .catch(err => setFamiliasErro(`Erro ao buscar famílias: ${(err as Error).message}`));
     }
   }, [open, familias.length, unidadeId]);
 
@@ -284,6 +291,7 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
                 required className={cls} placeholder="Ex: HIG001" maxLength={20} />
             </Field>
             <Field label="Família Omie">
+              {familiasErro && <p className="text-[11px] text-amber-400 mb-1">{familiasErro}</p>}
               <div className="relative">
                 <select
                   value={familiaDescricao}

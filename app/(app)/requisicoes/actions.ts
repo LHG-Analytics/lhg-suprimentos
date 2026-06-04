@@ -390,12 +390,9 @@ export async function listarFamiliasOmie(unidadeId: string): Promise<FamiliaOmie
   const unidadeCreds = await getCredsUnidade(unidadeId);
   if (!unidadeCreds) return [];
 
-  try {
-    const familias = await listFamiliasProduto(unidadeCreds.creds);
-    return familias.map(f => ({ codigo: f.codigo, descricao: f.descricao }));
-  } catch {
-    return [];
-  }
+  // Lança o erro para o chamador poder exibir a mensagem
+  const familias = await listFamiliasProduto(unidadeCreds.creds);
+  return familias.map(f => ({ codigo: f.codigo, descricao: f.descricao }));
 }
 
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
