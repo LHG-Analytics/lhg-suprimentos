@@ -53,7 +53,12 @@ export type ProdutoOmieInput = z.infer<typeof ProdutoOmieSchema>;
 
 // ── Helper: buscar credenciais Omie da unidade ────────────────────────────────
 
-async function getCredsUnidade(unidadeId: string): Promise<OmieCredentials | null> {
+interface UnidadeCreds {
+  creds:    OmieCredentials;
+  codCateg: string;
+}
+
+async function getCredsUnidade(unidadeId: string): Promise<UnidadeCreds | null> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("unidades")
@@ -65,9 +70,20 @@ async function getCredsUnidade(unidadeId: string): Promise<OmieCredentials | nul
     .maybeSingle();
 
   if (!data) return null;
+
+  // Buscar omie_categoria_compras separado (campo adicionado na migration 0020)
+  const supabase2 = createServiceClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: extra } = await supabase2.from("unidades").select("omie_categoria_compras" as any).eq("id", unidadeId).maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const codCateg = ((extra as any)?.omie_categoria_compras as string | null) ?? "";
+
   return {
-    appKey:    (data.omie_app_key as string).replace(/^﻿/, ""),
-    appSecret: (data.omie_app_secret as string).replace(/^﻿/, ""),
+    creds: {
+      appKey:    (data.omie_app_key as string).replace(/^﻿/, ""),
+      appSecret: (data.omie_app_secret as string).replace(/^﻿/, ""),
+    },
+    codCateg,
   };
 }
 
@@ -127,10 +143,13 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
   let omieAviso: string | undefined;
   if (!temProdutoNovo) {
     try {
-      const creds = await getCredsUnidade(unidade_ids[0]);
-      if (!creds) {
+      const unidadeCreds = await getCredsUnidade(unidade_ids[0]);
+      if (!unidadeCreds) {
         omieAviso = "Unidade sem credenciais Omie — requisição criada somente na plataforma";
+      } else if (!unidadeCreds.codCateg) {
+        omieAviso = "Configure 'omie_categoria_compras' na unidade para enviar ao Omie";
       } else {
+        const { creds, codCateg } = unidadeCreds;
         const { data: itensReq } = await supabase
           .from("requisicao_itens")
           .select("id, produto_id, quantidade, produtos(omie_codigo)")
@@ -141,7 +160,7 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
           return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
         });
 
-        const omieCode = await upsertReq(creds, { codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
+        const omieCode = await upsertReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
         await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
       }
     } catch (err) {
@@ -189,8 +208,9 @@ export async function aprovarRequisicao(requisicaoId: string) {
   if (!req.omie_codigo) {
     try {
       const unidades = req.requisicao_unidades as Array<{ unidade_id: string }>;
-      const creds = await getCredsUnidade(unidades[0]?.unidade_id ?? "");
-      if (creds) {
+      const unidadeCreds = await getCredsUnidade(unidades[0]?.unidade_id ?? "");
+      if (unidadeCreds?.codCateg) {
+        const { creds, codCateg } = unidadeCreds;
         const { data: itensReq } = await supabase
           .from("requisicao_itens")
           .select("id, produto_id, quantidade, produtos(omie_codigo)")
@@ -201,7 +221,7 @@ export async function aprovarRequisicao(requisicaoId: string) {
           return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
         });
 
-        await upsertReq(creds, { codIntReqCompra: toOmieId(requisicaoId), obsReqCompra: req.titulo as string, ItensReqCompra: omieItens });
+        await upsertReq(creds, { codCateg, codIntReqCompra: toOmieId(requisicaoId), obsReqCompra: req.titulo as string, ItensReqCompra: omieItens });
       }
     } catch (err) {
       console.error("[aprovarRequisicao] Omie:", (err as Error).message);
@@ -291,8 +311,9 @@ export async function criarProdutoOmie(unidadeId: string, data: ProdutoOmieInput
   const parsed = ProdutoOmieSchema.safeParse(data);
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
 
-  const creds = await getCredsUnidade(unidadeId);
-  if (!creds) throw new Error("Unidade sem credenciais Omie configuradas");
+  const unidadeCreds = await getCredsUnidade(unidadeId);
+  if (!unidadeCreds) throw new Error("Unidade sem credenciais Omie configuradas");
+  const { creds } = unidadeCreds;
 
   const localId = crypto.randomUUID();
   const codigoIntegracao = `LHG-${localId.slice(0, 8)}`;
@@ -348,8 +369,9 @@ export async function atualizarProdutoOmie(produtoId: string, data: Partial<Prod
     throw new Error("Produto sem código Omie — não pode ser atualizado no Omie");
   }
 
-  const creds = await getCredsUnidade(prod.omie_unidade_id as string);
-  if (!creds) throw new Error("Unidade sem credenciais Omie");
+  const unidadeCreds = await getCredsUnidade(prod.omie_unidade_id as string);
+  if (!unidadeCreds) throw new Error("Unidade sem credenciais Omie");
+  const { creds } = unidadeCreds;
 
   await alterarProduto(creds, {
     omie_codigo:  prod.omie_codigo as string,

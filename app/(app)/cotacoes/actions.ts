@@ -60,6 +60,8 @@ function buildReqOmieParam(cot: CotacaoParaReqOmie): OmieReqParam {
   });
 
   return {
+    // TODO Fase 2: este sync cotação→Omie será removido. codCateg placeholder.
+    codCateg:        "",
     codIntReqCompra: cot.id,
     dtSugestao,
     obsReqCompra: fornName ? `Fornecedor: ${fornName}` : undefined,

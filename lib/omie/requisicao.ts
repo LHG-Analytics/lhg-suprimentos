@@ -3,13 +3,12 @@
  * Operações Omie para Requisição de Compra.
  * Endpoint: /produtos/requisicaocompra/
  *
- * Estrutura confirmada pela documentação Omie:
- *   - Wrapper do param: rcCadastro (não requisicaoCadastro)
- *   - codIntReqCompra: máx 20 chars
- *   - codIntItem: máx 20 chars
- *   - Calls: IncluirReq, UpsertReq, AlterarReq, ExcluirReq, ConsultarReq, PesquisarReq
- *
- * Helper: toOmieId(uuid) → primeiros 20 chars do UUID sem hifens
+ * Estrutura confirmada por testes diretos na API:
+ *   - Os campos vão DIRETAMENTE no param (sem wrapper rcCadastro ou requisicaoCadastro)
+ *   - codCateg é OBRIGATÓRIO
+ *   - codIntReqCompra: máx 20 chars — usar toOmieId()
+ *   - codIntItem: máx 20 chars — usar toOmieId()
+ *   - Calls válidas: IncluirReq, UpsertReq, AlterarReq, ExcluirReq, ConsultarReq, PesquisarReq
  */
 import { omiePost, OmieCredentials, isOmieEmptyError } from "./client";
 
@@ -32,83 +31,73 @@ export interface OmieReqItem {
 }
 
 export interface OmieReqParam {
+  /** Código de categoria do plano de contas — OBRIGATÓRIO. Ex: "2.02.87". */
+  codCateg:         string;
   /** Código de integração da requisição — máx 20 chars. Use toOmieId(uuid). */
   codIntReqCompra:  string;
-  dtSugestao?:      string;   // DD/MM/YYYY
+  dtSugestao?:      string;        // DD/MM/YYYY
   obsReqCompra?:    string;
-  ItensReqCompra:   OmieReqItem[];
+  ItensReqCompra?:  OmieReqItem[];
 }
 
 interface ReqStatus {
   codReqCompra?:    number;
   codIntReqCompra?: string;
-  cStatus?:         string;
-  cDescStatus?:     string;
-}
-
-// ── upsertReq ─────────────────────────────────────────────────────────────────
-
-/**
- * Cria ou atualiza (idempotente) uma Requisição de Compra no Omie.
- * Preferir sempre sobre incluirReq — evita erro REDUNDANT em retries.
- * Retorna codReqCompra gerado pelo Omie.
- */
-export async function upsertReq(
-  creds: OmieCredentials,
-  param: OmieReqParam,
-): Promise<number> {
-  const res = await omiePost<
-    { rcCadastro: OmieReqParam },
-    ReqStatus
-  >(
-    "/produtos/requisicaocompra/",
-    "UpsertReq",
-    creds,
-    { rcCadastro: param },
-  );
-  return res.codReqCompra ?? 0;
+  cCodStatus?:      string;
+  cDesStatus?:      string;
 }
 
 // ── incluirReq ────────────────────────────────────────────────────────────────
 
 /**
  * Cria uma nova Requisição de Compra no Omie.
- * Use upsertReq se puder — é idempotente e mais seguro em retries.
+ * Os campos vão DIRETO no param — sem wrapper.
+ * Retorna codReqCompra gerado pelo Omie.
  */
 export async function incluirReq(
   creds: OmieCredentials,
   param: OmieReqParam,
 ): Promise<number> {
-  const res = await omiePost<
-    { rcCadastro: OmieReqParam },
-    ReqStatus
-  >(
+  const res = await omiePost<OmieReqParam, ReqStatus>(
     "/produtos/requisicaocompra/",
     "IncluirReq",
     creds,
-    { rcCadastro: param },
+    param,
+  );
+  return res.codReqCompra ?? 0;
+}
+
+// ── upsertReq ─────────────────────────────────────────────────────────────────
+
+/**
+ * Cria ou atualiza (idempotente) uma Requisição de Compra no Omie.
+ * Os campos vão DIRETO no param — sem wrapper.
+ * Retorna codReqCompra.
+ */
+export async function upsertReq(
+  creds: OmieCredentials,
+  param: OmieReqParam,
+): Promise<number> {
+  const res = await omiePost<OmieReqParam, ReqStatus>(
+    "/produtos/requisicaocompra/",
+    "UpsertReq",
+    creds,
+    param,
   );
   return res.codReqCompra ?? 0;
 }
 
 // ── excluirReq ────────────────────────────────────────────────────────────────
 
-/**
- * Exclui uma Requisição de Compra pelo código de integração.
- * Usa rcChave conforme documentação Omie.
- */
 export async function excluirReq(
   creds: OmieCredentials,
   codIntReqCompra: string,
 ): Promise<void> {
-  await omiePost<
-    { rcChave: { codIntReqCompra: string } },
-    Record<string, unknown>
-  >(
+  await omiePost<{ codIntReqCompra: string; codReqCompra: number }, Record<string, unknown>>(
     "/produtos/requisicaocompra/",
     "ExcluirReq",
     creds,
-    { rcChave: { codIntReqCompra: toOmieId(codIntReqCompra) } },
+    { codIntReqCompra: toOmieId(codIntReqCompra), codReqCompra: 0 },
   );
 }
 
@@ -127,28 +116,19 @@ export interface OmieRequisicaoItemDetalhe {
 export interface OmieRequisicaoItem {
   codReqCompra:     number;
   codIntReqCompra?: string;
-  dtSugestao?:      string;   // "DD/MM/YYYY"
+  codCateg?:        string;
+  dtSugestao?:      string;
   obsReqCompra?:    string;
   cSituacao?:       string;
   ItensReqCompra?:  OmieRequisicaoItemDetalhe[];
 }
 
 interface PesquisarReqResponse {
-  nPagina:             number;
-  nTotPaginas:         number;
-  nRegistros:          number;
-  nTotRegistros:       number;
-  cadastros?:          OmieRequisicaoItem[];
-  // campo alternativo — Omie às vezes retorna com nome diferente
-  requisicaoCadastro?: OmieRequisicaoItem[];
-}
-
-interface PesquisarReqParam {
-  nPagina:              number;
-  nRegPorPagina:        number;
-  cOrdenarPor?:         string;
-  cOrdemDecrescente?:   string;
-  filtrar_situacao?:    string;
+  pagina:             number;
+  total_de_paginas:   number;
+  registros:          number;
+  total_de_registros: number;
+  cadastros?:         OmieRequisicaoItem[];
 }
 
 // ── listAllRequisicoes ────────────────────────────────────────────────────────
@@ -167,26 +147,21 @@ export async function listAllRequisicoes(
   while (true) {
     let res: PesquisarReqResponse;
     try {
-      res = await omiePost<{ rcListarRequest: PesquisarReqParam }, PesquisarReqResponse>(
+      res = await omiePost<{ rcListarRequest: { pagina: number; registros_por_pagina: number } }, PesquisarReqResponse>(
         "/produtos/requisicaocompra/",
         "PesquisarReq",
         creds,
-        {
-          rcListarRequest: {
-            nPagina:        page,
-            nRegPorPagina:  PER_PAGE,
-          },
-        },
+        { rcListarRequest: { pagina: page, registros_por_pagina: PER_PAGE } },
       );
     } catch (err) {
       if (isOmieEmptyError(err)) break;
       throw err;
     }
 
-    const items = res.cadastros ?? res.requisicaoCadastro ?? [];
+    const items = res.cadastros ?? [];
     all.push(...items);
 
-    if (page >= res.nTotPaginas || items.length === 0) break;
+    if (page >= res.total_de_paginas || items.length === 0) break;
     page++;
   }
 
