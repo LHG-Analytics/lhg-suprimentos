@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { criarRequisicao } from "../actions";
+import { criarRequisicao, listarCategoriasOmie, type CategoriaOmie } from "../actions";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ interface FormState {
   justificativa: string;
   unidade_ids:   string[];
   itens:         ItemRow[];
+  codCateg:      string;   // código de categoria Omie
 }
 
 interface Props {
@@ -263,7 +264,24 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     justificativa: "",
     unidade_ids:   unidades.length === 1 ? [unidades[0].id] : [],
     itens:         [emptyItem()],
+    codCateg:      "",
   });
+
+  const [categorias,      setCategorias]      = useState<CategoriaOmie[]>([]);
+  const [categQuery,      setCategQuery]      = useState("");
+  const [categCarregando, setCategCarregando] = useState(false);
+
+  // Carrega categorias Omie quando a primeira unidade é selecionada
+  useEffect(() => {
+    const unidadeId = form.unidade_ids[0];
+    if (!unidadeId || categorias.length > 0) return;
+    setCategCarregando(true);
+    listarCategoriasOmie(unidadeId)
+      .then(res => { if ("categorias" in res) setCategorias(res.categorias); })
+      .catch(() => {})
+      .finally(() => setCategCarregando(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.unidade_ids[0]]);
 
   function reset() {
     setStep(1);
@@ -275,7 +293,10 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
       justificativa: "",
       unidade_ids:   unidades.length === 1 ? [unidades[0].id] : [],
       itens:         [emptyItem()],
+      codCateg:      "",
     });
+    setCategorias([]);
+    setCategQuery("");
   }
 
   function handleClose() { reset(); onClose(); }
@@ -331,6 +352,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
           urgencia:      form.urgencia,
           justificativa: form.justificativa.trim() || undefined,
           unidade_ids:   form.unidade_ids,
+          codCateg:      form.codCateg || undefined,
           itens: itensValidos.map(i =>
             i.tipo === "catalogo"
               ? { tipo: "catalogo" as const, produto_id: i.produto_id, quantidade: i.quantidade, observacao: i.observacao.trim() || undefined }
@@ -553,6 +575,60 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Categoria Omie */}
+                <div>
+                  <label className="block text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-1.5 font-medium">
+                    Categoria Omie <span className="normal-case text-muted-foreground/60">(para onde vai o custo)</span>
+                  </label>
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder={categCarregando ? "Carregando categorias…" : "Buscar ou selecionar categoria (ex: Alimentos)"}
+                      value={categQuery || (form.codCateg ? `${form.codCateg} — ${categorias.find(c => c.codigo === form.codCateg)?.descricao ?? ""}` : "")}
+                      onChange={e => { setCategQuery(e.target.value); setForm(f => ({ ...f, codCateg: "" })); }}
+                      disabled={categCarregando}
+                      className={cn(
+                        "w-full rounded-lg border border-border bg-background pl-8 pr-4 py-2.5",
+                        "text-sm text-foreground placeholder:text-muted-foreground/50",
+                        "focus:outline-none focus:ring-1 focus:ring-ring transition-colors",
+                      )}
+                    />
+                    {categCarregando && <Loader2 size={12} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                    {/* Dropdown de categorias filtradas */}
+                    {categQuery && !form.codCateg && categorias.length > 0 && (() => {
+                      const ql = categQuery.toLowerCase();
+                      const filtradas = categorias.filter(c =>
+                        c.descricao.toLowerCase().includes(ql) || c.codigo.includes(categQuery)
+                      ).slice(0, 8);
+                      if (!filtradas.length) return null;
+                      return (
+                        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                          {filtradas.map(c => (
+                            <button
+                              key={c.codigo}
+                              type="button"
+                              onClick={() => {
+                                setForm(f => ({ ...f, codCateg: c.codigo }));
+                                setCategQuery("");
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors border-b border-border/40 last:border-0"
+                            >
+                              <span className="text-xs font-mono text-lhg-400">{c.codigo}</span>
+                              <span className="text-xs text-foreground/80 ml-2">{c.descricao}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  {form.codCateg && (
+                    <p className="text-[11px] text-emerald-400 mt-1">
+                      ✓ {form.codCateg} — {categorias.find(c => c.codigo === form.codCateg)?.descricao}
+                    </p>
+                  )}
                 </div>
 
                 {/* Justificativa */}

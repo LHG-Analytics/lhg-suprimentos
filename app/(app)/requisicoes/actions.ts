@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { incluirProduto, alterarProduto, isOmieRedundantError, listFamiliasProduto } from "@/lib/omie/client";
+import { incluirProduto, alterarProduto, isOmieRedundantError, listFamiliasProduto, omiePost } from "@/lib/omie/client";
 import { incluirReq, upsertReq, consultarReq, toOmieId } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
@@ -37,6 +37,7 @@ const NovaRequisicaoSchema = z.object({
   justificativa: z.string().optional(),
   unidade_ids:   z.array(z.string().uuid()).min(1, "Selecione ao menos uma unidade"),
   itens:         z.array(ItemSchema).min(1, "Adicione ao menos um item"),
+  codCateg:      z.string().optional(), // código de categoria Omie escolhido pelo usuário
 });
 
 export type NovaRequisicaoInput = z.infer<typeof NovaRequisicaoSchema>;
@@ -151,10 +152,13 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
       const unidadeCreds = await getCredsUnidade(unidade_ids[0]);
       if (!unidadeCreds) {
         omieAviso = "Unidade sem credenciais Omie — requisição criada somente na plataforma";
-      } else if (!unidadeCreds.codCateg) {
-        omieAviso = "Configure omie_categoria_compras na unidade para enviar ao Omie";
       } else {
-        const { creds, codCateg } = unidadeCreds;
+        const { creds } = unidadeCreds;
+        // Categoria: escolhida pelo usuário no form → senão usa o padrão da unidade
+        const codCateg = parsed.data.codCateg || unidadeCreds.codCateg;
+        if (!codCateg) {
+          omieAviso = "Configure omie_categoria_compras na unidade (ou selecione no formulário)";
+        } else {
         const { data: itensReq } = await supabase
           .from("requisicao_itens")
           .select("id, produto_id, quantidade, produtos(omie_codigo)")
@@ -183,7 +187,8 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
           // Omie retornou 0 — sem erro mas sem criar
           omieAviso = `Omie não criou a requisição (codReqCompra=0). codCateg=${codCateg}`;
         }
-      }
+        } // fecha else do codCateg
+      } // fecha else do unidadeCreds
     } catch (err) {
       const msg = (err as Error).message;
       console.error("[criarRequisicao] Omie sync:", msg);
@@ -379,6 +384,63 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
 }
 
 // ── listarFamiliasOmie ────────────────────────────────────────────────────────
+
+// ── listarCategoriasOmie ──────────────────────────────────────────────────────
+
+export interface CategoriaOmie { codigo: string; descricao: string; }
+
+export async function listarCategoriasOmie(
+  unidadeId: string,
+): Promise<{ categorias: CategoriaOmie[] } | { erro: string }> {
+  const unidadeCreds = await getCredsUnidade(unidadeId);
+  if (!unidadeCreds) return { erro: "Unidade sem credenciais Omie" };
+
+  try {
+    const PER_PAGE = 50;
+    const todas: CategoriaOmie[] = [];
+    let page = 1;
+
+    while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await omiePost(
+        "/geral/categorias/",
+        "ListarCategorias",
+        unidadeCreds.creds,
+        { pagina: page, registros_por_pagina: PER_PAGE, descricao: "" },
+      );
+
+      const cats = (res.categoria_cadastro ?? []) as Array<{
+        codigo: string;
+        descricao: string;
+        conta_despesa: string;
+        conta_inativa: string;
+        nao_exibir: string;
+        totalizadora: string;
+      }>;
+
+      // Apenas despesas ativas, não-totalizadoras e visíveis
+      const filtradas = cats.filter(c =>
+        c.conta_despesa === "S" &&
+        c.conta_inativa === "N" &&
+        c.nao_exibir    !== "S" &&
+        c.totalizadora  !== "S"
+      );
+
+      todas.push(...filtradas.map(c => ({ codigo: c.codigo, descricao: c.descricao })));
+
+      const totalPags = res.total_de_paginas ?? 1;
+      if (page >= totalPags || cats.length === 0) break;
+      page++;
+    }
+
+    // Ordenar por código para hierarquia natural
+    todas.sort((a, b) => a.codigo.localeCompare(b.codigo));
+    return { categorias: todas };
+  } catch (err) {
+    console.error("[listarCategoriasOmie]", (err as Error).message);
+    return { erro: `Falhou no Omie: ${(err as Error).message}` };
+  }
+}
 
 export interface FamiliaOmie { descricao: string; codigo: number; }
 
