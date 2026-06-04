@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { selecionarFornecedorItem, enviarEmailCotacao } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
+import { AprovarCompraPanel } from "./aprovar-compra-panel";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -726,6 +727,23 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── Painel de aprovação — aparece quando cotação está em status editável ── */}
+      {(cotacao.status === "cotacao" || cotacao.status === "pendente" || cotacao.status === "rascunho") && (
+        <AprovarCompraPanel
+          cotacaoId={cotacao.id}
+          cotacaoStatus={cotacao.status as string}
+          itens={(cotacao.cotacao_itens as any[]).map((item: any) => ({
+            id:               item.id,
+            quantidade:       item.quantidade,
+            selecionado_forn: item.selecionado_forn ?? null,
+            produtos:         item.produtos ? { nome: item.produtos.nome } : null,
+          }))}
+          fornecedores={(cotacao.cotacao_fornecedores as any[])
+            .map((cf: any) => cf.fornecedores)
+            .filter(Boolean)}
+        />
       )}
 
       {/* ── Wizard Gerar Pedidos ─────────────────────────────────────────────── */}
