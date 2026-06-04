@@ -43,13 +43,14 @@ export type NovaRequisicaoInput = z.infer<typeof NovaRequisicaoSchema>;
 export type ItemInput = z.infer<typeof ItemSchema>;
 
 const ProdutoOmieSchema = z.object({
-  nome:             z.string().min(2, "Nome obrigatório"),
-  unidade:          z.string().min(1, "Unidade obrigatória"),
-  ncm:              z.string().optional(),
-  familia:          z.string().optional(),
-  valorCusto:       z.number().optional(),
-  codigoProduto:    z.string().min(1, "Código do produto obrigatório"),
-  codigoIntegracao: z.string().optional(),
+  nome:              z.string().min(2, "Nome obrigatório"),
+  unidade:           z.string().min(1, "Unidade obrigatória"),
+  ncm:               z.string().optional(),
+  familiaDescricao:  z.string().optional(),
+  familiaCodigo:     z.number().optional(),
+  valorCusto:        z.number().optional(),
+  codigoProduto:     z.string().min(1, "Código do produto obrigatório"),
+  codigoIntegracao:  z.string().optional(),
 });
 
 export type ProdutoOmieInput = z.infer<typeof ProdutoOmieSchema>;
@@ -379,16 +380,27 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
 
 // ── listarFamiliasOmie ────────────────────────────────────────────────────────
 
-/** Retorna a lista de famílias Omie distintas já sincronizadas no catálogo. */
-export async function listarFamiliasOmie(): Promise<string[]> {
+export interface FamiliaOmie { descricao: string; codigo: number | null; }
+
+/** Retorna famílias Omie distintas do catálogo com código numérico. */
+export async function listarFamiliasOmie(): Promise<FamiliaOmie[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
     .from("produtos")
-    .select("familia_omie")
+    .select("familia_omie, codigo_familia_omie")
     .not("familia_omie", "is", null)
     .order("familia_omie");
-  const unique = [...new Set((data ?? []).map(p => p.familia_omie as string).filter(Boolean))];
-  return unique;
+
+  const seen = new Set<string>();
+  const result: FamiliaOmie[] = [];
+  for (const p of (data ?? [])) {
+    const desc = p.familia_omie as string | null;
+    if (!desc || seen.has(desc)) continue;
+    seen.add(desc);
+    result.push({ descricao: desc, codigo: (p.codigo_familia_omie as number | null) ?? null });
+  }
+  return result;
 }
 
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
@@ -431,7 +443,8 @@ export async function criarProdutoOmie(
     codigoProduto = await incluirProduto(creds, {
       nome:              parsed.data.nome,
       unidade:           parsed.data.unidade,
-      familia_omie:      parsed.data.familia,
+      familia_omie:      parsed.data.familiaDescricao,
+      familia_codigo:    parsed.data.familiaCodigo,
       valor_unitario:    parsed.data.valorCusto ?? 0,
       codigo_integracao: codigoIntegracao,
       codigo_interno:    parsed.data.codigoProduto,
@@ -492,7 +505,7 @@ export async function atualizarProdutoOmie(produtoId: string, data: Partial<Prod
     omie_codigo:  prod.omie_codigo as string,
     nome:         data.nome        ?? (prod.nome as string),
     preco_custo:  data.valorCusto  ?? ((prod.preco_custo as number | null) ?? 0),
-    familia_omie: data.familia     ?? ((prod.familia_omie as string | null) ?? ""),
+    familia_omie: data.familiaDescricao ?? ((prod.familia_omie as string | null) ?? ""),
     unidade:      data.unidade     ?? (prod.unidade_med as string),
   });
 

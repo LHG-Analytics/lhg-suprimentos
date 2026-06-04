@@ -1297,7 +1297,8 @@ interface ProdutoParam {
   descricao:                 string;
   unidade:                   string;
   valor_unitario:            number;
-  descricao_familia?:        string;
+  codigo_familia?:           number;   // ID numérico da família (preferido)
+  descricao_familia?:        string;   // fallback se não tiver codigo_familia
   codigo?:                   string;
   ncm?:                      string;   // opcional — não enviar se vazio
 }
@@ -1308,13 +1309,14 @@ interface ProdutoResponse {
 }
 
 export interface IncluirProdutoParams {
-  nome:              string;
-  unidade:           string;
-  ncm?:              string;
-  valor_unitario:    number;
-  familia_omie?:     string;
-  codigo_interno?:   string;
-  codigo_integracao: string;  // LHG-{uuid.slice(0,8)}
+  nome:               string;
+  unidade:            string;
+  ncm?:               string;
+  valor_unitario:     number;
+  familia_omie?:      string;   // fallback texto
+  familia_codigo?:    number;   // preferido: código numérico
+  codigo_interno?:    string;
+  codigo_integracao:  string;
 }
 
 /**
@@ -1334,7 +1336,9 @@ export async function incluirProduto(
     descricao:                 params.nome,
     unidade:                   params.unidade,
     valor_unitario:            params.valor_unitario,
-    descricao_familia:         params.familia_omie || undefined,
+    // Usa código numérico quando disponível (mais confiável); senão usa texto
+    ...(params.familia_codigo  ? { codigo_familia: params.familia_codigo } : {}),
+    ...(params.familia_omie && !params.familia_codigo ? { descricao_familia: params.familia_omie } : {}),
     codigo:                    params.codigo_interno || undefined,
     ...(ncm ? { ncm } : {}),
   };

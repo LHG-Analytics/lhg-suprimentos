@@ -12,7 +12,7 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import { X, Loader2, Check, Search, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { criarProdutoOmie, vincularProdutoItem, listarFamiliasOmie } from "../../actions";
+import { criarProdutoOmie, vincularProdutoItem, listarFamiliasOmie, type FamiliaOmie } from "../../actions";
 
 interface Props {
   open:              boolean;
@@ -191,10 +191,11 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
   const [ncmCodigo,        setNcmCodigo]        = useState("");
   const [ncmDescricao,     setNcmDescricao]     = useState("");
   const [custo,            setCusto]            = useState("");
-  const [familia,          setFamilia]          = useState("");
+  const [familiaDescricao, setFamiliaDescricao] = useState("");
+  const [familiaCodigo,    setFamiliaCodigo]    = useState<number | null>(null);
   const [codigoProduto,    setCodigoProduto]    = useState("");
   const [codigoIntegracao, setCodigoIntegracao] = useState("");
-  const [familias,         setFamilias]         = useState<string[]>([]);
+  const [familias,         setFamilias]         = useState<FamiliaOmie[]>([]);
   const [pending, startTransition] = useTransition();
 
   // Busca famílias ao abrir
@@ -226,11 +227,12 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
       const result = await criarProdutoOmie(unidadeId, {
         nome,
         unidade,
-        ncm:             ncmCode,
-        familia:         familia || undefined,
+        ncm:               ncmCode,
+        familiaDescricao:  familiaDescricao || undefined,
+        familiaCodigo:     familiaCodigo ?? undefined,
         valorCusto,
         codigoProduto,
-        codigoIntegracao: codigoIntegracao || undefined,
+        codigoIntegracao:  codigoIntegracao || undefined,
       });
 
       if ("erro" in result) { toast.error(result.erro); return; }
@@ -283,9 +285,22 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
             </Field>
             <Field label="Família Omie">
               <div className="relative">
-                <select value={familia} onChange={e => setFamilia(e.target.value)} className={cls}>
+                <select
+                  value={familiaDescricao}
+                  onChange={e => {
+                    const desc = e.target.value;
+                    setFamiliaDescricao(desc);
+                    const fam = familias.find(f => f.descricao === desc);
+                    setFamiliaCodigo(fam?.codigo ?? null);
+                  }}
+                  className={cls}
+                >
                   <option value="">Sem família</option>
-                  {familias.map(f => <option key={f} value={f}>{f}</option>)}
+                  {familias.map(f => (
+                    <option key={f.descricao} value={f.descricao}>
+                      {f.descricao}{f.codigo ? ` (${f.codigo})` : ""}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
               </div>

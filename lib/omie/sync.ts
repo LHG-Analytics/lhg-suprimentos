@@ -110,21 +110,22 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
   const descDetalhada = item.descr_detalhada ?? item.descricao_detalhada ?? null;
 
   return {
-    nome:                 item.descricao,
-    codigo:               item.codigo ?? `OMIE-${item.codigo_produto}`,
-    unidade_med:          item.unidade ?? "un",
-    categoria:            categoriaParaFamilia(familiaOmie),
-    familia_omie:         familiaOmie,
-    omie_codigo:          String(item.codigo_produto),
-    omie_unidade_id:      unidadeId,
-    omie_descricao:       descDetalhada,
-    ncm:                  item.ncm ?? null,
-    ean:                  item.ean ?? null,
+    nome:                  item.descricao,
+    codigo:                item.codigo ?? `OMIE-${item.codigo_produto}`,
+    unidade_med:           item.unidade ?? "un",
+    categoria:             categoriaParaFamilia(familiaOmie),
+    familia_omie:          familiaOmie,
+    codigo_familia_omie:   item.codigo_familia ?? null,
+    omie_codigo:           String(item.codigo_produto),
+    omie_unidade_id:       unidadeId,
+    omie_descricao:        descDetalhada,
+    ncm:                   item.ncm ?? null,
+    ean:                   item.ean ?? null,
     // Omie retorna valor_custo = preço de aquisição; valor_unitario = preço de venda.
     // Prioriza custo real; cai em valor_unitario apenas se custo não vier na resposta.
-    preco_custo:          item.valor_custo ?? item.valor_unitario ?? null,
-    omie_sincronizado_em: new Date().toISOString(),
-    ativo:                item.inativo !== "S",
+    preco_custo:           item.valor_custo ?? item.valor_unitario ?? null,
+    omie_sincronizado_em:  new Date().toISOString(),
+    ativo:                 item.inativo !== "S",
   };
 }
 
