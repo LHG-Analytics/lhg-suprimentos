@@ -161,8 +161,15 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
           return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
         });
 
-        console.info("[criarRequisicao] Enviando ao Omie — codCateg:", codCateg, "codInt:", toOmieId(req.id));
-        const omieCode = await incluirReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
+        // dtSugestao é obrigatório no Omie — usa data de hoje + 7 dias como prazo sugerido
+        const dtSugestao = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 7);
+          return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+        })();
+
+        console.info("[criarRequisicao] Enviando ao Omie — codCateg:", codCateg, "codInt:", toOmieId(req.id), "dt:", dtSugestao);
+        const omieCode = await incluirReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), dtSugestao, obsReqCompra: titulo, ItensReqCompra: omieItens });
         console.info("[criarRequisicao] Omie respondeu — codReqCompra:", omieCode);
 
         if (omieCode > 0) {
