@@ -4,6 +4,7 @@
  * para pedidos e fornecedores.
  * Server Component — busca dados diretamente no Supabase.
  */
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { RefreshCw, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,25 @@ function minutosAtras(date: Date): string {
 async function fetchSyncStatus() {
   const supabase = await createClient();
 
+  // Unidade ativa — filtra as queries pela unidade selecionada
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+  let unidadeId: string | null = null;
+  if (slug && slug !== "todas") {
+    const { data: un } = await supabase
+      .from("unidades")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+    unidadeId = un?.id ?? null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyUnidade = (q: any) => unidadeId ? q.eq("unidade_id", unidadeId) : q;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyOmieUnidade = (q: any) => unidadeId ? q.eq("omie_unidade_id", unidadeId) : q;
+
   const [
     { data: ultimoPedidoOmie },
     { count: pedidosSync },
@@ -37,13 +57,14 @@ async function fetchSyncStatus() {
     { count: totalFornecedores },
     { count: fornecedoresSinc },
   ] = await Promise.all([
-    // Último pedido sincronizado do Omie
-    supabase
-      .from("omie_pedidos_compra")
-      .select("omie_sincronizado_em")
-      .order("omie_sincronizado_em", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    // Último pedido sincronizado do Omie (filtrado por unidade)
+    applyUnidade(
+      supabase
+        .from("omie_pedidos_compra")
+        .select("omie_sincronizado_em")
+        .order("omie_sincronizado_em", { ascending: false })
+        .limit(1)
+    ).maybeSingle(),
 
     // Pedidos LHG com omie_status = sincronizado
     supabase
@@ -57,27 +78,32 @@ async function fetchSyncStatus() {
       .select("*", { count: "exact", head: true })
       .in("omie_status", ["pendente", "erro"] as const),
 
-    // Último fornecedor com omie_codigo (sincronizado)
-    supabase
-      .from("fornecedores")
-      .select("created_at")
-      .not("omie_codigo", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    // Último fornecedor com omie_codigo (filtrado por unidade via omie_unidade_id)
+    applyOmieUnidade(
+      supabase
+        .from("fornecedores")
+        .select("created_at")
+        .not("omie_codigo", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+    ).maybeSingle(),
 
-    // Total de fornecedores ativos
-    supabase
-      .from("fornecedores")
-      .select("*", { count: "exact", head: true })
-      .eq("ativo", true),
+    // Total de fornecedores ativos (filtrado por unidade)
+    applyOmieUnidade(
+      supabase
+        .from("fornecedores")
+        .select("*", { count: "exact", head: true })
+        .eq("ativo", true)
+    ),
 
-    // Fornecedores com omie_codigo
-    supabase
-      .from("fornecedores")
-      .select("*", { count: "exact", head: true })
-      .eq("ativo", true)
-      .not("omie_codigo", "is", null),
+    // Fornecedores com omie_codigo (filtrado por unidade)
+    applyOmieUnidade(
+      supabase
+        .from("fornecedores")
+        .select("*", { count: "exact", head: true })
+        .eq("ativo", true)
+        .not("omie_codigo", "is", null)
+    ),
   ]);
 
   const syncs: SyncInfo[] = [
