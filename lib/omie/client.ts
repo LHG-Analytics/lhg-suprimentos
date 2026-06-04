@@ -1361,10 +1361,10 @@ export interface OmieFamiliaProduto {
 }
 
 interface FamCadastroItem {
-  codigo:      number;   // Código da Família de Produto
-  codInt?:     string;   // Código de Integração
-  codFamilia?: string;   // Código interno da família
-  nomeFamilia: string;   // Nome da Família de Produto
+  codigo:      number;   // Código da Família (BIGINT no Omie — ex: 2149433474)
+  codInt?:     string;
+  codFamilia?: string;
+  nomeFamilia: string;
   inativo?:    string;   // "S" | "N"
 }
 
