@@ -43,11 +43,13 @@ export type NovaRequisicaoInput = z.infer<typeof NovaRequisicaoSchema>;
 export type ItemInput = z.infer<typeof ItemSchema>;
 
 const ProdutoOmieSchema = z.object({
-  nome:       z.string().min(2, "Nome obrigatório"),
-  unidade:    z.string().min(1, "Unidade obrigatória (ex: UN, KG)"),
-  ncm:        z.string().optional(),  // obrigatório no Omie mas validamos lá
-  familia:    z.string().optional(),
-  valorCusto: z.number().optional(),
+  nome:             z.string().min(2, "Nome obrigatório"),
+  unidade:          z.string().min(1, "Unidade obrigatória"),
+  ncm:              z.string().optional(),
+  familia:          z.string().optional(),
+  valorCusto:       z.number().optional(),
+  codigoProduto:    z.string().min(1, "Código do produto obrigatório"),
+  codigoIntegracao: z.string().optional(),
 });
 
 export type ProdutoOmieInput = z.infer<typeof ProdutoOmieSchema>;
@@ -323,6 +325,20 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
   revalidatePath(`/requisicoes/${item.requisicao_id}`);
 }
 
+// ── listarFamiliasOmie ────────────────────────────────────────────────────────
+
+/** Retorna a lista de famílias Omie distintas já sincronizadas no catálogo. */
+export async function listarFamiliasOmie(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("produtos")
+    .select("familia_omie")
+    .not("familia_omie", "is", null)
+    .order("familia_omie");
+  const unique = [...new Set((data ?? []).map(p => p.familia_omie as string).filter(Boolean))];
+  return unique;
+}
+
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
 
 export async function criarProdutoOmie(
@@ -356,7 +372,7 @@ export async function criarProdutoOmie(
   const { creds } = unidadeCreds;
 
   const localId = crypto.randomUUID();
-  const codigoIntegracao = `LHG-${localId.slice(0, 8)}`;
+  const codigoIntegracao = parsed.data.codigoIntegracao?.trim() || `LHG-${localId.slice(0, 8)}`;
 
   let codigoProduto: number;
   try {
@@ -366,7 +382,7 @@ export async function criarProdutoOmie(
       familia_omie:      parsed.data.familia,
       valor_unitario:    parsed.data.valorCusto ?? 0,
       codigo_integracao: codigoIntegracao,
-      codigo_interno:    codigoIntegracao,
+      codigo_interno:    parsed.data.codigoProduto,
       ncm:               parsed.data.ncm || "00000000",
     });
   } catch (err) {
