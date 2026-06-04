@@ -252,6 +252,14 @@ export function EditarFornecedorModal({ fornecedor, onClose }: EditarFornecedorM
             </div>
 
             {/* Rodapé */}
+            {/* Erro próximo do botão (visível mesmo com scroll) */}
+            {erro && (
+              <div className="flex items-start gap-2.5 rounded-lg bg-red-500/10 border border-red-500/20 px-3.5 py-3">
+                <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-red-600 dark:text-red-400 leading-snug">{erro}</p>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
