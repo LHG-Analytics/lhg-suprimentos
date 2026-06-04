@@ -204,11 +204,15 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
   useEffect(() => {
     if (open && familias.length === 0) {
       listarFamiliasOmie(unidadeId)
-        .then(data => {
-          setFamilias(data);
-          if (data.length === 0) setFamiliasErro("Nenhuma família encontrada no Omie");
+        .then(result => {
+          if ("erro" in result) {
+            setFamiliasErro(result.erro);
+          } else {
+            setFamilias(result.familias);
+            if (result.familias.length === 0) setFamiliasErro("Nenhuma família no Omie");
+          }
         })
-        .catch(err => setFamiliasErro(`Erro ao buscar famílias: ${(err as Error).message}`));
+        .catch(err => setFamiliasErro(`Erro: ${(err as Error).message}`));
     }
   }, [open, familias.length, unidadeId]);
 

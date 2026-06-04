@@ -386,13 +386,19 @@ export interface FamiliaOmie { descricao: string; codigo: number; }
  * Busca famílias de produto do Omie usando as credenciais da unidade.
  * Retorna lista com codigo (integer) e descricao para usar no select.
  */
-export async function listarFamiliasOmie(unidadeId: string): Promise<FamiliaOmie[]> {
+export async function listarFamiliasOmie(
+  unidadeId: string,
+): Promise<{ familias: FamiliaOmie[] } | { erro: string }> {
   const unidadeCreds = await getCredsUnidade(unidadeId);
-  if (!unidadeCreds) return [];
+  if (!unidadeCreds) return { erro: "Unidade sem credenciais Omie" };
 
-  // Lança o erro para o chamador poder exibir a mensagem
-  const familias = await listFamiliasProduto(unidadeCreds.creds);
-  return familias.map(f => ({ codigo: f.codigo, descricao: f.descricao }));
+  try {
+    const familias = await listFamiliasProduto(unidadeCreds.creds);
+    return { familias: familias.map(f => ({ codigo: f.codigo, descricao: f.descricao })) };
+  } catch (err) {
+    console.error("[listarFamiliasOmie]", (err as Error).message);
+    return { erro: `Falhou no Omie: ${(err as Error).message}` };
+  }
 }
 
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
