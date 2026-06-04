@@ -31,22 +31,24 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const valorCusto = custo ? Number(custo.replace(",", ".")) : undefined;
-        const { produtoId } = await criarProdutoOmie(unidadeId, {
-          nome, unidade, familia: familia || undefined, valorCusto,
-        });
+      const valorCusto = custo ? Number(custo.replace(",", ".")) : undefined;
+      const result = await criarProdutoOmie(unidadeId, {
+        nome, unidade, familia: familia || undefined, valorCusto,
+      });
 
-        if (requisicaoItemId) {
-          await vincularProdutoItem(requisicaoItemId, produtoId);
-          toast.success(`Produto "${nome}" criado no Omie e vinculado`);
-        } else {
-          toast.success(`Produto "${nome}" criado no Omie`);
-        }
-        onClose();
-      } catch (err) {
-        toast.error((err as Error).message);
+      if ("erro" in result) {
+        toast.error(result.erro);
+        return;
       }
+
+      const { produtoId } = result;
+      if (requisicaoItemId) {
+        await vincularProdutoItem(requisicaoItemId, produtoId);
+        toast.success(`Produto "${nome}" criado no Omie e vinculado`);
+      } else {
+        toast.success(`Produto "${nome}" criado no Omie`);
+      }
+      onClose();
     });
   }
 

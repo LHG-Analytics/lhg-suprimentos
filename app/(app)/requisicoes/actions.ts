@@ -324,12 +324,14 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
 
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
 
-export async function criarProdutoOmie(unidadeId: string, data: ProdutoOmieInput): Promise<{ produtoId: string }> {
+export async function criarProdutoOmie(
+  unidadeId: string,
+  data: ProdutoOmieInput,
+): Promise<{ produtoId: string } | { erro: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Verificar que o usuário tem acesso à unidade (comprador/admin: todas; solicitante: só as suas)
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("role")
@@ -342,29 +344,34 @@ export async function criarProdutoOmie(unidadeId: string, data: ProdutoOmieInput
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("unidade_id", unidadeId);
-    if ((count ?? 0) === 0) throw new Error("Sem permissão para esta unidade");
+    if ((count ?? 0) === 0) return { erro: "Sem permissão para esta unidade" };
   }
 
   const parsed = ProdutoOmieSchema.safeParse(data);
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos");
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
 
   const unidadeCreds = await getCredsUnidade(unidadeId);
-  if (!unidadeCreds) throw new Error("Unidade sem credenciais Omie configuradas");
+  if (!unidadeCreds) return { erro: "Unidade sem credenciais Omie configuradas" };
   const { creds } = unidadeCreds;
 
   const localId = crypto.randomUUID();
   const codigoIntegracao = `LHG-${localId.slice(0, 8)}`;
 
-  // Criar no Omie
-  const codigoProduto = await incluirProduto(creds, {
-    nome:             parsed.data.nome,
-    unidade:          parsed.data.unidade,
-    familia_omie:     parsed.data.familia,
-    valor_unitario:   parsed.data.valorCusto ?? 0,
-    codigo_integracao: codigoIntegracao,
-  });
+  let codigoProduto: number;
+  try {
+    codigoProduto = await incluirProduto(creds, {
+      nome:              parsed.data.nome,
+      unidade:           parsed.data.unidade,
+      familia_omie:      parsed.data.familia,
+      valor_unitario:    parsed.data.valorCusto ?? 0,
+      codigo_integracao: codigoIntegracao,
+    });
+  } catch (err) {
+    return { erro: `Falhou no Omie: ${(err as Error).message}` };
+  }
 
-  // Salvar localmente
+  if (!codigoProduto) return { erro: "Omie não retornou código do produto (codProduto=0)" };
+
   const serviceClient = createServiceClient();
   const { data: prod, error } = await serviceClient
     .from("produtos")
@@ -382,7 +389,7 @@ export async function criarProdutoOmie(unidadeId: string, data: ProdutoOmieInput
     .select("id")
     .single();
 
-  if (error || !prod) throw new Error(error?.message ?? "Erro ao salvar produto localmente");
+  if (error || !prod) return { erro: error?.message ?? "Erro ao salvar produto localmente" };
 
   revalidatePath("/produtos");
   return { produtoId: prod.id };
