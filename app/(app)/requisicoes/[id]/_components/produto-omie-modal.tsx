@@ -2,10 +2,11 @@
 
 /**
  * produto-omie-modal.tsx
- * Modal para Keila cadastrar um produto no Omie a partir de um item de texto livre.
+ * Modal para cadastrar produto no Omie.
+ * NCM pesquisado via BrasilAPI (gratuita, sem autenticação).
  */
-import { useState, useTransition } from "react";
-import { X, Loader2, Check } from "lucide-react";
+import { useState, useTransition, useEffect, useRef } from "react";
+import { X, Loader2, Check, Search } from "lucide-react";
 import { toast } from "sonner";
 import { criarProdutoOmie, vincularProdutoItem } from "../../actions";
 
@@ -17,10 +18,13 @@ interface Props {
   nomeSugerido:      string;
 }
 
-const UNIDADES = ["UN", "KG", "LT", "CX", "PC", "MT", "GL", "SC", "FR", "PR"];
+interface NcmItem { codigo: string; descricao: string; }
 
-function Field({ label, required, hint, children }: {
-  label: string; required?: boolean; hint?: string; children: React.ReactNode;
+const UNIDADES = ["UN", "KG", "LT", "CX", "PC", "MT", "GL", "SC", "FR", "PR"];
+const cls = "w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring";
+
+function Field({ label, required, children }: {
+  label: string; required?: boolean; children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
@@ -28,12 +32,81 @@ function Field({ label, required, hint, children }: {
         {label} {required && <span className="text-red-400 normal-case">*</span>}
       </label>
       {children}
-      {hint && <p className="text-[10px] text-muted-foreground/60">{hint}</p>}
     </div>
   );
 }
 
-const cls = "w-full h-9 px-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring";
+/** Campo NCM com busca via BrasilAPI */
+function NcmSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [query,       setQuery]       = useState(value);
+  const [sugestoes,   setSugestoes]   = useState<NcmItem[]>([]);
+  const [buscando,    setBuscando]    = useState(false);
+  const [aberto,      setAberto]      = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (query.length < 3) { setSugestoes([]); return; }
+
+    timerRef.current = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const res = await fetch(
+          `https://brasilapi.com.br/api/ncm/v1?search=${encodeURIComponent(query)}`,
+        );
+        if (res.ok) {
+          const data: NcmItem[] = await res.json();
+          setSugestoes(data.slice(0, 8));
+          setAberto(true);
+        }
+      } catch { /* BrasilAPI fora do ar — usuário digita manualmente */ }
+      finally { setBuscando(false); }
+    }, 400);
+  }, [query]);
+
+  function selecionar(item: NcmItem) {
+    onChange(item.codigo);
+    setQuery(`${item.codigo} — ${item.descricao}`);
+    setSugestoes([]);
+    setAberto(false);
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); onChange(""); }}
+          onFocus={() => sugestoes.length > 0 && setAberto(true)}
+          placeholder="Digite o produto para buscar o NCM (ex: sabonete)"
+          required
+          className="w-full h-9 pl-8 pr-3 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:border-ring"
+        />
+        {buscando && <Loader2 size={12} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />}
+      </div>
+
+      {aberto && sugestoes.length > 0 && (
+        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border bg-card shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+          {sugestoes.map(s => (
+            <button
+              key={s.codigo}
+              type="button"
+              onClick={() => selecionar(s)}
+              className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors border-b border-border/40 last:border-0"
+            >
+              <span className="text-xs font-mono text-lhg-400">{s.codigo}</span>
+              <span className="text-xs text-foreground/80 ml-2 line-clamp-1">{s.descricao}</span>
+            </button>
+          ))}
+          <div className="px-3 py-1.5 text-[10px] text-muted-foreground/50 bg-muted/20">
+            Fonte: BrasilAPI (Receita Federal)
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, nomeSugerido }: Props) {
   const [nome,    setNome]    = useState(nomeSugerido);
@@ -47,16 +120,14 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!ncm) { toast.error("Selecione ou digite um NCM válido"); return; }
     startTransition(async () => {
       const valorCusto = custo ? Number(custo.replace(",", ".")) : undefined;
       const result = await criarProdutoOmie(unidadeId, {
-        nome, unidade, ncm: ncm || undefined, familia: familia || undefined, valorCusto,
+        nome, unidade, ncm, familia: familia || undefined, valorCusto,
       });
 
-      if ("erro" in result) {
-        toast.error(result.erro);
-        return;
-      }
+      if ("erro" in result) { toast.error(result.erro); return; }
 
       const { produtoId } = result;
       if (requisicaoItemId) {
@@ -97,10 +168,11 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
             </Field>
           </div>
 
-          <Field label="NCM" required
-            hint="Código fiscal do produto (ex: 3304.99.00 para amenities, 3402.20.00 para limpeza)">
-            <input value={ncm} onChange={e => setNcm(e.target.value)} required
-              className={cls} placeholder="Ex: 3304.99.00" maxLength={10} />
+          <Field label="NCM" required>
+            <NcmSearch value={ncm} onChange={setNcm} />
+            <p className="text-[10px] text-muted-foreground/50 mt-1">
+              Digite o nome do produto para buscar o código NCM automaticamente
+            </p>
           </Field>
 
           <Field label="Família Omie (opcional)">
