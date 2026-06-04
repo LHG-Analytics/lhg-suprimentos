@@ -87,7 +87,8 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
     endereco: item.endereco ?? null,
     cidade: item.cidade ?? null,
     uf: item.estado ?? null,
-    omie_codigo: String(item.codigo_cliente),
+    // codigo_cliente pode vir como campo numérico; guarda null se ausente
+    omie_codigo: item.codigo_cliente ? String(item.codigo_cliente) : null,
     omie_unidade_id: unidadeId,
     omie_sincronizado_em: new Date().toISOString(),
     // Omie usa "inativo" como campo de status real no ListarClientes.
