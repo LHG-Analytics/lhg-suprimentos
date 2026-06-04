@@ -1290,54 +1290,61 @@ export async function incluirCliente(
   return res.codigo_cliente_omie;
 }
 
-// ── IncluirProduto ─────────────────────────────────────────────────────────────
+// ── IncluirProduto / UpsertProduto ─────────────────────────────────────────────
 
-interface IncluirProdutoParam {
+interface ProdutoParam {
   codigo_produto_integracao: string;
   descricao:                 string;
   unidade:                   string;
-  ncm:                       string;
   valor_unitario:            number;
   descricao_familia?:        string;
   codigo?:                   string;
+  ncm?:                      string;   // opcional — não enviar se vazio
 }
 
-interface IncluirProdutoResponse {
+interface ProdutoResponse {
   codigo_produto:             number;
   codigo_produto_integracao?: string;
 }
 
+export interface IncluirProdutoParams {
+  nome:              string;
+  unidade:           string;
+  ncm?:              string;
+  valor_unitario:    number;
+  familia_omie?:     string;
+  codigo_interno?:   string;
+  codigo_integracao: string;  // LHG-{uuid.slice(0,8)}
+}
+
 /**
- * Cria um novo produto no Omie.
- * NCM é obrigatório pela API Omie.
- * Endpoint: POST /geral/produtos/ — call: IncluirProduto
+ * Cria ou atualiza um produto no Omie via UpsertProduto (idempotente).
+ * NCM é opcional — não enviado quando vazio para evitar rejeição.
+ * Endpoint: POST /geral/produtos/ — call: UpsertProduto
  * Retorna codigo_produto para salvar em produtos.omie_codigo.
  */
 export async function incluirProduto(
   creds: OmieCredentials,
-  params: {
-    nome:            string;
-    unidade:         string;
-    ncm?:            string;
-    valor_unitario:  number;
-    familia_omie?:   string;
-    codigo_interno?: string;
-    codigo_integracao: string;   // LHG-{uuid.slice(0,8)}
-  },
+  params: IncluirProdutoParams,
 ): Promise<number> {
-  const res = await omiePost<IncluirProdutoParam, IncluirProdutoResponse>(
+  const ncm = params.ncm ? params.ncm.replace(/\D/g, "") : undefined;
+
+  const body: ProdutoParam = {
+    codigo_produto_integracao: params.codigo_integracao,
+    descricao:                 params.nome,
+    unidade:                   params.unidade,
+    valor_unitario:            params.valor_unitario,
+    descricao_familia:         params.familia_omie || undefined,
+    codigo:                    params.codigo_interno || undefined,
+    ...(ncm ? { ncm } : {}),
+  };
+
+  const res = await omiePost<ProdutoParam, ProdutoResponse>(
     "/geral/produtos/",
-    "IncluirProduto",
+    "UpsertProduto",
     creds,
-    {
-      codigo_produto_integracao: params.codigo_integracao,
-      descricao:                 params.nome,
-      unidade:                   params.unidade,
-      ncm:                       (params.ncm ?? "").replace(/\D/g, ""),
-      valor_unitario:            params.valor_unitario,
-      descricao_familia:         params.familia_omie ?? "",
-      codigo:                    params.codigo_interno ?? "",
-    },
+    body,
+    1, // sem retry para evitar REDUNDANT
   );
   return res.codigo_produto;
 }
