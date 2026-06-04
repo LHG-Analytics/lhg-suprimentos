@@ -4,71 +4,12 @@
  * actions.ts — LHG-210/211/212/220
  * Server Actions para o módulo de Cotações.
  *   LHG-212: enviarEmailCotacao — solicita cotação por email via Resend
- *   LHG-220: editarCotacao + Omie Requisição de Compra sync
  */
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { incluirReq, upsertReq, excluirReq, type OmieReqParam } from "@/lib/omie/requisicao";
-import { OmieError } from "@/lib/omie/client";
 import { incluirPedCompra } from "@/lib/omie/pedidos";
-
-// ── Helper: monta payload da Requisição Omie a partir dos dados da cotação ──────
-
-interface CotacaoParaReqOmie {
-  id:     string;
-  prazo:  string | null;
-  cotacao_itens: Array<{
-    id:         string;
-    quantidade: number;
-    produtos:   { omie_codigo: string | null } | null;
-    cotacao_matriz: Array<{ preco_unitario: number | null }>;
-  }>;
-  cotacao_fornecedores: Array<{
-    fornecedores: { nome_fantasia: string | null; razao_social: string } | null;
-  }>;
-}
-
-function buildReqOmieParam(cot: CotacaoParaReqOmie): OmieReqParam {
-  const fornName = cot.cotacao_fornecedores[0]?.fornecedores?.nome_fantasia
-    ?? cot.cotacao_fornecedores[0]?.fornecedores?.razao_social
-    ?? "";
-
-  let dtSugestao: string | undefined;
-  if (cot.prazo) {
-    const d = new Date(cot.prazo.includes("T") ? cot.prazo : `${cot.prazo}T12:00:00`);
-    if (!isNaN(d.getTime())) {
-      dtSugestao = [
-        String(d.getDate()).padStart(2, "0"),
-        String(d.getMonth() + 1).padStart(2, "0"),
-        d.getFullYear(),
-      ].join("/");
-    }
-  }
-
-  const itens = cot.cotacao_itens.map((item) => {
-    const preco = item.cotacao_matriz[0]?.preco_unitario ?? 0;
-    const codProduto = item.produtos?.omie_codigo
-      ? { codProd: Number(item.produtos.omie_codigo) }
-      : {};
-    return {
-      codIntItem: item.id,
-      ...codProduto,
-      qtde:      item.quantidade,
-      precoUnit: preco,
-    };
-  });
-
-  return {
-    // TODO Fase 2: este sync cotação→Omie será removido. codCateg placeholder.
-    codCateg:        "",
-    codIntReqCompra: cot.id,
-    dtSugestao,
-    obsReqCompra: fornName ? `Fornecedor: ${fornName}` : undefined,
-    ItensReqCompra: itens,
-  };
-}
 
 // ── deletarCotacao ────────────────────────────────────────────────────────────
 
@@ -79,7 +20,7 @@ export async function deletarCotacao(id: string) {
 
   const { data: cot, error: fetchErr } = await supabase
     .from("cotacoes")
-    .select("id, status, numero, omie_codigo, cotacao_unidades(unidades(omie_app_key, omie_app_secret))")
+    .select("id, status, numero")
     .eq("id", id)
     .single();
 
@@ -87,22 +28,6 @@ export async function deletarCotacao(id: string) {
 
   if (cot.status === "aprovado") {
     throw new Error("Não é possível excluir uma cotação já aprovada (pedidos já foram gerados).");
-  }
-
-  // Tentar ExcluirReq no Omie antes de deletar (não bloqueia se falhar)
-  type UnidRow = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
-  const unids = cot.cotacao_unidades as UnidRow[] | null;
-  const unid  = unids?.[0]?.unidades;
-
-  if (cot.omie_codigo && unid?.omie_app_key && unid?.omie_app_secret) {
-    try {
-      await excluirReq(
-        { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
-        cot.id,
-      );
-    } catch (err) {
-      console.warn("[deletarCotacao] ExcluirReq Omie falhou (não bloqueia):", err instanceof Error ? err.message : err);
-    }
   }
 
   // Remove filhos na ordem correta (FK: matriz → itens → fornecedores → unidades → cotação)
@@ -217,56 +142,6 @@ export async function criarCotacao(input: z.infer<typeof NovaCotacaoSchema>) {
       .from("requisicoes")
       .update({ status: "cotacao" })
       .eq("id", requisicao_id);
-  }
-
-  // ── Sync Omie: IncluirReq (não bloqueia se falhar) ────────────────────────
-  if (requisicao_id) {
-    try {
-      const { data: unidRows } = await supabase
-        .from("cotacao_unidades")
-        .select("unidades(omie_app_key, omie_app_secret)")
-        .eq("cotacao_id", cot.id)
-        .limit(1);
-
-      type UnidRow = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
-      const unid = (unidRows as UnidRow[] | null)?.[0]?.unidades;
-
-      if (unid?.omie_app_key && unid?.omie_app_secret) {
-        const { data: cotItens } = await supabase
-          .from("cotacao_itens")
-          .select("id, quantidade, produtos(omie_codigo), cotacao_matriz(preco_unitario)")
-          .eq("cotacao_id", cot.id);
-
-        const { data: cotForns } = await supabase
-          .from("cotacao_fornecedores")
-          .select("fornecedores(nome_fantasia, razao_social)")
-          .eq("cotacao_id", cot.id);
-
-        type CotItemRow = { id: string; quantidade: number; produtos: { omie_codigo: string | null } | null; cotacao_matriz: Array<{ preco_unitario: number | null }> };
-        type CotFornRow = { fornecedores: { nome_fantasia: string | null; razao_social: string } | null };
-
-        const param = buildReqOmieParam({
-          id: cot.id,
-          prazo: null,
-          cotacao_itens: (cotItens as CotItemRow[] | null) ?? [],
-          cotacao_fornecedores: (cotForns as CotFornRow[] | null) ?? [],
-        });
-
-        const nCodReq = await incluirReq(
-          { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
-          param,
-        );
-
-        if (nCodReq) {
-          await supabase
-            .from("cotacoes")
-            .update({ omie_codigo: String(nCodReq), omie_sincronizado_em: new Date().toISOString() })
-            .eq("id", cot.id);
-        }
-      }
-    } catch (err) {
-      console.warn("[criarCotacao] IncluirReq Omie falhou (não bloqueia):", err instanceof Error ? err.message : err);
-    }
   }
 
   revalidatePath("/cotacoes");
@@ -465,16 +340,7 @@ export async function editarCotacao(
 
   const { data: cot, error: fetchErr } = await supabase
     .from("cotacoes")
-    .select(`
-      id, status, omie_codigo, prazo,
-      cotacao_unidades(unidades(omie_app_key, omie_app_secret)),
-      cotacao_itens(
-        id, quantidade,
-        produtos(omie_codigo),
-        cotacao_matriz(preco_unitario)
-      ),
-      cotacao_fornecedores(fornecedores(nome_fantasia, razao_social))
-    `)
+    .select("id, status")
     .eq("id", id)
     .single();
 
@@ -493,36 +359,6 @@ export async function editarCotacao(
     .eq("id", id);
 
   if (updateErr) return { erro: updateErr.message };
-
-  // UpsertReq no Omie (não bloqueia)
-  type UnidRow = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
-  const unid = (cot.cotacao_unidades as UnidRow[])?.[0]?.unidades;
-
-  if (unid?.omie_app_key && unid?.omie_app_secret) {
-    try {
-      type CotItemRow = { id: string; quantidade: number; produtos: { omie_codigo: string | null } | null; cotacao_matriz: Array<{ preco_unitario: number | null }> };
-      type CotFornRow = { fornecedores: { nome_fantasia: string | null; razao_social: string } | null };
-
-      const param = buildReqOmieParam({
-        id: cot.id,
-        prazo: parsed.data.prazo ?? cot.prazo ?? null,
-        cotacao_itens: (cot.cotacao_itens as CotItemRow[]) ?? [],
-        cotacao_fornecedores: (cot.cotacao_fornecedores as CotFornRow[]) ?? [],
-      });
-
-      await upsertReq(
-        { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
-        param,
-      );
-
-      await supabase
-        .from("cotacoes")
-        .update({ omie_sincronizado_em: new Date().toISOString() })
-        .eq("id", id);
-    } catch (err) {
-      console.warn("[editarCotacao] UpsertReq Omie falhou (não bloqueia):", err instanceof OmieError ? err.message : err);
-    }
-  }
 
   revalidatePath("/cotacoes");
   return { ok: true };
