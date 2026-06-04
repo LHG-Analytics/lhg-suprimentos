@@ -703,3 +703,38 @@ export async function enviarEmailCotacao(
   revalidatePath(`/cotacoes/${cotacaoId}`);
   return { enviados: enviados.length, erros };
 }
+
+// ── atribuirFornecedorVencedor ─────────────────────────────────────────────────
+
+/**
+ * Marca o fornecedor vencedor para uma lista de itens da cotação.
+ * Usado pelo painel de seleção em massa.
+ */
+export async function atribuirFornecedorVencedor(
+  itemIds: string[],
+  fornecedorId: string | null,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  if (itemIds.length === 0) return { erro: "Nenhum item selecionado" };
+
+  const { error } = await supabase
+    .from("cotacao_itens")
+    .update({ selecionado_forn: fornecedorId })
+    .in("id", itemIds);
+
+  if (error) return { erro: error.message };
+
+  // Busca o cotacao_id de qualquer item para revalidar a rota
+  const { data: item } = await supabase
+    .from("cotacao_itens")
+    .select("cotacao_id")
+    .eq("id", itemIds[0])
+    .single();
+
+  if (item?.cotacao_id) revalidatePath(`/cotacoes/${item.cotacao_id}`);
+
+  return { ok: true };
+}
