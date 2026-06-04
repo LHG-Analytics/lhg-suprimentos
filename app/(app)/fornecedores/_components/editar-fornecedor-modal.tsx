@@ -103,7 +103,7 @@ export function EditarFornecedorModal({ fornecedor, onClose }: EditarFornecedorM
   if (!fornecedor) return null;
 
   const semOmie  = !fornecedor.omie_codigo;
-  const disabled = semOmie || isPending;
+  const disabled = isPending; // edição local sempre permitida; Omie só sincroniza se tiver código
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,6 +129,7 @@ export function EditarFornecedorModal({ fornecedor, onClose }: EditarFornecedorM
       if ("erro" in res) {
         setErro(res.erro);
       } else {
+        if (res.omieAviso) setErro(`⚠ Salvo localmente, mas falhou no Omie: ${res.omieAviso}`);
         onClose();
       }
     });
@@ -165,12 +166,12 @@ export function EditarFornecedorModal({ fornecedor, onClose }: EditarFornecedorM
         <div className="overflow-y-auto flex-1">
           <form onSubmit={handleSubmit} className="p-5 space-y-5">
 
-            {/* Banner: sem Omie */}
+            {/* Banner: sem Omie — informativo, não bloqueia edição */}
             {semOmie && (
               <div className="flex items-start gap-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3.5 py-3">
                 <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-amber-600 dark:text-amber-400 leading-snug">
-                  Fornecedor não sincronizado com o Omie — execute o Sync primeiro
+                  Fornecedor sem código Omie — dados serão salvos apenas localmente (sem sync ao Omie)
                 </p>
               </div>
             )}

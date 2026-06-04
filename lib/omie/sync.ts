@@ -79,7 +79,8 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
   return {
     razao_social: item.razao_social,
     nome_fantasia: item.nome_fantasia ?? null,
-    cnpj: item.cnpj_cpf,
+    // CNPJ limpo (só dígitos) para match com registros criados manualmente
+    cnpj: item.cnpj_cpf?.replace(/\D/g, "") ?? null,
     email: item.email ?? null,
     telefone: telefone,
     contato: item.contato ?? null,

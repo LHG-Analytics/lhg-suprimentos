@@ -25,7 +25,7 @@ export interface EditarFornecedorInput {
 export async function editarFornecedor(
   fornecedorId: string,
   dados: EditarFornecedorInput,
-): Promise<{ ok: true } | { erro: string }> {
+): Promise<{ ok: true; omieAviso?: string } | { erro: string }> {
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -43,32 +43,33 @@ export async function editarFornecedor(
     .single();
 
   if (fetchErr || !fornecedor) return { erro: "Fornecedor não encontrado" };
-  if (!fornecedor.omie_codigo)  return { erro: "Fornecedor não sincronizado com o Omie — execute o Sync primeiro" };
 
   const unidade = fornecedor.unidades as { omie_app_key: string; omie_app_secret: string } | null;
-  if (!unidade?.omie_app_key || !unidade?.omie_app_secret) {
-    return { erro: "Credenciais Omie não configuradas para esta unidade" };
-  }
 
-  // Chama AlterarCliente no Omie
-  try {
-    await alterarFornecedor(
-      { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret },
-      {
-        omie_codigo:   fornecedor.omie_codigo,
-        razao_social:  dados.razao_social.trim(),
-        nome_fantasia: dados.nome_fantasia?.trim() ?? "",
-        email:         dados.email?.trim() ?? "",
-        telefone:      dados.telefone?.trim() ?? "",
-        contato:       dados.contato?.trim() ?? "",
-        endereco:      dados.endereco?.trim() ?? "",
-        cep:           dados.cep?.replace(/\D/g, "") ?? "",
-        cidade:        dados.cidade?.trim() ?? "",
-        uf:            dados.uf?.trim() ?? "",
-      },
-    );
-  } catch (err) {
-    return { erro: err instanceof Error ? err.message : "Erro ao comunicar com o Omie" };
+  // Só tenta sincronizar com Omie se o fornecedor tiver código Omie
+  let omieAviso: string | undefined;
+  if (fornecedor.omie_codigo && unidade?.omie_app_key) {
+    try {
+      await alterarFornecedor(
+        { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret },
+        {
+          omie_codigo:   fornecedor.omie_codigo,
+          razao_social:  dados.razao_social.trim(),
+          nome_fantasia: dados.nome_fantasia?.trim() ?? "",
+          email:         dados.email?.trim() ?? "",
+          telefone:      dados.telefone?.trim() ?? "",
+          contato:       dados.contato?.trim() ?? "",
+          endereco:      dados.endereco?.trim() ?? "",
+          cep:           dados.cep?.replace(/\D/g, "") ?? "",
+          cidade:        dados.cidade?.trim() ?? "",
+          uf:            dados.uf?.trim() ?? "",
+        },
+      );
+    } catch (err) {
+      // Falha no Omie não bloqueia salvar localmente
+      omieAviso = err instanceof Error ? err.message : "Erro ao sincronizar com o Omie";
+      console.error("[editarFornecedor] Omie:", omieAviso);
+    }
   }
 
   // Atualiza Supabase
@@ -89,7 +90,7 @@ export async function editarFornecedor(
     .eq("id", fornecedorId);
 
   revalidatePath("/fornecedores");
-  return { ok: true };
+  return { ok: true, omieAviso };
 }
 
 // ── criarFornecedor ────────────────────────────────────────────────────────────
