@@ -10,7 +10,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { incluirProduto, alterarProduto, isOmieRedundantError } from "@/lib/omie/client";
-import { incluirReq, upsertReq, toOmieId } from "@/lib/omie/requisicao";
+import { incluirReq, upsertReq, consultarReq, toOmieId } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -176,8 +176,29 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
     } catch (err) {
       const msg = (err as Error).message;
       console.error("[criarRequisicao] Omie sync:", msg);
-      // Mostra SEMPRE — inclusive REDUNDANT (para diagnóstico)
-      omieAviso = `Falhou no Omie: ${msg}`;
+
+      if (isOmieRedundantError(err)) {
+        // REDUNDANT = o retry do omiePost chegou ao Omie, mas a 1ª chamada JÁ havia criado.
+        // A requisição ESTÁ no Omie. Vamos buscar o código via ConsultarReq.
+        try {
+          const unidadeCreds2 = await getCredsUnidade(unidade_ids[0]);
+          if (unidadeCreds2) {
+            const codInt = toOmieId(req.id);
+            const omieCode = await consultarReq(unidadeCreds2.creds, codInt);
+            if (omieCode > 0) {
+              await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
+              omieOk = true;
+              console.info("[criarRequisicao] REDUNDANT resolvido — codReqCompra:", omieCode);
+            }
+          }
+        } catch {
+          // ConsultarReq falhou; requisição está no Omie mas sem código salvo
+          omieOk = true; // Ainda assim, a req está no Omie
+          console.info("[criarRequisicao] REDUNDANT — req no Omie, ConsultarReq falhou");
+        }
+      } else {
+        omieAviso = `Falhou no Omie: ${msg}`;
+      }
     }
   }
 

@@ -87,6 +87,28 @@ export async function upsertReq(
   return res.codReqCompra ?? 0;
 }
 
+// ── consultarReq ──────────────────────────────────────────────────────────────
+
+/**
+ * Busca uma Requisição de Compra pelo código de integração.
+ * Usado para recuperar codReqCompra após REDUNDANT (retry criou, 1ª chamada já tinha criado).
+ */
+export async function consultarReq(
+  creds: OmieCredentials,
+  codIntReqCompra: string,
+): Promise<number> {
+  const res = await omiePost<
+    { codIntReqCompra: string; codReqCompra: number },
+    { codReqCompra?: number }
+  >(
+    "/produtos/requisicaocompra/",
+    "ConsultarReq",
+    creds,
+    { codIntReqCompra, codReqCompra: 0 },
+  );
+  return res.codReqCompra ?? 0;
+}
+
 // ── excluirReq ────────────────────────────────────────────────────────────────
 
 export async function excluirReq(
