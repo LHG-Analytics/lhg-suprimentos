@@ -141,13 +141,14 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
 
   // Enviar ao Omie quando não há produto novo
   let omieAviso: string | undefined;
+  let omieOk = false;
   if (!temProdutoNovo) {
     try {
       const unidadeCreds = await getCredsUnidade(unidade_ids[0]);
       if (!unidadeCreds) {
         omieAviso = "Unidade sem credenciais Omie — requisição criada somente na plataforma";
       } else if (!unidadeCreds.codCateg) {
-        omieAviso = "Configure 'omie_categoria_compras' na unidade para enviar ao Omie";
+        omieAviso = "Configure omie_categoria_compras na unidade para enviar ao Omie";
       } else {
         const { creds, codCateg } = unidadeCreds;
         const { data: itensReq } = await supabase
@@ -160,23 +161,28 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
           return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
         });
 
+        console.info("[criarRequisicao] Enviando ao Omie — codCateg:", codCateg, "codInt:", toOmieId(req.id));
         const omieCode = await incluirReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), obsReqCompra: titulo, ItensReqCompra: omieItens });
-        await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
+        console.info("[criarRequisicao] Omie respondeu — codReqCompra:", omieCode);
+
+        if (omieCode > 0) {
+          await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
+          omieOk = true;
+        } else {
+          // Omie retornou 0 — sem erro mas sem criar
+          omieAviso = `Omie não criou a requisição (codReqCompra=0). codCateg=${codCateg}`;
+        }
       }
     } catch (err) {
       const msg = (err as Error).message;
       console.error("[criarRequisicao] Omie sync:", msg);
-      // REDUNDANT = omiePost retry enviou a mesma req duas vezes; Omie já registrou na 1ª tentativa
-      if (isOmieRedundantError(err)) {
-        console.info("[criarRequisicao] Omie REDUNDANT — requisição já registrada, ignorando");
-      } else {
-        omieAviso = `Criada na plataforma, mas falhou no Omie: ${msg}`;
-      }
+      // Mostra SEMPRE — inclusive REDUNDANT (para diagnóstico)
+      omieAviso = `Falhou no Omie: ${msg}`;
     }
   }
 
   revalidatePath("/requisicoes");
-  return { id: req.id, numero: req.numero as string, omieAviso };
+  return { id: req.id, numero: req.numero as string, omieAviso, omieOk };
 }
 
 // ── aprovarRequisicao ─────────────────────────────────────────────────────────

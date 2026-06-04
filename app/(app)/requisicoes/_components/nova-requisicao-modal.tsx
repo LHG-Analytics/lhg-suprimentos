@@ -340,8 +340,10 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
         toast.success(`Requisição ${result.numero} criada`, {
           description: `${itensValidos.length} item${itensValidos.length !== 1 ? "s" : ""} adicionado${itensValidos.length !== 1 ? "s" : ""}`,
         });
-        if (result.omieAviso) {
-          toast.warning("Atenção: Omie", { description: result.omieAviso, duration: 10_000 });
+        if (result.omieOk) {
+          toast.success("Enviada ao Omie ✓", { description: `Requisição registrada no Omie`, duration: 5_000 });
+        } else if (result.omieAviso) {
+          toast.warning("Atenção: Omie", { description: result.omieAviso, duration: 15_000 });
         }
         handleClose();
       } catch (err) {
