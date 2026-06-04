@@ -201,9 +201,9 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
   // Busca famílias ao abrir
   useEffect(() => {
     if (open && familias.length === 0) {
-      listarFamiliasOmie().then(setFamilias).catch(() => {});
+      listarFamiliasOmie(unidadeId).then(setFamilias).catch(() => {});
     }
-  }, [open, familias.length]);
+  }, [open, familias.length, unidadeId]);
 
   if (!open) return null;
 

@@ -1352,3 +1352,50 @@ export async function incluirProduto(
   );
   return res.codigo_produto;
 }
+
+// ── ListarFamilias ─────────────────────────────────────────────────────────────
+
+export interface OmieFamiliaProduto {
+  codigo:    number;
+  descricao: string;
+}
+
+interface ListarFamiliasResponse {
+  total_de_paginas: number;
+  total_de_registros: number;
+  famCadastro: OmieFamiliaProduto[];
+}
+
+/**
+ * Lista todas as famílias de produto cadastradas no Omie.
+ * Endpoint: POST /geral/familiasproduto/ — call: ListarFamilias
+ */
+export async function listFamiliasProduto(
+  creds: OmieCredentials,
+): Promise<OmieFamiliaProduto[]> {
+  const PER_PAGE = 50;
+  const all: OmieFamiliaProduto[] = [];
+  let page = 1;
+
+  while (true) {
+    try {
+      const res = await omiePost<
+        { pagina: number; registros_por_pagina: number },
+        ListarFamiliasResponse
+      >(
+        "/geral/familiasproduto/",
+        "ListarFamilias",
+        creds,
+        { pagina: page, registros_por_pagina: PER_PAGE },
+      );
+      all.push(...(res.famCadastro ?? []));
+      if (page >= res.total_de_paginas || (res.famCadastro ?? []).length === 0) break;
+      page++;
+    } catch (err) {
+      if (isOmieEmptyError(err)) break;
+      throw err;
+    }
+  }
+
+  return all;
+}

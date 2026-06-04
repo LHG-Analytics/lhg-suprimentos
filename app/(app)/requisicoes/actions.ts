@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { incluirProduto, alterarProduto, isOmieRedundantError } from "@/lib/omie/client";
+import { incluirProduto, alterarProduto, isOmieRedundantError, listFamiliasProduto } from "@/lib/omie/client";
 import { incluirReq, upsertReq, consultarReq, toOmieId } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
@@ -380,27 +380,22 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
 
 // ── listarFamiliasOmie ────────────────────────────────────────────────────────
 
-export interface FamiliaOmie { descricao: string; codigo: number | null; }
+export interface FamiliaOmie { descricao: string; codigo: number; }
 
-/** Retorna famílias Omie distintas do catálogo com código numérico. */
-export async function listarFamiliasOmie(): Promise<FamiliaOmie[]> {
-  const supabase = await createClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (supabase as any)
-    .from("produtos")
-    .select("familia_omie, codigo_familia_omie")
-    .not("familia_omie", "is", null)
-    .order("familia_omie");
+/**
+ * Busca famílias de produto do Omie usando as credenciais da unidade.
+ * Retorna lista com codigo (integer) e descricao para usar no select.
+ */
+export async function listarFamiliasOmie(unidadeId: string): Promise<FamiliaOmie[]> {
+  const unidadeCreds = await getCredsUnidade(unidadeId);
+  if (!unidadeCreds) return [];
 
-  const seen = new Set<string>();
-  const result: FamiliaOmie[] = [];
-  for (const p of (data ?? [])) {
-    const desc = p.familia_omie as string | null;
-    if (!desc || seen.has(desc)) continue;
-    seen.add(desc);
-    result.push({ descricao: desc, codigo: (p.codigo_familia_omie as number | null) ?? null });
+  try {
+    const familias = await listFamiliasProduto(unidadeCreds.creds);
+    return familias.map(f => ({ codigo: f.codigo, descricao: f.descricao }));
+  } catch {
+    return [];
   }
-  return result;
 }
 
 // ── criarProdutoOmie ──────────────────────────────────────────────────────────
