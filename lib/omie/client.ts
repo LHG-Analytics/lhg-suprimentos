@@ -1368,7 +1368,8 @@ interface ListarFamiliasResponse {
 
 /**
  * Lista todas as famílias de produto cadastradas no Omie.
- * Endpoint: POST /geral/familiasproduto/ — call: ListarFamilias
+ * Endpoint: POST /geral/familiasproduto/ — call: PesquisarFamilias
+ * Parâmetro: famListarRequest / Retorno: famListarResponse
  */
 export async function listFamiliasProduto(
   creds: OmieCredentials,
@@ -1379,17 +1380,32 @@ export async function listFamiliasProduto(
 
   while (true) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await omiePost<
-        { pagina: number; registros_por_pagina: number },
-        ListarFamiliasResponse
+        { famListarRequest: { pagina: number; registros_por_pagina: number } },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        any
       >(
         "/geral/familiasproduto/",
-        "ListarFamilias",
+        "PesquisarFamilias",
         creds,
-        { pagina: page, registros_por_pagina: PER_PAGE },
+        { famListarRequest: { pagina: page, registros_por_pagina: PER_PAGE } },
       );
-      all.push(...(res.famCadastro ?? []));
-      if (page >= res.total_de_paginas || (res.famCadastro ?? []).length === 0) break;
+
+      // Tenta os campos mais prováveis da resposta do Omie
+      const items: OmieFamiliaProduto[] =
+        (res.famCadastro ?? res.cadastros ?? res.famListarResponse ?? []).map(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (f: any) => ({
+            codigo:    f.nCodFamProd ?? f.codigo ?? f.codigo_familia ?? 0,
+            descricao: f.cDescFamProd ?? f.descricao ?? f.nome ?? "",
+          }),
+        ).filter((f: OmieFamiliaProduto) => f.codigo > 0 && f.descricao);
+
+      all.push(...items);
+
+      const totalPags = res.total_de_paginas ?? res.nTotPaginas ?? 1;
+      if (page >= totalPags || items.length === 0) break;
       page++;
     } catch (err) {
       if (isOmieEmptyError(err)) break;
