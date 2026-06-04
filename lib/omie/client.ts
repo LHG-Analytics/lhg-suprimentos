@@ -1391,13 +1391,13 @@ export async function listFamiliasProduto(
   while (true) {
     try {
       const res = await omiePost<
-        { famListarRequest: { pagina: number; registros_por_pagina: number } },
+        { pagina: number; registros_por_pagina: number },
         FamListarResponse
       >(
-        "/geral/familiasproduto/",
+        "/geral/familias/",
         "PesquisarFamilias",
         creds,
-        { famListarRequest: { pagina: page, registros_por_pagina: PER_PAGE } },
+        { pagina: page, registros_por_pagina: PER_PAGE },
       );
 
       const items: OmieFamiliaProduto[] = (res.famCadastro ?? [])
