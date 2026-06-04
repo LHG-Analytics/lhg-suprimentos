@@ -62,6 +62,11 @@ AGENTS.md
 prototype/
 docs/*.pdf
 docs/*.fig
+docs/*.html
+
+# Superpowers brainstorm server — arquivos temporários locais
+.superpowers/
+
 # Specs e planos do superpowers são commitados (docs/superpowers/)
 lhg-suprimentos-kickoff.md
 supabase/.temp/
