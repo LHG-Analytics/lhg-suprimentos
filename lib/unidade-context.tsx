@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 export type UnidadeId =
   | "todas"
   | "lush-ipiranga"
+  | "lush-ipiranga-concavo"
   | "lush-lapa"
   | "andar-de-cima"
   | "altana";
@@ -46,11 +47,19 @@ export const UNIDADES: Unidade[] = [
   },
   {
     id:        "lush-ipiranga",
-    nome:      "Lush Ipiranga",
+    nome:      "Lush Ipiranga (RCC)",
     logo:      "/unidades/lush.png",
-    shortName: "Ipiranga",
+    shortName: "Ipiranga RCC",
     cor:       "#10b981",
     codigo:    "RCC",
+  },
+  {
+    id:        "lush-ipiranga-concavo",
+    nome:      "Lush Ipiranga (CONCAVO)",
+    logo:      "/unidades/lush.png",
+    shortName: "Ipiranga CONCAVO",
+    cor:       "#8b5cf6",
+    codigo:    "CONCAVO",
   },
   {
     id:        "lush-lapa",
