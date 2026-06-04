@@ -365,7 +365,8 @@ export async function criarProdutoOmie(
       familia_omie:      parsed.data.familia,
       valor_unitario:    parsed.data.valorCusto ?? 0,
       codigo_integracao: codigoIntegracao,
-      codigo_interno:    codigoIntegracao,  // obrigatório no Omie
+      codigo_interno:    codigoIntegracao,
+      ncm:               "00000000",  // placeholder — NCM obrigatório no Omie
     });
   } catch (err) {
     return { erro: `Falhou no Omie: ${(err as Error).message}` };
