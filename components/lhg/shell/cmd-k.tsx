@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
   LayoutDashboard, ClipboardList, Scale, ShoppingCart,
-  FileText, Truck, Package, Sparkles, BarChart2, Settings,
+  Truck, Package, Sparkles, BarChart2, Settings,
   Search, Plus, FilePlus2, MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,6 @@ interface CmdKProps {
 const QUICK_ACTIONS = [
   { label: "Nova Requisição",  href: "/requisicoes?novo=1",  icon: ClipboardList,    kbd: "⌘N" },
   { label: "Nova Cotação",     href: "/cotacoes?novo=1",     icon: FilePlus2,        kbd: null  },
-  { label: "Registrar NF",     href: "/notas-fiscais?novo=1",icon: FileText,         kbd: null  },
   { label: "Abrir Chat IA",    href: "/chat",               icon: MessageSquarePlus, kbd: null  },
 ] as const;
 
@@ -36,7 +35,6 @@ const QUICK_LINKS = [
   { label: "Requisições",         href: "/requisicoes",  icon: ClipboardList },
   { label: "Cotações em aberto",  href: "/cotacoes",     icon: Scale },
   { label: "Pedidos de compra",   href: "/pedidos",      icon: ShoppingCart },
-  { label: "Entrada de NF",       href: "/nf",           icon: FileText },
   { label: "Fornecedores",        href: "/fornecedores", icon: Truck },
   { label: "Produtos",            href: "/produtos",     icon: Package },
   { label: "Assistente IA",       href: "/chat",         icon: Sparkles },

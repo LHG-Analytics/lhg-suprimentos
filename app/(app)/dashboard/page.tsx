@@ -84,7 +84,6 @@ async function fetchKpis(supabase: SupabaseClient) {
     { data: economiaRows },
     { count: pendAprov },
     { count: pendAprovPrev },
-    { count: nfsPendentes },
   ] = await Promise.all([
     supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null),
     supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null),
@@ -93,7 +92,6 @@ async function fetchKpis(supabase: SupabaseClient) {
     supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null),
     supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao"),
     supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso),
-    supabase.from("notas_fiscais").select("*", { count: "exact", head: true }).eq("status", "conferencia"),
   ]);
 
   const valor     = (valorRows     ?? []).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
@@ -111,7 +109,6 @@ async function fetchKpis(supabase: SupabaseClient) {
     pendAprov:     pendAprov     ?? 0,
     pendAprovPrev: pendAprovPrev ?? 0,
     deltaPendAprov: pendAprovPrev ? (((pendAprov ?? 0) - pendAprovPrev) / pendAprovPrev) * 100 : null,
-    nfsPendentes:  nfsPendentes  ?? 0,
   };
 }
 
@@ -180,7 +177,6 @@ async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
   const [
     { data: cotsPendentes },
     { data: pedsPendentes },
-    { data: nfsConferencia },
     { data: pedErroOmie },
   ] = await Promise.all([
     // Cotações aguardando cotação de preços
@@ -199,14 +195,6 @@ async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
       .eq("status", "aguardando_aprovacao")
       .order("created_at", { ascending: true })
       .limit(4),
-
-    // NFs em conferência (divergências pendentes)
-    supabase
-      .from("notas_fiscais")
-      .select("id, numero, valor_total, created_at, pedidos(numero)")
-      .eq("status", "conferencia")
-      .order("created_at", { ascending: true })
-      .limit(3),
 
     // Pedidos com erro de sincronização Omie
     supabase
@@ -244,20 +232,6 @@ async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
       valor:     p.valor_total,
       tempo:     p.created_at,
       cta:       "Aprovar",
-    });
-  }
-
-  for (const n of nfsConferencia ?? []) {
-    const pedNro = (n.pedidos as { numero: string } | null)?.numero;
-    acoes.push({
-      id:        `nf-${n.id}`,
-      tipo:      "nf",
-      descricao: "NF com divergência aguardando conferência em",
-      alvo:      n.numero ?? pedNro ?? "NF",
-      alvoHref:  "/notas-fiscais",
-      valor:     n.valor_total,
-      tempo:     n.created_at,
-      cta:       "Conferir",
     });
   }
 
@@ -464,7 +438,7 @@ export default async function DashboardPage({
   ]);
 
   // Valores de fallback para cada seção
-  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, nfsPendentes: 0 };
+  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null };
   const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
   const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [] };
   const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
@@ -517,14 +491,6 @@ export default async function DashboardPage({
           prev={kpis.pendAprovPrev.toString()}
           meta="< 24h"
           metaLabel="SLA MÉDIO"
-          mono
-        />
-        <KpiCard
-          label="NFs AGUARDANDO CONF."
-          value={kpis.nfsPendentes.toString()}
-          accent={kpis.nfsPendentes > 0 ? "negative" : "neutral"}
-          meta="0"
-          metaLabel="META"
           mono
         />
         {/* Total Insumos — gasto real vs orçamento de produtos da planilha */}

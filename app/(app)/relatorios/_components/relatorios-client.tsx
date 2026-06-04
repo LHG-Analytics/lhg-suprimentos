@@ -11,8 +11,7 @@ import {
   CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
-  TrendingUp, TrendingDown, DollarSign, Package,
-  FileCheck, Download, CheckCircle2, Clock, XCircle,
+  TrendingDown, DollarSign, Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/utils";
@@ -26,7 +25,6 @@ interface Resumo {
   mediaMensal:    number;
   ticketMedio:    number;
   totalPedidos:   number;
-  nfsLancadas:    number;
 }
 
 interface FornecedorRow {
@@ -40,18 +38,11 @@ interface EvolucaoMes {
   mes: string; key: string; gasto: number; economia: number;
 }
 
-interface NFRow {
-  id: string; numero: string | null; pedidoNumero: string;
-  fornecedor: string; valorTotal: number | null; emissao: string | null;
-  lancadaOmie: boolean; status: string; createdAt: string;
-}
-
 interface Props {
   resumo:      Resumo;
   fornecedores: FornecedorRow[];
   categorias:  CategoriaRow[];
   evolucao:    EvolucaoMes[];
-  nfs:         NFRow[];
 }
 
 // ── Paleta de cores para o gráfico de pizza ───────────────────────────────────
@@ -105,32 +96,10 @@ function KpiMini({ label, value, sub, icon: Icon, accent }: {
   );
 }
 
-// ── Export CSV ────────────────────────────────────────────────────────────────
-function exportCSV(rows: NFRow[]) {
-  const header = "NF,Pedido,Fornecedor,Valor,Emissão,Status Omie";
-  const lines  = rows.map((r) =>
-    [
-      r.numero ?? "—",
-      r.pedidoNumero,
-      `"${r.fornecedor}"`,
-      (r.valorTotal ?? 0).toFixed(2).replace(".", ","),
-      r.emissao ?? "—",
-      r.lancadaOmie ? "Lançada" : "Pendente",
-    ].join(","),
-  );
-  const blob = new Blob([[header, ...lines].join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `nfs-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, nfs }: Props) {
-  const [abaAtiva, setAbaAtiva] = useState<"evolucao" | "fornecedores" | "nfs">("evolucao");
+export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao }: Props) {
+  const [abaAtiva, setAbaAtiva] = useState<"evolucao" | "fornecedores">("evolucao");
 
   const totalCategorias = categorias.reduce((s, c) => s + c.total, 0);
 
@@ -167,13 +136,6 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
           sub={`Ticket médio ${formatBRL(resumo.ticketMedio)}`}
           icon={Package}
           accent="neutral"
-        />
-        <KpiMini
-          label="NFs lançadas Omie"
-          value={resumo.nfsLancadas.toString()}
-          sub={`de ${nfs.length} registradas`}
-          icon={FileCheck}
-          accent={resumo.nfsLancadas < nfs.length ? "red" : "green"}
         />
       </div>
 
@@ -270,8 +232,8 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Tabs */}
         <div className="flex border-b border-border/80 px-5 pt-4 gap-5">
-          {(["evolucao", "fornecedores", "nfs"] as const).map((tab) => {
-            const labelsFinal = { evolucao: "Top fornecedores", fornecedores: "Por fornecedor", nfs: "NFs registradas" };
+          {(["evolucao", "fornecedores"] as const).map((tab) => {
+            const labelsFinal = { evolucao: "Top fornecedores", fornecedores: "Por fornecedor" };
             return (
               <button
                 key={tab}
@@ -387,67 +349,6 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao, n
             </div>
           )}
 
-          {/* NFs registradas */}
-          {abaAtiva === "nfs" && (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs text-muted-foreground">{nfs.length} notas fiscais registradas</span>
-                <button
-                  onClick={() => exportCSV(nfs)}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-lg px-3 py-1.5"
-                >
-                  <Download size={12} />
-                  Exportar CSV
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                {nfs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/60 py-8 text-center">Nenhuma NF registrada</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        {["NF", "Pedido", "Fornecedor", "Valor", "Emissão", "Omie"].map((h) => (
-                          <th key={h} className="text-left text-[11px] uppercase tracking-wider text-muted-foreground font-medium pb-3 pr-4 whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {nfs.map((n) => (
-                        <tr key={n.id} className="border-b border-border/40 hover:bg-muted/40 transition-colors">
-                          <td className="py-2.5 pr-4 font-mono text-foreground/80 text-xs">{n.numero ?? "—"}</td>
-                          <td className="py-2.5 pr-4 font-mono text-muted-foreground text-xs">{n.pedidoNumero}</td>
-                          <td className="py-2.5 pr-4 text-foreground/80 max-w-[180px] truncate">{n.fornecedor}</td>
-                          <td className="py-2.5 pr-4 font-mono text-foreground whitespace-nowrap">
-                            {n.valorTotal != null ? formatBRL(n.valorTotal) : "—"}
-                          </td>
-                          <td className="py-2.5 pr-4 text-muted-foreground text-xs whitespace-nowrap">
-                            {n.emissao ? n.emissao.slice(0, 10).split("-").reverse().join("/") : "—"}
-                          </td>
-                          <td className="py-2.5">
-                            {n.lancadaOmie ? (
-                              <span className="flex items-center gap-1 text-xs text-emerald-400">
-                                <CheckCircle2 size={12} /> Lançada
-                              </span>
-                            ) : n.status === "erro_omie" ? (
-                              <span className="flex items-center gap-1 text-xs text-red-400">
-                                <XCircle size={12} /> Erro
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
-                                <Clock size={12} /> Pendente
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

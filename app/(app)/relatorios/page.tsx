@@ -6,7 +6,7 @@
  */
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatBRL, formatDate } from "@/lib/utils";
+import { formatBRL } from "@/lib/utils";
 import { RelatoriosClient } from "./_components/relatorios-client";
 
 export const metadata = { title: "Relatórios" };
@@ -30,7 +30,6 @@ async function fetchResumo(supabase: SupabaseClient) {
   const [
     { data: pedidosAll },
     { data: cotacoesAll },
-    { count: nfsLancadas },
     { data: economiaRows },
   ] = await Promise.all([
     // Pedidos dos últimos 12 meses (finalizados + recebidos)
@@ -45,13 +44,6 @@ async function fetchResumo(supabase: SupabaseClient) {
       .from("cotacoes")
       .select("economia, economia_pct, created_at")
       .eq("status", "aprovado")
-      .gte("created_at", start12),
-
-    // Total de NFs lançadas no Omie
-    supabase
-      .from("notas_fiscais")
-      .select("*", { count: "exact", head: true })
-      .eq("lancada_no_omie", true)
       .gte("created_at", start12),
 
     // Economia últimos 3 meses separada para comparação
@@ -75,7 +67,6 @@ async function fetchResumo(supabase: SupabaseClient) {
     mediaMensal,
     ticketMedio,
     totalPedidos: (pedidosAll ?? []).length,
-    nfsLancadas: nfsLancadas ?? 0,
   };
 }
 
@@ -182,33 +173,6 @@ async function fetchEvolucaoMensal(supabase: SupabaseClient) {
   });
 }
 
-async function fetchUltimasNFs(supabase: SupabaseClient) {
-  const { data } = await supabase
-    .from("notas_fiscais")
-    .select(`
-      id, numero, chave_acesso, valor_total, emissao, lancada_no_omie, status, created_at,
-      pedidos ( numero, fornecedores ( nome_fantasia, razao_social ) )
-    `)
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  return (data ?? []).map((nf) => {
-    const ped  = nf.pedidos as { numero: string; fornecedores: { nome_fantasia: string | null; razao_social: string } | null } | null;
-    const forn = ped?.fornecedores;
-    return {
-      id:            nf.id,
-      numero:        nf.numero,
-      pedidoNumero:  ped?.numero ?? "—",
-      fornecedor:    forn?.nome_fantasia ?? forn?.razao_social ?? "—",
-      valorTotal:    nf.valor_total,
-      emissao:       nf.emissao,
-      lancadaOmie:   nf.lancada_no_omie ?? false,
-      status:        nf.status,
-      createdAt:     nf.created_at,
-    };
-  });
-}
-
 // ── Página ─────────────────────────────────────────────────────────────────────
 
 export default async function RelatoriosPage() {
@@ -216,12 +180,11 @@ export default async function RelatoriosPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [resumo, fornecedores, categorias, evolucao, nfs] = await Promise.all([
+  const [resumo, fornecedores, categorias, evolucao] = await Promise.all([
     fetchResumo(supabase),
     fetchGastosPorFornecedor(supabase),
     fetchGastosPorCategoria(supabase),
     fetchEvolucaoMensal(supabase),
-    fetchUltimasNFs(supabase),
   ]);
 
   return (
@@ -230,7 +193,6 @@ export default async function RelatoriosPage() {
       fornecedores={fornecedores}
       categorias={categorias}
       evolucao={evolucao}
-      nfs={nfs}
     />
   );
 }

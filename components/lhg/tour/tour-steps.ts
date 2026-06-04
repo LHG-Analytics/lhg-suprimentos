@@ -3,7 +3,7 @@
  * Definição declarativa dos passos do tour interativo.
  * Cada passo especifica: alvo CSS, posição do balão, página de destino.
  *
- * Fluxo coberto: Requisição → Cotação → Pedido → Nota Fiscal → Recebimento Omie
+ * Fluxo coberto: Requisição → Cotação → Pedido
  */
 
 export type TourPosition = "center" | "right" | "bottom" | "top" | "left";
@@ -22,7 +22,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id:          "welcome",
     title:       "Bem-vindo ao LHG Suprimentos!",
-    description: "Em menos de 2 minutos você vai conhecer o fluxo completo de compras: Requisição → Cotação → Pedido → NF. Vamos lá?",
+    description: "Em menos de 2 minutos você vai conhecer o fluxo completo de compras: Requisição → Cotação → Pedido. Vamos lá?",
     position:    "center",
     emoji:       "👋",
   },
@@ -72,18 +72,9 @@ export const TOUR_STEPS: TourStep[] = [
     emoji:       "🛒",
   },
   {
-    id:          "nav-nf",
-    title:       "Passo 4 — Nota Fiscal",
-    description: "Ao receber a mercadoria, lance a Nota Fiscal do fornecedor aqui. O sistema vincula ao pedido e conclui o recebimento no Omie automaticamente.",
-    target:      'a[href="/notas-fiscais"]',
-    position:    "right",
-    page:        "/pedidos",
-    emoji:       "🧾",
-  },
-  {
     id:          "done",
     title:       "Pronto! Você já domina o fluxo.",
-    description: "Requisição → Cotação → Pedido → NF. Ciclo completo, do pedido ao recebimento no ERP. Qualquer dúvida, clique no ❓ da barra superior para rever este guia.",
+    description: "Requisição → Cotação → Pedido. Ciclo completo de compras. Qualquer dúvida, clique no ❓ da barra superior para rever este guia.",
     position:    "center",
     emoji:       "🚀",
   },
