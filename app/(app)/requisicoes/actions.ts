@@ -144,85 +144,11 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
     )
   );
 
-  // Enviar ao Omie quando não há produto novo
-  let omieAviso: string | undefined;
-  let omieOk = false;
-  if (!temProdutoNovo) {
-    try {
-      const unidadeCreds = await getCredsUnidade(unidade_ids[0]);
-      if (!unidadeCreds) {
-        omieAviso = "Unidade sem credenciais Omie — requisição criada somente na plataforma";
-      } else {
-        const { creds } = unidadeCreds;
-        // Categoria: escolhida pelo usuário no form → senão usa o padrão da unidade
-        const codCateg = parsed.data.codCateg || unidadeCreds.codCateg;
-        if (!codCateg) {
-          omieAviso = "Configure omie_categoria_compras na unidade (ou selecione no formulário)";
-        } else {
-        const { data: itensReq } = await supabase
-          .from("requisicao_itens")
-          .select("id, produto_id, quantidade, produtos(omie_codigo, preco_custo)")
-          .eq("requisicao_id", req.id);
-
-        const omieItens = (itensReq ?? []).map((i) => {
-          const prod = i.produtos as { omie_codigo: string | null; preco_custo: number | null } | null;
-          // Usa preco_custo como preço estimado — Omie exige nValUnit > 0 para converter em Pedido de Compra
-          const precoUnit = prod?.preco_custo && prod.preco_custo > 0 ? prod.preco_custo : 0.01;
-          return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit };
-        });
-
-        // dtSugestao é obrigatório no Omie — usa data de hoje + 7 dias como prazo sugerido
-        const dtSugestao = (() => {
-          const d = new Date();
-          d.setDate(d.getDate() + 7);
-          return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-        })();
-
-        console.info("[criarRequisicao] Enviando ao Omie — codCateg:", codCateg, "codInt:", toOmieId(req.id), "dt:", dtSugestao);
-        const omieCode = await incluirReq(creds, { codCateg, codIntReqCompra: toOmieId(req.id), dtSugestao, obsReqCompra: titulo, ItensReqCompra: omieItens });
-        console.info("[criarRequisicao] Omie respondeu — codReqCompra:", omieCode);
-
-        if (omieCode > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString(), omie_categoria: codCateg } as any).eq("id", req.id);
-          omieOk = true;
-        } else {
-          // Omie retornou 0 — sem erro mas sem criar
-          omieAviso = `Omie não criou a requisição (codReqCompra=0). codCateg=${codCateg}`;
-        }
-        } // fecha else do codCateg
-      } // fecha else do unidadeCreds
-    } catch (err) {
-      const msg = (err as Error).message;
-      console.error("[criarRequisicao] Omie sync:", msg);
-
-      if (isOmieRedundantError(err)) {
-        // REDUNDANT = o omiePost fez retry e o Omie recusou por duplicata.
-        // Pode significar que a 1ª chamada chegou ao Omie — vamos verificar.
-        try {
-          const unidadeCreds2 = await getCredsUnidade(unidade_ids[0]);
-          if (unidadeCreds2) {
-            const codInt = toOmieId(req.id);
-            const omieCode = await consultarReq(unidadeCreds2.creds, codInt);
-            if (omieCode > 0) {
-              await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
-              omieOk = true;
-              console.info("[criarRequisicao] REDUNDANT — req confirmada no Omie:", omieCode);
-            } else {
-              // ConsultarReq não encontrou nada = req NÃO está no Omie
-              omieAviso = "Omie retornou REDUNDANT mas a requisição não foi encontrada. Aguarde 60s e tente novamente.";
-            }
-          }
-        } catch {
-          // ConsultarReq lançou exceção = req NÃO está no Omie
-          omieAviso = "Omie retornou REDUNDANT mas a requisição não foi encontrada. Aguarde 60s e tente novamente.";
-          console.error("[criarRequisicao] REDUNDANT sem req no Omie");
-        }
-      } else {
-        omieAviso = `Falhou no Omie: ${msg}`;
-      }
-    }
-  }
+  // Requisição NÃO é enviada ao Omie.
+  // Omie não tem API para converter Req → Pedido de Compra mantendo vínculo.
+  // O Pedido de Compra é criado diretamente via IncluirPedCompra na aprovação da cotação.
+  const omieAviso: string | undefined = undefined;
+  const omieOk = false;
 
   revalidatePath("/requisicoes");
   return { id: req.id, numero: req.numero as string, omieAviso, omieOk };

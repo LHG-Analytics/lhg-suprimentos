@@ -286,7 +286,6 @@ export async function pushPedidoOmie(
       nQtdeParc,
       cCodCateg,
       nCodCC,
-      nCodReq,     // vincula ao número da Requisição no Omie (conecta no kanban)
       cNumPedido:  pedido.numero,
       cObs:        obsTexto,
       cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
