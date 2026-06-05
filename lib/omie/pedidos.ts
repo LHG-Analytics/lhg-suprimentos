@@ -80,19 +80,34 @@ export async function incluirPedCompra(
   return res.nCodPed ?? 0;
 }
 
+// ── UpsertPedCompra — estrutura DIFERENTE do Incluir ──────────────────────────
+// Documentação: cabecalho_upsert / frete_upsert / produtos_upsert
+
+export interface OmiePedParamUpsert {
+  cabecalho_upsert: Omit<OmiePedCabecalhoIncluir, never>;  // mesmos campos, nome diferente
+  frete_upsert?:   OmiePedFreteIncluir;
+  produtos_upsert: OmiePedItemIncluir[];
+}
+
 /**
  * Cria ou atualiza um Pedido de Compra no Omie (idempotente por cCodIntPed).
- * Usado como fallback quando IncluirPedCompra retorna REDUNDANT.
+ * ATENÇÃO: usa cabecalho_upsert / frete_upsert / produtos_upsert (não _incluir).
  */
 export async function upsertPedCompra(
   creds: OmieCredentials,
   param: OmiePedParamIncluir,
 ): Promise<number> {
-  const res = await omiePost<OmiePedParamIncluir, IncluirPedCompraResponse>(
+  // Converte do formato "incluir" para o formato "upsert" que a API exige
+  const upsertParam: OmiePedParamUpsert = {
+    cabecalho_upsert: param.cabecalho_incluir,
+    frete_upsert:     param.frete_incluir,
+    produtos_upsert:  param.produtos_incluir,
+  };
+  const res = await omiePost<OmiePedParamUpsert, IncluirPedCompraResponse>(
     "/produtos/pedidocompra/",
     "UpsertPedCompra",
     creds,
-    param,
+    upsertParam,
   );
   return res.nCodPed ?? 0;
 }
