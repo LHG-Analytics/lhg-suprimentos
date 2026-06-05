@@ -11,7 +11,7 @@
 import Image from "next/image";
 
 // ── Configuração — altere apenas aqui ─────────────────────────────────────────
-const LOGO_SRC   = "/logo-supplies.png";  // caminho relativo a /public
+const LOGO_SRC   = "/logo-supplies.webp";  // caminho relativo a /public
 const LOGO_WIDTH = 48;                    // largura em px para height=32 (proporção 1.5 do arquivo 1536×1024)
 const LOGO_ALT   = "LHG Suprimentos";
 

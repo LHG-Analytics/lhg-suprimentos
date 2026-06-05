@@ -21,11 +21,11 @@ import { signInWithGoogle } from "../actions";
 // 5 logos repetidas em ordem embaralhada para preencher as 4 colunas do efeito 3D.
 // Para trocar/adicionar: coloque novos arquivos em public/unidades/ e inclua aqui.
 const BASE_LOGOS = [
-  "/logo-supplies.png",      // LHG Suprimentos
-  "/unidades/lush.png",      // Lush Ipiranga / Lapa
-  "/unidades/adc.png",       // Andar de Cima
-  "/unidades/altana.png",    // Altana
-  "/unidades/tout.png",      // Tout
+  "/logo-supplies.webp",      // LHG Suprimentos
+  "/unidades/lush.webp",      // Lush Ipiranga / Lapa
+  "/unidades/adc.webp",       // Andar de Cima
+  "/unidades/altana.webp",    // Altana
+  "/unidades/tout.webp",      // Tout
 ];
 
 // Repete e embaralha para ~40 itens (4 colunas × ~10 cards cada)

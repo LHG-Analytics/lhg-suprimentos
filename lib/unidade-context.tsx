@@ -42,14 +42,14 @@ export const UNIDADES: Unidade[] = [
   {
     id:        "todas",
     nome:      "Todas as unidades",
-    logo:      "/logo-supplies.png",
+    logo:      "/logo-supplies.webp",
     shortName: "Todas",
     cor:       "#71717a",
   },
   {
     id:        "lush-ipiranga",
     nome:      "Lush Ipiranga",
-    logo:      "/unidades/lush.png",
+    logo:      "/unidades/lush.webp",
     shortName: "Ipiranga",
     cor:       "#10b981",
     codigo:    "RCC",
@@ -57,7 +57,7 @@ export const UNIDADES: Unidade[] = [
   {
     id:        "lush-ipiranga-concavo",
     nome:      "Lush Ipiranga",
-    logo:      "/unidades/lush.png",
+    logo:      "/unidades/lush.webp",
     shortName: "Ipiranga",
     cor:       "#8b5cf6",
     codigo:    "CONCAVO",
@@ -65,21 +65,21 @@ export const UNIDADES: Unidade[] = [
   {
     id:        "lush-lapa",
     nome:      "Lush Lapa",
-    logo:      "/unidades/lush.png",
+    logo:      "/unidades/lush.webp",
     shortName: "Lapa",
     cor:       "#38bdf8",
   },
   {
     id:        "andar-de-cima",
     nome:      "Andar de Cima",
-    logo:      "/unidades/adc.png",
+    logo:      "/unidades/adc.webp",
     shortName: "Andar de Cima",
     cor:       "#f59e0b",
   },
   {
     id:        "altana",
     nome:      "Altana",
-    logo:      "/unidades/altana.png",
+    logo:      "/unidades/altana.webp",
     shortName: "Altana",
     cor:       "#a78bfa",
     disabled:  true,
@@ -87,8 +87,8 @@ export const UNIDADES: Unidade[] = [
   {
     id:        "lhg-holding",
     nome:      "LHG Holding",
-    // Coloque o arquivo em: public/unidades/lhg-holding.png
-    logo:      "/unidades/lhg-holding.png",
+    // Coloque o arquivo em: public/unidades/lhg-holding.webp
+    logo:      "/unidades/lhg-holding.webp",
     shortName: "Holding",
     cor:       "#6366f1",
   },
