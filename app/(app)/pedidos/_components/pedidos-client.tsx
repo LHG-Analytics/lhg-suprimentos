@@ -569,7 +569,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
   const [busca,        setBusca]        = useState("");
   const buscaDebounced = useDebounce(busca, 300);
   const [selectedLhg,  setSelectedLhg]  = useState<Pedido | null>(null);
-  const [selectedOmie, setSelectedOmie] = useState<OmiePedido | null>(null);
   const [page,         setPage]         = useState(0);
   const [dataInicio,   setDataInicio]   = useState<string>("");
   const [dataFim,      setDataFim]      = useState<string>("");
@@ -624,17 +623,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       })
       .map(p => ({ kind: "lhg", data: p }));
 
-    const omieRows: RowOmie[] = omie_pedidos
-      .filter(p => {
-        return !q ||
-          (p.fornecedor_nome?.toLowerCase().includes(q) ?? false) ||
-          (p.numero?.toString().includes(q) ?? false) ||
-          (p.numero_pedido_forn?.toLowerCase().includes(q) ?? false) ||
-          (p.itens?.some(item => item.descricao.toLowerCase().includes(q)) ?? false);
-      })
-      .map(p => ({ kind: "omie", data: p }));
-
-    // Filtro por data (created_at / data_pedido)
+    // Filtro por data
     const inicio = dataInicio ? new Date(dataInicio + "T00:00:00") : null;
     const fim    = dataFim    ? new Date(dataFim    + "T23:59:59") : null;
 
@@ -647,26 +636,10 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         })
       : lhgRows;
 
-    const omieFiltrados = inicio || fim
-      ? omieRows.filter(r => {
-          const d = new Date(r.data.data_pedido ?? r.data.omie_sincronizado_em);
-          if (inicio && d < inicio) return false;
-          if (fim    && d > fim)    return false;
-          return true;
-        })
-      : omieRows;
-
-    // Ordena por data desc
-    return [...lhgFiltrados, ...omieFiltrados].sort((a, b) => {
-      const dateA = a.kind === "lhg"
-        ? new Date(a.data.created_at).getTime()
-        : new Date(a.data.data_pedido ?? a.data.omie_sincronizado_em).getTime();
-      const dateB = b.kind === "lhg"
-        ? new Date(b.data.created_at).getTime()
-        : new Date(b.data.data_pedido ?? b.data.omie_sincronizado_em).getTime();
-      return dateB - dateA;
-    });
-  }, [pedidosIniciais, omie_pedidos, buscaDebounced, dataInicio, dataFim]);
+    return lhgFiltrados.sort((a, b) =>
+      new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime(),
+    );
+  }, [pedidosIniciais, buscaDebounced, dataInicio, dataFim]);
 
   // ── Paginação ─────────────────────────────────────────────────────────────────
   const PAGE_SIZE   = 50;
@@ -821,7 +794,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           <span>
             Custo total:{" "}
             <span className="font-mono font-semibold text-foreground">
-              {formatBRL(rows.reduce((s, r) => s + (r.kind === "lhg" ? r.data.valor_total : (r.data.valor_total ?? 0)), 0))}
+              {formatBRL(rows.reduce((s, r) => s + (r.data.valor_total ?? 0), 0))}
             </span>
           </span>
           <button
@@ -916,52 +889,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                     </div>
                   </li>
                 );
-              } else {
-                // Omie
-                const p = row.data;
-                return (
-                  <li
-                    key={`omie-${p.id}`}
-                    onClick={() => setSelectedOmie(p)}
-                    className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer items-center"
-                  >
-                    {/* Pedido # */}
-                    <div className="font-mono text-[11px] text-muted-foreground truncate">
-                      {p.numero ? `#${p.numero}` : `c.${p.omie_codigo}`}
-                    </div>
-
-                    {/* Fornecedor + itens */}
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate leading-tight">
-                        {p.fornecedor_nome ?? "Fornecedor desconhecido"}
-                      </div>
-                      {/* Itens do pedido Omie (produtos_consulta) */}
-                      {p.itens && p.itens.length > 0 ? (
-                        <div className="text-[11px] text-muted-foreground/60 mt-0.5 truncate">
-                          {p.itens.slice(0, 2).map(i => i.descricao).filter(Boolean).join(" · ")}
-                          {p.itens.length > 2 && ` +${p.itens.length - 2}`}
-                        </div>
-                      ) : p.numero_pedido_forn ? (
-                        <div className="text-[11px] text-muted-foreground/60 mt-0.5">Nº forn: {p.numero_pedido_forn}</div>
-                      ) : null}
-                    </div>
-
-                    {/* Data */}
-                    <div className="hidden md:block text-[12px] text-muted-foreground">
-                      {p.data_pedido ? formatDate(p.data_pedido) : "—"}
-                    </div>
-
-                    {/* Previsão Entrega */}
-                    <div className="hidden md:block text-[12px] text-muted-foreground">
-                      {p.data_previsao ? formatDate(p.data_previsao) : "—"}
-                    </div>
-
-                    {/* Valor */}
-                    <div className="font-mono text-sm font-semibold text-foreground">
-                      {p.valor_total !== null ? formatBRL(p.valor_total) : "—"}
-                    </div>
-                  </li>
-                );
               }
             })}
           </ul>
@@ -1000,13 +927,6 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
           pedido={selectedLhg}
           onClose={() => setSelectedLhg(null)}
           onAtualizado={handleAtualizado}
-        />
-      )}
-      {selectedOmie && (
-        <ModalOmiePedido
-          pedido={selectedOmie}
-          onClose={() => setSelectedOmie(null)}
-          onSync={() => router.refresh()}
         />
       )}
     </div>
