@@ -230,17 +230,37 @@ export async function pushPedidoOmie(
     return { omie_codigo: pedidoAtual.omie_codigo };
   }
 
+  // Comportamento confirmado pelo suporte Omie:
+  // REDUNDANT = o MESMO cCodIntPed foi enviado 2x em menos de 60s.
+  // A 1ª chamada CRIA o pedido. A 2ª retorna REDUNDANT.
+  // Solução: guardar o cCodIntPed usado, esperar 60s, consultar com o MESMO código.
+
   const foiRedundant = pedidoAtual?.omie_erro?.includes("REDUNDANT") || pedidoAtual?.omie_erro?.includes("duplicada");
-  const cCodIntPed   = foiRedundant
+
+  // Extrai o cCodIntPed da tentativa anterior salvo no omie_erro (formato: "... | codInt=XXX")
+  const lastCodIntPed = pedidoAtual?.omie_erro?.match(/\|codInt=([^\s]+)/)?.[1];
+
+  // Na 1ª tentativa: usa pedidoId. No retry: usa código único novo (nunca o mesmo que causou REDUNDANT)
+  const cCodIntPed = foiRedundant
     ? `${pedidoId.slice(0, 18)}-${Date.now().toString(36)}`
     : pedidoId;
 
-  // Omie hasheia nCodFor+nCodProd+nQtde+nValUnit+dDtPrevisao para REDUNDANT (ignora cCodIntPed).
-  // No retry, somamos 1 dia à data para mudar o hash e sair do loop.
+  // Se temos o código anterior, tenta ConsultarPedCompra com ele — o pedido pode já existir
+  if (foiRedundant && lastCodIntPed) {
+    console.log(`[pushPedidoOmie] tentando ConsultarPedCompra com código anterior: ${lastCodIntPed}`);
+    const nCodExistente = await consultarPedCompraPorCodIntPed(creds, lastCodIntPed);
+    if (nCodExistente) {
+      const omieRef = String(nCodExistente);
+      await supabase.from("pedidos").update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null }).eq("id", pedidoId);
+      await supabase.from("pedido_eventos").insert({ pedido_id: pedidoId, tipo: "omie", texto: `Pedido recuperado do Omie via ConsultarPedCompra — nCodPed: ${omieRef}`, autor_id: user.id });
+      revalidatePath("/pedidos");
+      return { omie_codigo: omieRef };
+    }
+  }
+
   const dataBase = pedido.entrega_prev
     ? new Date(pedido.entrega_prev + "T12:00:00")
     : new Date(Date.now() + 7 * 86_400_000);
-  if (foiRedundant) dataBase.setDate(dataBase.getDate() + 1);
   const dataPrevisao = dataBase.toLocaleDateString("pt-BR");
 
   const nCodCC    = unidade.omie_conta_corrente    ? Number(unidade.omie_conta_corrente)    : undefined;
@@ -301,36 +321,13 @@ export async function pushPedidoOmie(
       (err.message.includes("REDUNDANT") || err.message.toLowerCase().includes("redundante"));
 
     if (isRedundant) {
-      console.log(`[pushPedidoOmie] REDUNDANT — tentando ConsultarPedCompra(cCodIntPed=${pedidoId}) depois busca paginada por nCodFor=${forn.omie_codigo}`);
-
-      // Estratégia 1: acesso direto pelo cCodIntPed original (sem paginação)
-      let nCodExistente = await consultarPedCompraPorCodIntPed(creds, pedidoId);
-
-      // Estratégia 2: busca paginada por fornecedor (até 5 páginas = 250 pedidos)
-      if (!nCodExistente) {
-        nCodExistente = await recuperarPedCompraPorFornecedor(creds, Number(forn.omie_codigo));
-      }
-
-      if (nCodExistente) {
-        const omieRef = String(nCodExistente);
-        await supabase
-          .from("pedidos")
-          .update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null })
-          .eq("id", pedidoId);
-        await supabase.from("pedido_eventos").insert({
-          pedido_id: pedidoId,
-          tipo:      "omie",
-          texto:     `Pedido recuperado do Omie após REDUNDANT — nCodPed: ${omieRef}`,
-          autor_id:  user.id,
-        });
-        revalidatePath("/pedidos");
-        return { omie_codigo: omieRef };
-      }
-      console.log(`[pushPedidoOmie] Pedido não encontrado no Omie para fornecedor ${forn.omie_codigo}`);
-      // NÃO chamar revalidatePath no REDUNDANT sem recovery — isso causa remount do
-      // componente TentarNovamenteButton e reseta o countdown, causando loop infinito
-      const rawMsgR = err instanceof OmieError ? err.message : "Erro desconhecido";
-      await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: `Omie: ${rawMsgR}` }).eq("id", pedidoId);
+      // Suporte Omie: REDUNDANT = mesmo cCodIntPed enviado 2x em <60s.
+      // A 1ª chamada CRIOU o pedido. Salvamos o cCodIntPed para ConsultarPedCompra após 60s.
+      const rawMsgR = err instanceof OmieError ? err.message : "Consumo redundante";
+      // Guarda o cCodIntPed usado para recuperar na próxima tentativa (após 60s)
+      const errMsg = `Omie: ${rawMsgR} |codInt=${cCodIntPed}`;
+      await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: errMsg }).eq("id", pedidoId);
+      console.log(`[pushPedidoOmie] REDUNDANT com cCodIntPed=${cCodIntPed} — na próxima tentativa (após 60s) usaremos ConsultarPedCompra com este código`);
       return { erro: `Omie: ${rawMsgR}` };
     }
 
