@@ -712,50 +712,99 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                   </span>
                 </div>
 
-                {/* Tabela de itens */}
+                {/* Tabela de itens — grid de 7 colunas: tipo | produto | qtd | unid | custo | obs | del */}
                 <div className="rounded-lg border border-border overflow-hidden">
-                  {/* Header — oculto no mobile */}
-                  <div className="hidden sm:grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-2.5 border-b border-border bg-muted/40">
-                    {["PRODUTO", "QTD", "UNID.", "ÚLT. CUSTO", "OBSERVAÇÃO", ""].map(h => (
-                      <div key={h} className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-medium">
+
+                  {/* Header */}
+                  <div className="hidden sm:grid grid-cols-[48px_1fr_60px_52px_88px_1fr_28px] gap-x-3 px-3 py-2 border-b border-border/80 bg-muted/50">
+                    {["TIPO", "PRODUTO", "QTD", "UNID.", "ÚLT. CUSTO", "OBSERVAÇÃO", ""].map(h => (
+                      <div key={h} className={cn(
+                        "text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60 font-semibold",
+                        h === "QTD" && "text-center",
+                        h === "UNID." && "text-center",
+                        h === "ÚLT. CUSTO" && "text-right",
+                      )}>
                         {h}
                       </div>
                     ))}
                   </div>
 
                   {/* Linhas */}
-                  {form.itens.map((item) => (
-                    <div key={item._key} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                  {form.itens.map((item, rowIdx) => (
+                    <div key={item._key} className={cn(
+                      "border-b border-border/30 last:border-0 transition-colors hover:bg-muted/[0.07]",
+                    )}>
 
-                      {/* ── Mobile: layout empilhado ── */}
-                      <div className="sm:hidden px-3 py-2 space-y-1.5">
-                        {/* Toggle tipo de item */}
-                        <div className="flex gap-1 mb-2">
+                      {/* ── Mobile ── */}
+                      <div className="sm:hidden px-3 py-2.5 space-y-2">
+                        <div className="flex items-center gap-2">
+                          {/* Toggle mobile */}
                           <button
                             type="button"
-                            onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
+                            onClick={() => item.tipo === "catalogo"
+                              ? updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })
+                              : updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })
+                            }
                             className={cn(
-                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              "shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors border",
                               item.tipo === "catalogo"
-                                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25"
-                                : "bg-muted text-muted-foreground hover:text-foreground",
+                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                                : "border-amber-500/40 bg-amber-500/10 text-amber-400",
                             )}
                           >
-                            Catálogo
+                            {item.tipo === "catalogo" ? "Cat" : "Livre"}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                              item.tipo === "livre"
-                                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25"
-                                : "bg-muted text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Texto livre
+                          {item.tipo === "catalogo" ? (
+                            <div className="flex-1 min-w-0">
+                              <ProdutoCombobox value={item.produto} onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })} produtos={produtos} familiaFiltro={familiaFiltro} />
+                            </div>
+                          ) : (
+                            <input type="text" placeholder="Descreva o produto..." value={item.produto_nome_livre} onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })} className="flex-1 h-8 px-2.5 rounded-md bg-background border border-amber-500/30 text-foreground text-[12px] focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/40" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input type="number" min={1} value={item.quantidade} onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })} className="w-16 h-8 rounded-md border border-border bg-transparent px-2 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                          {item.tipo === "livre" ? (
+                            <select value={item.produto_unidade_med} onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })} className="w-20 h-8 px-2 rounded-md bg-background border border-amber-500/30 text-foreground text-[11px] focus:outline-none">
+                              {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          ) : (
+                            <span className="text-[11px] font-mono text-muted-foreground uppercase">{item.produto?.unidade_med ?? "—"}</span>
+                          )}
+                          {item.tipo === "catalogo" && item.produto?.preco_custo && (
+                            <span className="text-[11px] font-mono text-emerald-400 ml-auto">{formatBRL(item.produto.preco_custo)}</span>
+                          )}
+                          <input type="text" placeholder="obs." value={item.observacao} onChange={(e) => updateItem(item._key, { observacao: e.target.value })} className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-2 py-1 text-[12px] placeholder:text-muted-foreground/40 focus:outline-none focus:border-border hover:border-border transition-colors" />
+                          <button type="button" onClick={() => form.itens.length > 1 && removeItem(item._key)} disabled={form.itens.length === 1} className={cn("p-1 rounded transition-colors shrink-0", form.itens.length === 1 ? "text-muted-foreground/20 cursor-not-allowed" : "text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10")}>
+                            <Trash2 size={13} />
                           </button>
                         </div>
+                      </div>
+
+                      {/* ── Desktop — 7 colunas alinhadas com o header ── */}
+                      <div className="hidden sm:grid grid-cols-[48px_1fr_60px_52px_88px_1fr_28px] gap-x-3 px-3 py-1.5 items-center">
+
+                        {/* Col 1 — TIPO: pill toggle */}
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            title={item.tipo === "catalogo" ? "Catálogo — clique para Texto livre" : "Texto livre — clique para Catálogo"}
+                            onClick={() => item.tipo === "catalogo"
+                              ? updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })
+                              : updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })
+                            }
+                            className={cn(
+                              "w-full py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-all",
+                              item.tipo === "catalogo"
+                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                                : "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                            )}
+                          >
+                            {item.tipo === "catalogo" ? "Cat" : "Livre"}
+                          </button>
+                        </div>
+
+                        {/* Col 2 — PRODUTO */}
                         {item.tipo === "catalogo" ? (
                           <ProdutoCombobox
                             value={item.produto}
@@ -764,181 +813,78 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                             familiaFiltro={familiaFiltro}
                           />
                         ) : (
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Descreva o produto não encontrado no catálogo..."
-                              value={item.produto_nome_livre}
-                              onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
-                              className="flex-1 h-9 px-3 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
-                            />
+                          <input
+                            type="text"
+                            placeholder="Descreva o produto..."
+                            value={item.produto_nome_livre}
+                            onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
+                            className="w-full h-7 px-2.5 rounded-md bg-background border border-amber-500/30 text-foreground text-[12px] focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/40"
+                          />
+                        )}
+
+                        {/* Col 3 — QTD */}
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={item.quantidade}
+                          onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
+                          className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-[12px] text-foreground font-mono text-center focus:outline-none focus:border-border hover:border-border transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+
+                        {/* Col 4 — UNID. */}
+                        <div className="flex items-center justify-center">
+                          {item.tipo === "catalogo" ? (
+                            <span className="text-[11px] font-mono text-muted-foreground uppercase tabular-nums">
+                              {item.produto?.unidade_med ?? "—"}
+                            </span>
+                          ) : (
                             <select
                               value={item.produto_unidade_med}
                               onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
-                              className="w-20 h-9 px-2 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500"
+                              className="w-full h-7 px-1 rounded-md bg-background border border-amber-500/30 text-foreground text-[11px] focus:outline-none focus:border-amber-500"
                             >
                               {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
                                 <option key={u} value={u}>{u}</option>
                               ))}
                             </select>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={item.quantidade}
-                            onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
-                            className="w-16 rounded border border-border bg-transparent px-2 py-1.5 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                          <span className="text-[11px] font-mono text-muted-foreground uppercase shrink-0">
-                            {item.tipo === "catalogo" ? (item.produto?.unidade_med ?? "—") : item.produto_unidade_med}
-                          </span>
+                          )}
+                        </div>
+
+                        {/* Col 5 — ÚLT. CUSTO */}
+                        <div className="flex items-center justify-end">
                           {item.tipo === "catalogo" && item.produto?.preco_custo ? (
-                            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                            <span className="text-[11px] font-mono text-emerald-400 tabular-nums">
                               {formatBRL(item.produto.preco_custo)}
                             </span>
-                          ) : null}
-                          <input
-                            type="text"
-                            placeholder="obs. (opcional)"
-                            value={item.observacao}
-                            onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
-                            className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border hover:border-border transition-colors"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => form.itens.length > 1 && removeItem(item._key)}
-                            disabled={form.itens.length === 1}
-                            className={cn(
-                              "flex items-center justify-center rounded p-1 transition-colors shrink-0",
-                              form.itens.length === 1
-                                ? "text-muted-foreground/20 cursor-not-allowed"
-                                : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
-                            )}
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground/25 select-none">—</span>
+                          )}
                         </div>
-                      </div>
 
-                      {/* ── Desktop: grid alinhado com header ── */}
-                      <div className="hidden sm:grid sm:grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5 items-center">
-                          {/* Produto — toggle + campo dentro da mesma célula */}
-                          <div className="min-w-0 flex items-center gap-1">
-                            {/* Mini toggle catálogo/livre */}
-                            <div className="flex shrink-0 rounded overflow-hidden border border-border/60 text-[10px] font-medium">
-                              <button
-                                type="button"
-                                onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
-                                className={cn(
-                                  "px-1.5 py-0.5 transition-colors",
-                                  item.tipo === "catalogo"
-                                    ? "bg-emerald-500/20 text-emerald-400"
-                                    : "bg-transparent text-muted-foreground/50 hover:text-foreground",
-                                )}
-                              >Cat</button>
-                              <button
-                                type="button"
-                                onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
-                                className={cn(
-                                  "px-1.5 py-0.5 transition-colors border-l border-border/60",
-                                  item.tipo === "livre"
-                                    ? "bg-amber-500/20 text-amber-400"
-                                    : "bg-transparent text-muted-foreground/50 hover:text-foreground",
-                                )}
-                              >Livre</button>
-                            </div>
-                            {/* Campo produto */}
-                            {item.tipo === "catalogo" ? (
-                              <div className="flex-1 min-w-0">
-                                <ProdutoCombobox
-                                  value={item.produto}
-                                  onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                                  produtos={produtos}
-                                  familiaFiltro={familiaFiltro}
-                                />
-                              </div>
-                            ) : (
-                              <input
-                                type="text"
-                                placeholder="Descreva o produto..."
-                                value={item.produto_nome_livre}
-                                onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
-                                className="flex-1 min-w-0 h-7 px-2 rounded bg-background border border-amber-500/30 text-foreground text-[12px] focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
-                              />
-                            )}
-                          </div>
+                        {/* Col 6 — OBSERVAÇÃO */}
+                        <input
+                          type="text"
+                          placeholder="(opcional)"
+                          value={item.observacao}
+                          onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
+                          className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-[12px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-border hover:border-border transition-colors"
+                        />
 
-                          {/* Quantidade */}
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={item.quantidade}
-                            onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
-                            className="w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground font-mono text-center focus:outline-none focus:border-border hover:border-border transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-
-                          {/* Unidade de medida */}
-                          <div className="flex items-center justify-center">
-                            {item.tipo === "catalogo" ? (
-                              <span className="text-[11px] font-mono text-muted-foreground uppercase">
-                                {item.produto?.unidade_med ?? "—"}
-                              </span>
-                            ) : (
-                              <select
-                                value={item.produto_unidade_med}
-                                onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
-                                className="w-full h-7 px-1 rounded bg-background border border-amber-500/30 text-foreground text-[11px] focus:outline-none"
-                              >
-                                {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
-                                  <option key={u} value={u}>{u}</option>
-                                ))}
-                              </select>
-                            )}
-                          </div>
-
-                          {/* Último custo */}
-                          <div className="flex items-center justify-end">
-                            {item.tipo === "catalogo" && item.produto?.preco_custo ? (
-                              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                                {formatBRL(item.produto.preco_custo)}
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground/30">—</span>
-                            )}
-                          </div>
-
-                          {/* Observação */}
-                          <input
-                            type="text"
-                            placeholder="(opcional)"
-                            value={item.observacao}
-                            onChange={(e) => updateItem(item._key, { observacao: e.target.value })}
-                            className={cn(
-                              "w-full rounded border border-transparent bg-transparent",
-                              "px-2 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60",
-                              "focus:outline-none focus:border-border hover:border-border transition-colors",
-                              item.tipo === "livre" && "col-start-5",
-                            )}
-                          />
-
-                          {/* Delete */}
-                          <button
-                            type="button"
-                            onClick={() => form.itens.length > 1 && removeItem(item._key)}
-                            disabled={form.itens.length === 1}
-                            className={cn(
-                              "flex items-center justify-center rounded p-1 transition-colors",
-                              form.itens.length === 1
-                                ? "text-muted-foreground/20 cursor-not-allowed"
-                                : "text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10",
-                            )}
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                        {/* Col 7 — DELETE */}
+                        <button
+                          type="button"
+                          onClick={() => form.itens.length > 1 && removeItem(item._key)}
+                          disabled={form.itens.length === 1}
+                          className={cn(
+                            "flex items-center justify-center rounded-md p-1 transition-colors",
+                            form.itens.length === 1
+                              ? "text-muted-foreground/20 cursor-not-allowed"
+                              : "text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10",
+                          )}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
                   ))}
