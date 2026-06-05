@@ -221,7 +221,7 @@ export async function adicionarFornecedorCotacao(
 export async function gerarPedidosDeCotacao(
   cotacaoId: string,
   selecoes: Record<string, string | null>,
-): Promise<{ ok: true; numeroPedidos: number } | { erro: string }> {
+): Promise<{ ok: true; numeroPedidos: number; pedidoIds: string[] } | { erro: string }> {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -284,6 +284,7 @@ export async function gerarPedidosDeCotacao(
     }
 
     if (grupos.size === 0) return { erro: "Nenhum item selecionado" };
+    const pedidoIds: string[] = [];
 
     // Número sequencial PED-YYYY-NNNN
     const year = new Date().getFullYear();
@@ -331,6 +332,7 @@ export async function gerarPedidosDeCotacao(
         console.error("[gerarPedidos] pedido insert error:", pedErr);
         return { erro: pedErr?.message ?? "Erro ao criar pedido" };
       }
+      pedidoIds.push(pedido.id);
 
       const { error: itensInsErr } = await supabase
         .from("pedido_itens")
@@ -365,7 +367,7 @@ export async function gerarPedidosDeCotacao(
 
     revalidatePath("/cotacoes");
     revalidatePath("/pedidos");
-    return { ok: true, numeroPedidos: grupos.size };
+    return { ok: true, numeroPedidos: grupos.size, pedidoIds };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro inesperado ao gerar pedidos";
     console.error("[gerarPedidos] unexpected error:", err);

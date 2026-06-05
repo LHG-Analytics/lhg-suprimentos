@@ -11,6 +11,7 @@ import { X, ShoppingCart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { gerarPedidosDeCotacao } from "../../actions";
+import { pushPedidoOmie } from "@/app/(app)/pedidos/actions";
 
 interface MatrizCell {
   cotacao_item_id: string;
@@ -77,9 +78,19 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
           toast.error(`Erro ao gerar pedidos: ${res.erro}`);
           return;
         }
+
+        // Envia automaticamente ao Omie via UpsertPedCompra (idempotente)
+        let enviados = 0;
+        for (const pedidoId of res.pedidoIds ?? []) {
+          const push = await pushPedidoOmie(pedidoId);
+          if (!("erro" in push)) enviados++;
+        }
+
         toast.success(
           `${res.numeroPedidos} pedido${res.numeroPedidos !== 1 ? "s" : ""} gerado${res.numeroPedidos !== 1 ? "s" : ""}`,
-          { description: "Os pedidos foram criados e aguardam aprovação" },
+          { description: enviados === res.numeroPedidos
+              ? `${enviados} enviado${enviados !== 1 ? "s" : ""} ao Omie com sucesso`
+              : `${enviados}/${res.numeroPedidos} enviado${enviados !== 1 ? "s" : ""} ao Omie — use "Tentar novamente" nos demais` },
         );
         onClose();
         router.push("/pedidos");
