@@ -603,12 +603,6 @@ export async function deletarRequisicao(
 
   if (!req) return { erro: "Requisição não encontrada" };
 
-  // Bloqueia exclusão de requisições que já foram aprovadas ou estão em cotação
-  // Permite excluir em qualquer status exceto "aguardando_cotacao" (pedido já gerado)
-  if (req.status === "aguardando_cotacao") {
-    return { erro: "Requisição já aprovada e com pedido gerado. Exclua o pedido de compra primeiro." };
-  }
-
   // Anula o vínculo nas cotações que referenciam esta requisição (FK nullable)
   await supabase.from("cotacoes").update({ requisicao_id: null }).eq("requisicao_id", id);
 
