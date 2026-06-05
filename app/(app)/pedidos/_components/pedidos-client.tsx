@@ -7,7 +7,7 @@
  * Click LHG  → modal de detalhe (ações: aprovar, rejeitar, email, Omie…).
  * Click Omie → modal de detalhe Omie.
  */
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
@@ -118,14 +118,27 @@ const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = 
 
 function TentarNovamenteButton({ pedidoId }: { pedidoId: string }) {
   const [pending, start] = useTransition();
+  const [cooldown, setCooldown] = useState(0);
   const router = useRouter();
 
+  // Decrementa o countdown a cada segundo
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
   function handleClick(e: React.MouseEvent) {
-    e.stopPropagation(); // não abre o modal
+    e.stopPropagation();
     start(async () => {
       const res = await pushPedidoOmie(pedidoId);
       if ("erro" in res && res.erro) {
-        toast.error(res.erro ?? "Erro ao enviar ao Omie");
+        // Extrai quantos segundos o Omie pede para aguardar
+        const match = res.erro.match(/Aguarde (\d+) segundo/i);
+        if (match) {
+          setCooldown(parseInt(match[1]) + 3); // +3s de margem
+        }
+        toast.error(res.erro);
       } else {
         toast.success("Pedido enviado ao Omie com sucesso");
         router.refresh();
@@ -133,15 +146,17 @@ function TentarNovamenteButton({ pedidoId }: { pedidoId: string }) {
     });
   }
 
+  const disabled = pending || cooldown > 0;
+
   return (
     <button
       onClick={handleClick}
-      disabled={pending}
+      disabled={disabled}
       className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50"
-      title="Tentar enviar ao Omie novamente"
+      title={cooldown > 0 ? `Aguarde ${cooldown}s antes de tentar novamente` : "Tentar enviar ao Omie novamente"}
     >
       <RefreshCw size={11} className={pending ? "animate-spin" : ""} />
-      {pending ? "Enviando…" : "Tentar novamente"}
+      {pending ? "Enviando…" : cooldown > 0 ? `Aguardar ${cooldown}s…` : "Tentar novamente"}
     </button>
   );
 }
