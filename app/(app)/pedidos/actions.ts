@@ -253,20 +253,25 @@ export async function pushPedidoOmie(
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
-  // Busca o codCateg salvo na requisição (campo omie_categoria — mesmo valor enviado no IncluirReq)
+  // Busca codCateg e nCodReq da requisição vinculada (via cotação → requisição)
+  // nCodReq vincula o Pedido à Requisição no Omie (aparece como pedido derivado da req no kanban)
   let cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
+  let nCodReq: number | undefined;
   if (pedido.cotacao_id) {
     const { data: cotReq } = await supabase
       .from("cotacoes").select("requisicao_id").eq("id", pedido.cotacao_id).maybeSingle();
     if (cotReq?.requisicao_id) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: req } = await supabase
-        .from("requisicoes").select("omie_categoria" as any).eq("id", cotReq.requisicao_id).maybeSingle();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from("requisicoes").select("omie_codigo, omie_categoria" as any)
+        .eq("id", cotReq.requisicao_id).maybeSingle();
       const cat = (req as any)?.omie_categoria as string | null;
       if (cat) cCodCateg = cat;
+      const omieReqCod = (req as any)?.omie_codigo as number | null;
+      if (omieReqCod) nCodReq = omieReqCod;
     }
   }
-  console.log(`[pushPedidoOmie] cCodCateg=${cCodCateg}`);
+  console.log(`[pushPedidoOmie] cCodCateg=${cCodCateg} nCodReq=${nCodReq}`);
 
   const obsTexto = pedido.condicao_pgto
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
@@ -281,6 +286,7 @@ export async function pushPedidoOmie(
       nQtdeParc,
       cCodCateg,
       nCodCC,
+      nCodReq,     // vincula ao número da Requisição no Omie (conecta no kanban)
       cNumPedido:  pedido.numero,
       cObs:        obsTexto,
       cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
