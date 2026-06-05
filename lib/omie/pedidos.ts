@@ -154,7 +154,7 @@ export async function recuperarPedCompraPorFornecedor(
     try {
       const res = await omiePost<
         Record<string, unknown>,
-        { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number; nCodFor?: number } }> }
+        { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number | string; nCodFor?: number | string } }> }
       >(
         "/produtos/pedidocompra/",
         "PesquisarPedCompra",
@@ -162,19 +162,25 @@ export async function recuperarPedCompraPorFornecedor(
         {
           nPagina: 1,
           nRegsPorPagina: 50,
-          lApenasImportadoApi: "N",  // inclui todos (API e manuais)
+          lApenasImportadoApi: "N",
           ...filtro,
           dDataInicial: fmt(trintaDias),
           dDataFinal:   fmt(hoje),
         },
       );
-      const match = (res.pedidos_pesquisa ?? [])
-        .find(p => p.cabecalho_consulta?.nCodFor === nCodFor);
+
+      const pedidos = res.pedidos_pesquisa ?? [];
+      // Log dos nCodFor encontrados para diagnóstico
+      const codigosEncontrados = pedidos.map(p => p.cabecalho_consulta?.nCodFor);
+      console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} total=${pedidos.length} nCodFor encontrados:`, codigosEncontrados);
+
+      // Omie pode retornar nCodFor como número OU string — comparar via String()
+      const match = pedidos.find(p => String(p.cabecalho_consulta?.nCodFor) === String(nCodFor));
       if (match?.cabecalho_consulta?.nCodPed) {
-        return match.cabecalho_consulta.nCodPed;
+        return Number(match.cabecalho_consulta.nCodPed);
       }
-    } catch {
-      // continua para o próximo filtro
+    } catch (e) {
+      console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} erro:`, e);
     }
   }
   return null;
