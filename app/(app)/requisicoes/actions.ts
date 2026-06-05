@@ -181,7 +181,8 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
         console.info("[criarRequisicao] Omie respondeu — codReqCompra:", omieCode);
 
         if (omieCode > 0) {
-          await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString() }).eq("id", req.id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await supabase.from("requisicoes").update({ omie_codigo: omieCode, omie_sincronizado_em: new Date().toISOString(), omie_categoria: codCateg } as any).eq("id", req.id);
           omieOk = true;
         } else {
           // Omie retornou 0 — sem erro mas sem criar

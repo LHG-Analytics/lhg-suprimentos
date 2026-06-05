@@ -257,18 +257,16 @@ export async function pushPedidoOmie(
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
-  // Busca o codCateg da requisição vinculada à cotação (mesmo valor usado no IncluirReq)
+  // Busca o codCateg salvo na requisição (campo omie_categoria — mesmo valor enviado no IncluirReq)
   let cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
   if (pedido.cotacao_id) {
     const { data: cotReq } = await supabase
       .from("cotacoes").select("requisicao_id").eq("id", pedido.cotacao_id).maybeSingle();
     if (cotReq?.requisicao_id) {
-      const { data: reqUnit } = await supabase
-        .from("requisicao_unidades")
-        .select("unidades(omie_categoria_compras)")
-        .eq("requisicao_id", cotReq.requisicao_id)
-        .maybeSingle();
-      const cat = (reqUnit?.unidades as { omie_categoria_compras?: string | null } | null)?.omie_categoria_compras;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: req } = await supabase
+        .from("requisicoes").select("omie_categoria" as any).eq("id", cotReq.requisicao_id).maybeSingle();
+      const cat = (req as any)?.omie_categoria as string | null;
       if (cat) cCodCateg = cat;
     }
   }
