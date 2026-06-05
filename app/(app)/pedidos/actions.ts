@@ -237,12 +237,14 @@ export async function pushPedidoOmie(
 
   const foiRedundant = pedidoAtual?.omie_erro?.includes("REDUNDANT") || pedidoAtual?.omie_erro?.includes("duplicada");
 
-  // cCodIntPed curto (max 20 chars, sem hífens) para garantir compatibilidade Omie
-  // 1ª tentativa: "P" + 19 hex chars do pedidoId
-  // Retry: "R" + timestamp base36 (sempre diferente, ~11 chars)
+  // Timestamp único capturado uma vez — usado em cCodIntPed e cCodIntItem no retry
+  const retryTs = Date.now().toString(36).toUpperCase();
+
+  // Retry: todos os códigos de integração são únicos para garantir que o Omie não
+  // detecte REDUNDANT por cCodIntPed nem por cCodIntItem (ambos mudam a cada tentativa)
   const cCodIntPed = foiRedundant
-    ? `R${Date.now().toString(36).toUpperCase()}`
-    : `P${pedidoId.replace(/-/g, "").slice(0, 19).toUpperCase()}`;
+    ? `R${retryTs}`                                        // ex: RMQ12AB3C (único)
+    : `P${pedidoId.replace(/-/g, "").slice(0, 19).toUpperCase()}`; // ex: P6156C043...
 
   const dataBase = pedido.entrega_prev
     ? new Date(pedido.entrega_prev + "T12:00:00")
@@ -284,7 +286,10 @@ export async function pushPedidoOmie(
       cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
     },
     frete_incluir: { cTpFrete: "9" },
-    produtos_incluir: produtosIncluir,
+    // No retry, cCodIntItem também muda (pode ser chave de deduplicação do Omie)
+    produtos_incluir: foiRedundant
+      ? produtosIncluir.map((p, i) => ({ ...p, cCodIntItem: `R${retryTs}${i + 1}` }))
+      : produtosIncluir,
   };
 
   // Log da estrutura real que será enviada ao Omie
