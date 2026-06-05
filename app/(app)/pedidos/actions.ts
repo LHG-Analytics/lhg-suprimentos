@@ -631,9 +631,6 @@ export async function excluirPedidoLocal(
     .single();
 
   if (fetchErr || !pedido) return { erro: "Pedido não encontrado" };
-  if (pedido.omie_status === "sincronizado") {
-    return { erro: "Pedido sincronizado com o Omie. Exclua-o do Omie antes de remover aqui." };
-  }
   if (["recebido", "finalizado"].includes(pedido.status)) {
     return { erro: "Pedidos já recebidos não podem ser excluídos." };
   }

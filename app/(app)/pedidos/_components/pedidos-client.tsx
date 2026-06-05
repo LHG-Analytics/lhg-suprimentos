@@ -494,7 +494,7 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
           ) : null}
 
           {/* Excluir pedido — só disponível quando não sincronizado com Omie */}
-          {pedido.omie_status !== "sincronizado" && !["recebido","finalizado"].includes(pedido.status) && (
+          {!["recebido","finalizado"].includes(pedido.status) && (
             confirmarExcluir ? (
               <div className="flex items-center gap-1.5 ml-auto">
                 <span className="text-[11px] text-muted-foreground">Confirmar exclusão?</span>
@@ -511,7 +511,7 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
               <button onClick={() => setConfirmarExcluir(true)}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-red-400 hover:border-red-700/40 hover:bg-red-500/10 transition-colors",
-                  pedido.omie_status === "sincronizado" ? "hidden" : "",
+                  "",
                   !pedido.omie_status || pedido.omie_status === "erro" ? "ml-auto" : "",
                 )}>
                 <XCircle size={12} />Excluir
