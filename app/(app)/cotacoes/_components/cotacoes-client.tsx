@@ -4,8 +4,8 @@
  * cotacoes-client.tsx — LHG-210
  * Lista de cotações com mini-KPIs, filtros por status e criação a partir de requisição.
  */
-import { useState, useMemo, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useTransition, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Scale, Plus, ChevronRight, Sparkles,
   AlertTriangle, Calendar, Loader2, Trash2, Pencil, X, Download,
@@ -96,18 +96,29 @@ const FILTER_LABELS: Record<FilterStatus, string> = {
 // ── Modal de nova cotação ─────────────────────────────────────────────────────
 
 function NovaCotacaoModal({
-  open, onClose, requisicoes,
+  open, onClose, requisicoes, initialReqId = "", initialTitulo = "",
 }: {
-  open: boolean;
-  onClose: () => void;
-  requisicoes: Requisicao[];
+  open:          boolean;
+  onClose:       () => void;
+  requisicoes:   Requisicao[];
+  initialReqId?: string;
+  initialTitulo?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [titulo,      setTitulo]      = useState("");
-  const [reqId,       setReqId]       = useState<string | "">("");
+  const [titulo,      setTitulo]      = useState(initialTitulo);
+  const [reqId,       setReqId]       = useState<string | "">(initialReqId);
   const [urgente,     setUrgente]     = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
+
+  // Atualiza estado quando os valores iniciais mudam (modal reabre com novos valores)
+  useEffect(() => {
+    if (open) {
+      setTitulo(prev => prev || initialTitulo);
+      setReqId(prev => prev || initialReqId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function reset() {
     setTitulo(""); setReqId(""); setUrgente(false); setErrors({});
@@ -258,10 +269,23 @@ function NovaCotacaoModal({
 
 export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [filter,     setFilter]    = useState<FilterStatus>("todas");
   const [query,      setQuery]     = useState("");
   const queryDebounced = useDebounce(query, 300);
   const [modalOpen,  setModalOpen] = useState(false);
+
+  // Abre o modal automaticamente quando vindo de /requisicoes/[id] com ?nova=1
+  const [modalInitialReqId,    setModalInitialReqId]    = useState("");
+  const [modalInitialTitulo,   setModalInitialTitulo]   = useState("");
+  useEffect(() => {
+    if (searchParams.get("nova") === "1") {
+      setModalInitialReqId(searchParams.get("requisicao_id") ?? "");
+      setModalInitialTitulo(decodeURIComponent(searchParams.get("titulo") ?? ""));
+      setModalOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [confirmCot, setConfirmCot] = useState<Cotacao | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [, startDelete] = useTransition();
@@ -685,6 +709,8 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         requisicoes={requisicoes}
+        initialReqId={modalInitialReqId}
+        initialTitulo={modalInitialTitulo}
       />
 
       {/* ── Modal confirmar exclusão ─────────────────────────────────────────── */}

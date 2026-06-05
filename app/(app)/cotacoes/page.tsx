@@ -37,7 +37,7 @@ export default async function CotacoesPage() {
     supabase
       .from("requisicoes")
       .select("id, numero, titulo, status")
-      .in("status", ["rascunho", "cotacao"])
+      .in("status", ["rascunho", "aguardando_cotacao", "cotacao"])
       .order("created_at", { ascending: false }),
   ]);
 

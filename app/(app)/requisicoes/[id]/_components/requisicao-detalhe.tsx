@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -164,14 +164,23 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
         </div>
       </div>
 
-      {/* Status aguardando_cotacao */}
+      {/* Status aguardando_cotacao + botão criar cotação */}
       {req.status === "aguardando_cotacao" && (
-        <div className="rounded-lg bg-violet-500/08 border border-violet-500/25 p-4 flex items-center gap-3">
-          <Clock size={16} className="text-violet-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-violet-300">Aguardando cotação</p>
-            <p className="text-xs text-violet-300/60">Esta requisição está aprovada e pronta para ser cotada.</p>
+        <div className="rounded-lg bg-violet-500/08 border border-violet-500/25 p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Clock size={16} className="text-violet-400 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-violet-300">Aguardando cotação</p>
+              <p className="text-xs text-violet-300/60">Esta requisição está aprovada e pronta para ser cotada.</p>
+            </div>
           </div>
+          <Link
+            href={`/cotacoes?nova=1&requisicao_id=${req.id}&titulo=${encodeURIComponent(req.titulo)}`}
+            className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-violet-500 hover:bg-violet-600 text-white font-medium text-sm transition-colors shrink-0"
+          >
+            <Scale size={14} />
+            Criar cotação
+          </Link>
         </div>
       )}
 
