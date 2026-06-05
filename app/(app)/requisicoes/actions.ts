@@ -607,6 +607,9 @@ export async function deletarRequisicao(
     return { erro: "Requisição já aprovada e com pedido gerado. Exclua o pedido de compra primeiro." };
   }
 
+  // Anula o vínculo nas cotações que referenciam esta requisição (FK nullable)
+  await supabase.from("cotacoes").update({ requisicao_id: null }).eq("requisicao_id", id);
+
   await supabase.from("requisicao_itens").delete().eq("requisicao_id", id);
   await supabase.from("requisicao_unidades").delete().eq("requisicao_id", id);
 
