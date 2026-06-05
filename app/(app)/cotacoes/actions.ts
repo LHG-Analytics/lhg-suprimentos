@@ -26,10 +26,6 @@ export async function deletarCotacao(id: string) {
 
   if (fetchErr || !cot) throw new Error("Cotação não encontrada");
 
-  if (cot.status === "aprovado") {
-    throw new Error("Não é possível excluir uma cotação já aprovada (pedidos já foram gerados).");
-  }
-
   // Remove filhos na ordem correta (FK: matriz → itens → fornecedores → unidades → cotação)
   const { data: itens } = await supabase
     .from("cotacao_itens")
