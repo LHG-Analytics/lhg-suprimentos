@@ -213,6 +213,15 @@ export async function pushPedidoOmie(
     ? new Date(pedido.entrega_prev).toLocaleDateString("pt-BR")
     : new Date(Date.now() + 7 * 86_400_000).toLocaleDateString("pt-BR");
 
+  // Conta parcelas pelo número de valores separados por "/" em condicao_pgto
+  // Ex: "30/60" → 2, "30/60/90" → 3, "à vista" ou "30 dias" → 1
+  function parseParcelas(condicao: string | null): number {
+    if (!condicao) return 1;
+    const partes = condicao.split("/").filter(p => /^\s*\d+/.test(p.trim()));
+    return partes.length > 1 ? partes.length : 1;
+  }
+  const nQtdeParc = parseParcelas(pedido.condicao_pgto);
+
   // Verifica se já houve tentativas anteriores (omie_erro contém "REDUNDANT" ou "duplicada")
   const { data: pedidoAtual } = await supabase
     .from("pedidos")
@@ -243,7 +252,7 @@ export async function pushPedidoOmie(
         nCodFor:     Number(forn.omie_codigo),
         dDtPrevisao: dataPrevisao,
         nCodCC,
-        nQtdeParc:   1,
+        nQtdeParc,
         cObs:        pedido.condicao_pgto
           ? `${pedido.condicao_pgto} — Pedido LHG Suprimentos ${pedido.numero}`
           : `Pedido gerado pelo sistema LHG Suprimentos — ${pedido.numero}`,
