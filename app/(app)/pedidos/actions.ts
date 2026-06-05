@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { OmieError } from "@/lib/omie/client";
-import { incluirPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor } from "@/lib/omie/pedidos";
+import { incluirPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor, consultarPedCompraPorCodIntPed } from "@/lib/omie/pedidos";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -309,8 +309,16 @@ export async function pushPedidoOmie(
       (err.message.includes("REDUNDANT") || err.message.toLowerCase().includes("redundante"));
 
     if (isRedundant) {
-      console.log(`[pushPedidoOmie] REDUNDANT para fornecedor ${forn.omie_codigo} — buscando pedido existente no Omie`);
-      const nCodExistente = await recuperarPedCompraPorFornecedor(creds, Number(forn.omie_codigo));
+      console.log(`[pushPedidoOmie] REDUNDANT — tentando ConsultarPedCompra(cCodIntPed=${pedidoId}) depois busca paginada por nCodFor=${forn.omie_codigo}`);
+
+      // Estratégia 1: acesso direto pelo cCodIntPed original (sem paginação)
+      let nCodExistente = await consultarPedCompraPorCodIntPed(creds, pedidoId);
+
+      // Estratégia 2: busca paginada por fornecedor (até 5 páginas = 250 pedidos)
+      if (!nCodExistente) {
+        nCodExistente = await recuperarPedCompraPorFornecedor(creds, Number(forn.omie_codigo));
+      }
+
       if (nCodExistente) {
         const omieRef = String(nCodExistente);
         await supabase

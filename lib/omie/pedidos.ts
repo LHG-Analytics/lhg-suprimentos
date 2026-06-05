@@ -153,6 +153,35 @@ export async function consultarPedCompra(
  * mas a resposta foi perdida.
  * Retorna o nCodPed mais recente desse fornecedor, ou null se não encontrado.
  */
+/**
+ * Busca pedido pelo cCodIntPed original — acesso direto sem paginação.
+ * Retorna nCodPed ou null.
+ */
+export async function consultarPedCompraPorCodIntPed(
+  creds: OmieCredentials,
+  cCodIntPed: string,
+): Promise<number | null> {
+  try {
+    const res = await omiePost<
+      { cCodIntPed: string },
+      { nCodPed?: number; cabecalho?: { nCodPedido?: number } }
+    >(
+      "/produtos/pedidocompra/",
+      "ConsultarPedCompra",
+      creds,
+      { cCodIntPed },
+    );
+    return res.nCodPed ?? res.cabecalho?.nCodPedido ?? null;
+  } catch (e) {
+    console.log(`[consultarPedCompraPorCodIntPed] cCodIntPed=${cCodIntPed} não encontrado:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
+ * Busca pedido por nCodFor paginando TODAS as páginas (até 5 = 250 pedidos).
+ * Usa múltiplos filtros de status para cobrir pendentes, faturados e encerrados.
+ */
 export async function recuperarPedCompraPorFornecedor(
   creds: OmieCredentials,
   nCodFor: number,
@@ -162,10 +191,9 @@ export async function recuperarPedCompraPorFornecedor(
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     return `${dd}/${mm}/${d.getFullYear()}`;
   };
-  const hoje    = new Date();
+  const hoje       = new Date();
   const trintaDias = new Date(hoje.getTime() - 30 * 86_400_000);
 
-  // Busca em múltiplos filtros de status para garantir encontrar o pedido
   const filtros = [
     { lExibirPedidosPendentes: "T" as const },
     { lExibirPedidosFaturados: "T" as const },
@@ -173,37 +201,47 @@ export async function recuperarPedCompraPorFornecedor(
   ];
 
   for (const filtro of filtros) {
-    try {
-      const res = await omiePost<
-        Record<string, unknown>,
-        { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number | string; nCodFor?: number | string } }> }
-      >(
-        "/produtos/pedidocompra/",
-        "PesquisarPedCompra",
-        creds,
-        {
-          nPagina: 1,
-          nRegsPorPagina: 50,
-          lApenasImportadoApi: "N",
-          ...filtro,
-          dDataInicial: fmt(trintaDias),
-          dDataFinal:   fmt(hoje),
-        },
-      );
+    let pagina = 1;
+    let totalPaginas = 1;
 
-      const pedidos = res.pedidos_pesquisa ?? [];
-      // Log dos nCodFor encontrados para diagnóstico
-      const codigosEncontrados = pedidos.map(p => p.cabecalho_consulta?.nCodFor);
-      console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} total=${pedidos.length} nCodFor encontrados:`, codigosEncontrados);
+    do {
+      try {
+        const res = await omiePost<
+          Record<string, unknown>,
+          {
+            nTotalPaginas?: number;
+            total_de_paginas?: number;
+            pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number | string; nCodFor?: number | string } }>;
+          }
+        >(
+          "/produtos/pedidocompra/",
+          "PesquisarPedCompra",
+          creds,
+          {
+            nPagina: pagina,
+            nRegsPorPagina: 50,
+            lApenasImportadoApi: "N",
+            ...filtro,
+            dDataInicial: fmt(trintaDias),
+            dDataFinal:   fmt(hoje),
+          },
+        );
 
-      // Omie pode retornar nCodFor como número OU string — comparar via String()
-      const match = pedidos.find(p => String(p.cabecalho_consulta?.nCodFor) === String(nCodFor));
-      if (match?.cabecalho_consulta?.nCodPed) {
-        return Number(match.cabecalho_consulta.nCodPed);
+        totalPaginas = res.nTotalPaginas ?? res.total_de_paginas ?? 1;
+        const pedidos = res.pedidos_pesquisa ?? [];
+        console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} pág=${pagina}/${totalPaginas} registros=${pedidos.length}`);
+
+        const match = pedidos.find(p => String(p.cabecalho_consulta?.nCodFor) === String(nCodFor));
+        if (match?.cabecalho_consulta?.nCodPed) {
+          console.log(`[recuperarPedCompra] ENCONTRADO nCodPed=${match.cabecalho_consulta.nCodPed}`);
+          return Number(match.cabecalho_consulta.nCodPed);
+        }
+        pagina++;
+      } catch (e) {
+        console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} pág=${pagina} erro:`, e instanceof Error ? e.message : e);
+        break;
       }
-    } catch (e) {
-      console.log(`[recuperarPedCompra] filtro=${JSON.stringify(filtro)} erro:`, e);
-    }
+    } while (pagina <= Math.min(totalPaginas, 5)); // máx 5 páginas = 250 pedidos
   }
   return null;
 }
