@@ -282,7 +282,7 @@ export async function pushPedidoOmie(
       cCodCateg,
       nCodCC,
       cNumPedido:  pedido.numero,
-      cObs:        obsTexto,
+      cObs:        `${obsTexto} [${cCodIntPed.slice(-4)}]`, // sufixo único quebra hash REDUNDANT
       cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
     },
     frete_incluir: { cTpFrete: "9" },
