@@ -245,17 +245,9 @@ export async function pushPedidoOmie(
     ? `${pedidoId.slice(0, 18)}-${Date.now().toString(36)}`
     : pedidoId;
 
-  // Se temos o código anterior, tenta ConsultarPedCompra com ele — o pedido pode já existir
-  if (foiRedundant && lastCodIntPed) {
-    console.log(`[pushPedidoOmie] tentando ConsultarPedCompra com código anterior: ${lastCodIntPed}`);
-    const nCodExistente = await consultarPedCompraPorCodIntPed(creds, lastCodIntPed);
-    if (nCodExistente) {
-      const omieRef = String(nCodExistente);
-      await supabase.from("pedidos").update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null }).eq("id", pedidoId);
-      await supabase.from("pedido_eventos").insert({ pedido_id: pedidoId, tipo: "omie", texto: `Pedido recuperado do Omie via ConsultarPedCompra — nCodPed: ${omieRef}`, autor_id: user.id });
-      revalidatePath("/pedidos");
-      return { omie_codigo: omieRef };
-    }
+  // lastCodIntPed guardado mas não usado para consulta — apenas logging
+  if (lastCodIntPed) {
+    console.log(`[pushPedidoOmie] código anterior: ${lastCodIntPed} — nova tentativa com cCodIntPed diferente: ${cCodIntPed}`);
   }
 
   const dataBase = pedido.entrega_prev
@@ -321,13 +313,11 @@ export async function pushPedidoOmie(
       (err.message.includes("REDUNDANT") || err.message.toLowerCase().includes("redundante"));
 
     if (isRedundant) {
-      // Suporte Omie: REDUNDANT = mesmo cCodIntPed enviado 2x em <60s.
-      // A 1ª chamada CRIOU o pedido. Salvamos o cCodIntPed para ConsultarPedCompra após 60s.
+      // REDUNDANT: só salvar o erro com o cCodIntPed usado — NENHUMA consulta extra.
+      // Na próxima tentativa (após countdown de 60s), usará um novo cCodIntPed via timestamp.
       const rawMsgR = err instanceof OmieError ? err.message : "Consumo redundante";
-      // Guarda o cCodIntPed usado para recuperar na próxima tentativa (após 60s)
-      const errMsg = `Omie: ${rawMsgR} |codInt=${cCodIntPed}`;
+      const errMsg  = `Omie: ${rawMsgR} |codInt=${cCodIntPed}`;
       await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: errMsg }).eq("id", pedidoId);
-      console.log(`[pushPedidoOmie] REDUNDANT com cCodIntPed=${cCodIntPed} — na próxima tentativa (após 60s) usaremos ConsultarPedCompra com este código`);
       return { erro: `Omie: ${rawMsgR}` };
     }
 
