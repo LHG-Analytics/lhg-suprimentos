@@ -788,60 +788,12 @@ export async function aprovarCotacao(
       );
     }
 
-    // Tentar enviar ao Omie
-    let omieOk = false;
-    let omieErro: string | undefined;
-
-    if (unidade?.omie_app_key && unidade?.omie_app_secret && forn.omie_codigo) {
-      try {
-        const creds = { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret };
-        const produtosOmie = itensForn
-          .filter(i => i.produtos?.omie_codigo)
-          .map((item, idx) => {
-            const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
-            return {
-              cCodIntItem: `${pedidoId.slice(0, 8)}-${idx + 1}`,
-              nCodProd:    Number(item.produtos!.omie_codigo!),
-              nQtde:       item.quantidade,
-              nValUnit:    entrada?.preco_unitario ?? 0,
-            };
-          });
-
-        if (produtosOmie.length > 0) {
-          const nCodPed = await incluirPedCompra(creds, {
-            cabecalho_incluir: {
-              cCodIntPed:  pedidoId,
-              nCodFor:     Number(forn.omie_codigo),
-              dDtPrevisao: dtPrevisao,
-              cObs:        `Pedido ${numero} gerado pelo LHG Suprimentos`,
-            },
-            produtos_incluir: produtosOmie,
-          });
-
-          await supabase.from("pedidos").update({
-            omie_status: "sincronizado",
-            omie_codigo: String(nCodPed),
-            omie_erro:   null,
-          }).eq("id", pedidoId);
-
-          omieOk = true;
-        }
-      } catch (err) {
-        omieErro = err instanceof Error ? err.message : "Erro ao enviar ao Omie";
-        await supabase.from("pedidos").update({
-          omie_status: "pendente",
-          omie_erro:   omieErro,
-        }).eq("id", pedidoId);
-      }
-    }
-
-    // Registrar evento
+    // Pedido criado localmente — o envio ao Omie é feito manualmente via
+    // "Tentar novamente" nos Pedidos de Compra (possui retry, cCodCateg, nCodCC, UpsertPedCompra etc.)
     await supabase.from("pedido_eventos").insert({
       pedido_id: pedidoId,
-      tipo:      omieOk ? "omie" : "criacao",
-      texto:     omieOk
-        ? `Pedido enviado ao Omie — cotação ${cotacao.numero}`
-        : `Pedido criado localmente (Omie pendente) — cotação ${cotacao.numero}`,
+      tipo:      "criacao",
+      texto:     `Pedido criado — use "Tentar novamente" nos Pedidos para enviar ao Omie`,
       autor_id:  user.id,
     });
 
@@ -871,8 +823,8 @@ export async function aprovarCotacao(
       id:         pedidoId,
       numero,
       fornecedor: forn.nome_fantasia ?? forn.razao_social,
-      omieOk,
-      omieErro,
+      omieOk:     false,
+      omieErro:   undefined,
     });
   }
 
