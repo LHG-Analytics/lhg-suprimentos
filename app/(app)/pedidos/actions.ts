@@ -245,17 +245,45 @@ export async function pushPedidoOmie(
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
+  const obsTexto = pedido.condicao_pgto
+    ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
+    : `LHG Suprimentos ${pedido.numero}`;
+
+  console.log("[pushPedidoOmie] enviando para Omie:", JSON.stringify({
+    cCodIntPed, nCodFor: forn.omie_codigo, nCodCC, nQtdeParc, dDtPrevisao: dataPrevisao,
+    produtos: produtosIncluir.map(p => ({ nCodProd: p.nCodProd, nQtde: p.nQtde, nValUnit: p.nValUnit })),
+  }));
+
   try {
     const nCodPed = await incluirPedCompra(creds, {
       cabecalho_incluir: {
         cCodIntPed,
-        nCodFor:     Number(forn.omie_codigo),
-        dDtPrevisao: dataPrevisao,
-        nCodCC,
+        nCodFor:      Number(forn.omie_codigo),
+        dDtPrevisao:  dataPrevisao,
+        cCodParc:     "",
         nQtdeParc,
-        cObs:        pedido.condicao_pgto
-          ? `${pedido.condicao_pgto} — Pedido LHG Suprimentos ${pedido.numero}`
-          : `Pedido gerado pelo sistema LHG Suprimentos — ${pedido.numero}`,
+        cCodIntFor:   "",
+        cCodCateg:    "",
+        nCodCompr:    0,
+        cContato:     "",
+        cContrato:    "",
+        nCodCC,
+        nCodIntCC:    0,
+        nCodProj:     0,
+        cNumPedido:   pedido.numero,
+        cObs:         obsTexto,
+        cObsInt:      `Pedido gerado automaticamente pelo sistema LHG Suprimentos`,
+      },
+      frete_incluir: {
+        nCodTransp:    0,
+        cCodIntTransp: "",
+        cTpFrete:      "9",
+        nQtdVol:       0,
+        nPesoLiq:      0,
+        nPesoBruto:    0,
+        nValFrete:     0,
+        nValSeguro:    0,
+        nValOutras:    0,
       },
       produtos_incluir: produtosIncluir,
     });

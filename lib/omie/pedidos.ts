@@ -18,17 +18,39 @@ export interface OmiePedItemIncluir {
 }
 
 export interface OmiePedCabecalhoIncluir {
-  cCodIntPed:   string;   // pedido.id (ou variação no retry)
-  nCodFor:      number;   // fornecedor.omie_codigo
-  dDtPrevisao?: string;   // DD/MM/YYYY
+  cCodIntPed:   string;
+  nCodFor:      number;
+  dDtPrevisao?: string;
+  cCodParc?:    string;
+  nQtdeParc?:   number;
+  cCodIntFor?:  string;
+  cCodCateg?:   string;
+  nCodCompr?:   number;
+  cContato?:    string;
+  cContrato?:   string;
+  nCodCC?:      number;
+  nCodIntCC?:   number;
+  nCodProj?:    number;
+  cNumPedido?:  string;
   cObs?:        string;
-  nCodCC?:      number;   // conta corrente (ex: Itaú)
-  nQtdeParc?:   number;   // número de parcelas
-  cCodParc?:    string;   // código da condição de pagamento Omie
+  cObsInt?:     string;
+}
+
+export interface OmiePedFreteIncluir {
+  nCodTransp?:    number;
+  cCodIntTransp?: string;
+  cTpFrete?:      string;
+  nQtdVol?:       number;
+  nPesoLiq?:      number;
+  nPesoBruto?:    number;
+  nValFrete?:     number;
+  nValSeguro?:    number;
+  nValOutras?:    number;
 }
 
 export interface OmiePedParamIncluir {
   cabecalho_incluir: OmiePedCabecalhoIncluir;
+  frete_incluir?:    OmiePedFreteIncluir;
   produtos_incluir:  OmiePedItemIncluir[];
 }
 
