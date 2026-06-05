@@ -884,6 +884,12 @@ export async function syncRequisicoes(
 
             reqId = req.id;
 
+            // Vincular à unidade (necessário para o filtro da página por unidade)
+            await supabase
+              .from("requisicao_unidades")
+              .insert({ requisicao_id: reqId, unidade_id: unidadeId })
+              .throwOnError();
+
             // Criar itens da requisição
             if (item.ItensReqCompra?.length) {
               const itensMapped = await Promise.all(
