@@ -149,11 +149,12 @@ export interface OmieRequisicaoItem {
 }
 
 interface PesquisarReqResponse {
-  pagina:             number;
-  total_de_paginas:   number;
-  registros:          number;
-  total_de_registros: number;
-  cadastros?:         OmieRequisicaoItem[];
+  pagina:               number;
+  total_de_paginas:     number;
+  registros:            number;
+  total_de_registros:   number;
+  requisicaoCadastro?:  OmieRequisicaoItem[]; // campo correto conforme documentação
+  cadastros?:           OmieRequisicaoItem[]; // fallback compatibilidade
 }
 
 // ── listAllRequisicoes ────────────────────────────────────────────────────────
@@ -172,18 +173,23 @@ export async function listAllRequisicoes(
   while (true) {
     let res: PesquisarReqResponse;
     try {
-      res = await omiePost<{ rcListarRequest: { pagina: number; registros_por_pagina: number } }, PesquisarReqResponse>(
+      // Params diretos (não wrapped) — conforme documentação oficial do Omie
+      res = await omiePost<{ pagina: number; registros_por_pagina: number; apenas_importado_api: string }, PesquisarReqResponse>(
         "/produtos/requisicaocompra/",
         "PesquisarReq",
         creds,
-        { rcListarRequest: { pagina: page, registros_por_pagina: PER_PAGE } },
+        {
+          pagina,
+          registros_por_pagina: PER_PAGE,
+          apenas_importado_api: "N", // inclui requisições criadas manualmente no Omie (não só via API)
+        },
       );
     } catch (err) {
       if (isOmieEmptyError(err)) break;
       throw err;
     }
 
-    const items = res.cadastros ?? [];
+    const items = res.requisicaoCadastro ?? res.cadastros ?? [];
     all.push(...items);
 
     if (page >= res.total_de_paginas || items.length === 0) break;
