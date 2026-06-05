@@ -255,8 +255,24 @@ export async function pushPedidoOmie(
     : new Date(Date.now() + 7 * 86_400_000);
   const dataPrevisao = dataBase.toLocaleDateString("pt-BR");
 
-  const nCodCC    = unidade.omie_conta_corrente    ? Number(unidade.omie_conta_corrente)    : undefined;
-  const cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
+  const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
+
+  // Busca o codCateg da requisição vinculada à cotação (mesmo valor usado no IncluirReq)
+  let cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
+  if (pedido.cotacao_id) {
+    const { data: cotReq } = await supabase
+      .from("cotacoes").select("requisicao_id").eq("id", pedido.cotacao_id).maybeSingle();
+    if (cotReq?.requisicao_id) {
+      const { data: reqUnit } = await supabase
+        .from("requisicao_unidades")
+        .select("unidades(omie_categoria_compras)")
+        .eq("requisicao_id", cotReq.requisicao_id)
+        .maybeSingle();
+      const cat = (reqUnit?.unidades as { omie_categoria_compras?: string | null } | null)?.omie_categoria_compras;
+      if (cat) cCodCateg = cat;
+    }
+  }
+  console.log(`[pushPedidoOmie] cCodCateg=${cCodCateg}`);
 
   const obsTexto = pedido.condicao_pgto
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
