@@ -22,7 +22,8 @@ export type UnidadeId =
   | "lush-ipiranga-concavo"
   | "lush-lapa"
   | "andar-de-cima"
-  | "altana";
+  | "altana"
+  | "lhg-holding";
 
 export interface Unidade {
   id:        UnidadeId;
@@ -82,6 +83,14 @@ export const UNIDADES: Unidade[] = [
     shortName: "Altana",
     cor:       "#a78bfa",
     disabled:  true,
+  },
+  {
+    id:        "lhg-holding",
+    nome:      "LHG Holding",
+    // Coloque o arquivo em: public/unidades/lhg-holding.png
+    logo:      "/unidades/lhg-holding.png",
+    shortName: "Holding",
+    cor:       "#6366f1",
   },
 ];
 
