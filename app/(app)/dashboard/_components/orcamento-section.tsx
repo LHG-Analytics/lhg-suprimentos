@@ -42,23 +42,28 @@ async function fetchGastosPorPeriodo(
 
 // ── Componente async ───────────────────────────────────────────────────────────
 export async function OrcamentoSection() {
-  const supabase  = await createClient();
-  const sheetConfig = await getUnidadeSheetConfig();
+  try {
+    const supabase    = await createClient();
+    const sheetConfig = await getUnidadeSheetConfig();
 
-  const now        = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const now        = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [orcamento, gastosCat] = await Promise.all([
-    sheetConfig
-      ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
-      : Promise.resolve(null),
-    fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
-  ]);
+    const [orcamento, gastosCat] = await Promise.all([
+      sheetConfig
+        ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
+        : Promise.resolve(null),
+      fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
+    ]);
 
-  return (
-    <OrcamentoWidget
-      orcamento={orcamento}
-      gastosPorCategoria={gastosCat}
-    />
-  );
+    return (
+      <OrcamentoWidget
+        orcamento={orcamento}
+        gastosPorCategoria={gastosCat}
+      />
+    );
+  } catch (err) {
+    console.error("[OrcamentoSection] erro:", err);
+    return null; // falha silenciosa — não quebra o dashboard
+  }
 }
