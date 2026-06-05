@@ -68,16 +68,17 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
 
   function handleConfirmar() {
     start(async () => {
-      try {
-        await gerarPedidosDeCotacao(cotacao.id, selecoes);
-        toast.success(`${grupos.length} pedido${grupos.length !== 1 ? "s" : ""} gerado${grupos.length !== 1 ? "s" : ""}`, {
-          description: "Os pedidos foram criados e aguardam aprovação",
-        });
-        onClose();
-        router.push("/pedidos");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao gerar pedidos");
+      const res = await gerarPedidosDeCotacao(cotacao.id, selecoes);
+      if ("erro" in res) {
+        toast.error(`Erro ao gerar pedidos: ${res.erro}`);
+        return;
       }
+      toast.success(
+        `${res.numeroPedidos} pedido${res.numeroPedidos !== 1 ? "s" : ""} gerado${res.numeroPedidos !== 1 ? "s" : ""}`,
+        { description: "Os pedidos foram criados e aguardam aprovação" },
+      );
+      onClose();
+      router.push("/pedidos");
     });
   }
 

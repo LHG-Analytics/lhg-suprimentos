@@ -225,127 +225,138 @@ export async function adicionarFornecedorCotacao(
 export async function gerarPedidosDeCotacao(
   cotacaoId: string,
   selecoes: Record<string, string | null>,
-) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+): Promise<{ ok: true; numeroPedidos: number } | { erro: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { erro: "Não autenticado" };
 
-  // Buscar unidades da cotação para vincular ao pedido (necessário para pushPedidoOmie encontrar credenciais)
-  const { data: cotacaoUnidades } = await supabase
-    .from("cotacao_unidades")
-    .select("unidade_id")
-    .eq("cotacao_id", cotacaoId);
-  const unidadeIds = (cotacaoUnidades ?? []).map(cu => cu.unidade_id);
+    // Buscar unidades da cotação para vincular ao pedido
+    const { data: cotacaoUnidades } = await supabase
+      .from("cotacao_unidades")
+      .select("unidade_id")
+      .eq("cotacao_id", cotacaoId);
+    const unidadeIds = (cotacaoUnidades ?? []).map(cu => cu.unidade_id);
 
-  // Buscar itens da cotação com células da matriz (inclui prazo_entrega_dias)
-  const { data: itens, error: itensErr } = await supabase
-    .from("cotacao_itens")
-    .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)")
-    .eq("cotacao_id", cotacaoId);
+    // Buscar itens com células da matriz
+    const { data: itens, error: itensErr } = await supabase
+      .from("cotacao_itens")
+      .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)")
+      .eq("cotacao_id", cotacaoId);
 
-  if (itensErr || !itens) throw new Error(itensErr?.message ?? "Erro ao buscar itens");
-
-  // Agrupar por fornecedor — rastreia também o maior prazo de entrega entre os itens
-  const grupos = new Map<string, {
-    preco_unitario: number; quantidade: number; produto_id: string;
-    condicao_pgto: string | null; prazo_entrega_dias: number | null;
-  }[]>();
-
-  for (const item of itens) {
-    const fornId = selecoes[item.id];
-    if (!fornId) continue;
-
-    const cell = item.cotacao_matriz.find(c => c.fornecedor_id === fornId);
-    if (!cell || !cell.preco_unitario) continue;
-
-    if (!grupos.has(fornId)) grupos.set(fornId, []);
-    grupos.get(fornId)!.push({
-      preco_unitario:     cell.preco_unitario,
-      quantidade:         item.quantidade,
-      produto_id:         item.produto_id,
-      condicao_pgto:      cell.condicao_pagamento,
-      prazo_entrega_dias: cell.prazo_entrega_dias ?? null,
-    });
-  }
-
-  if (grupos.size === 0) throw new Error("Nenhum item selecionado");
-
-  // Gerar número sequencial PED-YYYY-NNNN
-  const year = new Date().getFullYear();
-  const { data: lastPed } = await supabase
-    .from("pedidos")
-    .select("numero")
-    .like("numero", `PED-${year}-%`)
-    .order("numero", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let lastNum = lastPed ? parseInt(lastPed.numero.split("-")[2] ?? "0", 10) : 0;
-
-  // Criar um pedido por fornecedor
-  for (const [fornId, linhas] of grupos) {
-    lastNum++;
-    const numero      = `PED-${year}-${String(lastNum).padStart(4, "0")}`;
-    const valor_total = linhas.reduce((acc, l) => acc + l.preco_unitario * l.quantidade, 0);
-    const condicao    = linhas[0]?.condicao_pgto ?? null;
-
-    // Prazo de entrega = maior prazo entre os itens deste fornecedor (pior caso)
-    const maxPrazo = linhas.reduce<number | null>((max, l) => {
-      if (l.prazo_entrega_dias == null) return max;
-      return max == null ? l.prazo_entrega_dias : Math.max(max, l.prazo_entrega_dias);
-    }, null);
-    const entrega_prev = maxPrazo != null
-      ? new Date(Date.now() + maxPrazo * 86_400_000).toISOString().slice(0, 10)
-      : null;
-
-    const { data: pedido, error: pedErr } = await supabase
-      .from("pedidos")
-      .insert({
-        numero,
-        cotacao_id:    cotacaoId,
-        fornecedor_id: fornId,
-        comprador_id:  user.id,
-        status:        "aguardando_aprovacao",
-        valor_total,
-        condicao_pgto: condicao,
-        entrega_prev,
-      })
-      .select("id")
-      .single();
-
-    if (pedErr || !pedido) throw new Error(pedErr?.message ?? "Erro ao criar pedido");
-
-    // Criar itens do pedido
-    const { error: itensInsErr } = await supabase
-      .from("pedido_itens")
-      .insert(
-        linhas.map(l => ({
-          pedido_id:      pedido.id,
-          produto_id:     l.produto_id,
-          quantidade:     l.quantidade,
-          preco_unitario: l.preco_unitario,
-          valor_total:    l.preco_unitario * l.quantidade,
-        })),
-      );
-
-    if (itensInsErr) throw new Error(itensInsErr.message);
-
-    // Vincular pedido às unidades da cotação (obrigatório para pushPedidoOmie encontrar credenciais)
-    if (unidadeIds.length > 0) {
-      await supabase.from("pedido_unidades").insert(
-        unidadeIds.map(uid => ({ pedido_id: pedido.id, unidade_id: uid })),
-      );
+    if (itensErr || !itens) {
+      console.error("[gerarPedidos] itens error:", itensErr);
+      return { erro: itensErr?.message ?? "Erro ao buscar itens" };
     }
+
+    // Agrupar por fornecedor
+    const grupos = new Map<string, {
+      preco_unitario: number; quantidade: number; produto_id: string;
+      condicao_pgto: string | null; prazo_entrega_dias: number | null;
+    }[]>();
+
+    for (const item of itens) {
+      const fornId = selecoes[item.id];
+      if (!fornId) continue;
+      const cell = item.cotacao_matriz.find(c => c.fornecedor_id === fornId);
+      if (!cell || !cell.preco_unitario) continue;
+      if (!grupos.has(fornId)) grupos.set(fornId, []);
+      grupos.get(fornId)!.push({
+        preco_unitario:     cell.preco_unitario,
+        quantidade:         item.quantidade,
+        produto_id:         item.produto_id,
+        condicao_pgto:      cell.condicao_pagamento,
+        prazo_entrega_dias: cell.prazo_entrega_dias ?? null,
+      });
+    }
+
+    if (grupos.size === 0) return { erro: "Nenhum item selecionado" };
+
+    // Número sequencial PED-YYYY-NNNN
+    const year = new Date().getFullYear();
+    const { data: lastPed } = await supabase
+      .from("pedidos")
+      .select("numero")
+      .like("numero", `PED-${year}-%`)
+      .order("numero", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let lastNum = lastPed ? parseInt(lastPed.numero.split("-")[2] ?? "0", 10) : 0;
+
+    for (const [fornId, linhas] of grupos) {
+      lastNum++;
+      const numero      = `PED-${year}-${String(lastNum).padStart(4, "0")}`;
+      const valor_total = linhas.reduce((acc, l) => acc + l.preco_unitario * l.quantidade, 0);
+      const condicao    = linhas[0]?.condicao_pgto ?? null;
+
+      const maxPrazo = linhas.reduce<number | null>((max, l) => {
+        if (l.prazo_entrega_dias == null) return max;
+        return max == null ? l.prazo_entrega_dias : Math.max(max, l.prazo_entrega_dias);
+      }, null);
+      const entrega_prev = maxPrazo != null
+        ? new Date(Date.now() + maxPrazo * 86_400_000).toISOString().slice(0, 10)
+        : null;
+
+      const { data: pedido, error: pedErr } = await supabase
+        .from("pedidos")
+        .insert({
+          numero,
+          cotacao_id:    cotacaoId,
+          fornecedor_id: fornId,
+          comprador_id:  user.id,
+          status:        "aguardando_aprovacao",
+          valor_total,
+          condicao_pgto: condicao,
+          entrega_prev,
+        })
+        .select("id")
+        .single();
+
+      if (pedErr || !pedido) {
+        console.error("[gerarPedidos] pedido insert error:", pedErr);
+        return { erro: pedErr?.message ?? "Erro ao criar pedido" };
+      }
+
+      const { error: itensInsErr } = await supabase
+        .from("pedido_itens")
+        .insert(
+          linhas.map(l => ({
+            pedido_id:      pedido.id,
+            produto_id:     l.produto_id,
+            quantidade:     l.quantidade,
+            preco_unitario: l.preco_unitario,
+            valor_total:    l.preco_unitario * l.quantidade,
+          })),
+        );
+
+      if (itensInsErr) {
+        console.error("[gerarPedidos] pedido_itens insert error:", itensInsErr);
+        return { erro: itensInsErr.message };
+      }
+
+      // Vincular unidades (necessário para pushPedidoOmie encontrar credenciais Omie)
+      if (unidadeIds.length > 0) {
+        const { error: unidErr } = await supabase.from("pedido_unidades").insert(
+          unidadeIds.map(uid => ({ pedido_id: pedido.id, unidade_id: uid })),
+        );
+        if (unidErr) console.error("[gerarPedidos] pedido_unidades insert error:", unidErr);
+      }
+    }
+
+    await supabase
+      .from("cotacoes")
+      .update({ status: "aprovado" })
+      .eq("id", cotacaoId);
+
+    revalidatePath("/cotacoes");
+    revalidatePath("/pedidos");
+    return { ok: true, numeroPedidos: grupos.size };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro inesperado ao gerar pedidos";
+    console.error("[gerarPedidos] unexpected error:", err);
+    return { erro: msg };
   }
-
-  // Atualizar status da cotação para "aprovado" (pedidos gerados)
-  await supabase
-    .from("cotacoes")
-    .update({ status: "aprovado" })
-    .eq("id", cotacaoId);
-
-  revalidatePath("/cotacoes");
-  revalidatePath("/pedidos");
 }
 
 // ── editarCotacao ─────────────────────────────────────────────────────────────
