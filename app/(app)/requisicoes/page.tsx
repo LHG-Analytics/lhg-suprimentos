@@ -37,20 +37,39 @@ export default async function RequisicoesPage() {
     unidadeId = unidade?.id ?? null;
   }
 
+  // Pré-filtra IDs de requisições pertencentes à unidade ativa
+  let reqIdsParaUnidade: string[] | null = null;
+  if (unidadeId) {
+    const { data: reqUnidades } = await supabase
+      .from("requisicao_unidades")
+      .select("requisicao_id")
+      .eq("unidade_id", unidadeId);
+    reqIdsParaUnidade = (reqUnidades ?? []).map((r) => r.requisicao_id);
+  }
+
   const [
     { data: requisicoes },
     { data: unidades },
     { data: produtos },
   ] = await Promise.all([
-    supabase
-      .from("requisicoes")
-      .select(
-        `id, numero, titulo, urgencia, status, origem, valor_estimado, created_at,
-         solicitante:user_profiles!solicitante_id(nome, avatar_url),
-         requisicao_unidades(unidade_id, unidades(nome, slug)),
-         requisicao_itens(id, produto_novo)`,
-      )
-      .order("created_at", { ascending: false }),
+    (() => {
+      let q = supabase
+        .from("requisicoes")
+        .select(
+          `id, numero, titulo, urgencia, status, origem, valor_estimado, created_at,
+           solicitante:user_profiles!solicitante_id(nome, avatar_url),
+           requisicao_unidades(unidade_id, unidades(nome, slug)),
+           requisicao_itens(id, produto_novo)`,
+        )
+        .order("created_at", { ascending: false });
+      // Aplica filtro por unidade quando selecionada
+      if (reqIdsParaUnidade !== null) {
+        q = reqIdsParaUnidade.length > 0
+          ? q.in("id", reqIdsParaUnidade)
+          : q.in("id", ["00000000-0000-0000-0000-000000000000"]); // nenhum resultado
+      }
+      return q;
+    })(),
 
     supabase
       .from("unidades")
@@ -78,6 +97,7 @@ export default async function RequisicoesPage() {
       requisicoes={requisicoes ?? []}
       unidades={unidades ?? []}
       produtos={produtos ?? []}
+      activeUnidadeId={unidadeId}
     />
   );
 }

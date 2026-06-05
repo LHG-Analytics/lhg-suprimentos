@@ -51,10 +51,11 @@ interface FormState {
 }
 
 interface Props {
-  open:     boolean;
-  onClose:  () => void;
-  unidades: Unidade[];
-  produtos: Produto[];
+  open:             boolean;
+  onClose:          () => void;
+  unidades:         Unidade[];
+  produtos:         Produto[];
+  activeUnidadeId?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -248,7 +249,7 @@ function ProdutoCombobox({
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props) {
+export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeUnidadeId }: Props) {
   const [step, setStep]       = useState(1);
   const [pending, startTransition] = useTransition();
   const [errors,  setErrors]  = useState<Record<string, string>>({});
@@ -258,11 +259,21 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
     new Set(produtos.map(p => p.familia_omie).filter(Boolean))
   ).sort() as string[];
 
+  // Determina a pré-seleção de unidade: prioridade para unidade ativa do cookie,
+  // fallback para única unidade disponível, senão vazio.
+  function defaultUnidadeIds(): string[] {
+    if (activeUnidadeId) {
+      const match = unidades.find(u => u.id === activeUnidadeId);
+      if (match) return [match.id];
+    }
+    return unidades.length === 1 ? [unidades[0].id] : [];
+  }
+
   const [form, setForm] = useState<FormState>({
     titulo:        "",
     urgencia:      "normal",
     justificativa: "",
-    unidade_ids:   unidades.length === 1 ? [unidades[0].id] : [],
+    unidade_ids:   defaultUnidadeIds(),
     itens:         [emptyItem()],
     codCateg:      "",
   });
@@ -294,7 +305,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
       titulo:        "",
       urgencia:      "normal",
       justificativa: "",
-      unidade_ids:   unidades.length === 1 ? [unidades[0].id] : [],
+      unidade_ids:   defaultUnidadeIds(),
       itens:         [emptyItem()],
       codCateg:      "",
     });

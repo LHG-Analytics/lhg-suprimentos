@@ -64,6 +64,16 @@ export default async function PedidosPage() {
     unidadeId = unidade?.id ?? null;
   }
 
+  // Pré-filtra IDs de pedidos pertencentes à unidade ativa
+  let pedidoIdsParaUnidade: string[] | null = null;
+  if (unidadeId) {
+    const { data: pedUnidades } = await supabase
+      .from("pedido_unidades")
+      .select("pedido_id")
+      .eq("unidade_id", unidadeId);
+    pedidoIdsParaUnidade = (pedUnidades ?? []).map((p) => p.pedido_id);
+  }
+
   // Query de omie_pedidos filtrada pela unidade ativa E pelo filtro de status
   // Nota: filtro_omie foi adicionado pela migration 0017 e ainda não está nos
   // tipos gerados pelo Supabase — chamamos .eq() depois da atribuição any
@@ -84,25 +94,34 @@ export default async function PedidosPage() {
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
   const [{ data: pedidos }, omieResult] = await Promise.all([
-    supabase
-      .from("pedidos")
-      .select(`
-        id, numero, status, valor_total, condicao_pgto, entrega_prev,
-        created_at, email_enviado_em, omie_status, omie_codigo,
-        comprador:user_profiles!comprador_id(nome, avatar_url),
-        aprovador:user_profiles!aprovador_id(nome),
-        fornecedores(id, razao_social, nome_fantasia, email, rating, pontualidade_pct),
-        cotacoes(id, numero, titulo),
-        pedido_itens(
-          id, quantidade, preco_unitario, valor_total,
-          produtos(id, nome, codigo, unidade_med, categoria)
-        ),
-        pedido_eventos(
-          id, tipo, texto, created_at, autor_nome,
-          autor:user_profiles!autor_id(nome, avatar_url)
-        )
-      `)
-      .order("created_at", { ascending: false }),
+    (() => {
+      let q = supabase
+        .from("pedidos")
+        .select(`
+          id, numero, status, valor_total, condicao_pgto, entrega_prev,
+          created_at, email_enviado_em, omie_status, omie_codigo,
+          comprador:user_profiles!comprador_id(nome, avatar_url),
+          aprovador:user_profiles!aprovador_id(nome),
+          fornecedores(id, razao_social, nome_fantasia, email, rating, pontualidade_pct),
+          cotacoes(id, numero, titulo),
+          pedido_itens(
+            id, quantidade, preco_unitario, valor_total,
+            produtos(id, nome, codigo, unidade_med, categoria)
+          ),
+          pedido_eventos(
+            id, tipo, texto, created_at, autor_nome,
+            autor:user_profiles!autor_id(nome, avatar_url)
+          )
+        `)
+        .order("created_at", { ascending: false });
+      // Aplica filtro por unidade quando selecionada
+      if (pedidoIdsParaUnidade !== null) {
+        q = pedidoIdsParaUnidade.length > 0
+          ? q.in("id", pedidoIdsParaUnidade)
+          : q.in("id", ["00000000-0000-0000-0000-000000000000"]); // nenhum resultado
+      }
+      return q;
+    })(),
 
     omieQuery,
   ]);

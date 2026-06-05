@@ -42,9 +42,10 @@ interface Produto  {
 }
 
 interface RequisicoesClientProps {
-  requisicoes: Requisicao[];
-  unidades:    Unidade[];
-  produtos:    Produto[];
+  requisicoes:      Requisicao[];
+  unidades:         Unidade[];
+  produtos:         Produto[];
+  activeUnidadeId?: string | null;
 }
 
 type ReqStatus = "rascunho" | "cotacao" | "pendente" | "aprovado" | "rejeitado" | "cancelado" | "pendente_produto" | "aguardando_cotacao";
@@ -104,7 +105,7 @@ const FILTER_LABELS: Record<FilterStatus, string> = {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function RequisicoesClient({ requisicoes, unidades, produtos }: RequisicoesClientProps) {
+export function RequisicoesClient({ requisicoes, unidades, produtos, activeUnidadeId }: RequisicoesClientProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterStatus>("todas");
   const [query,  setQuery]  = useState("");
@@ -458,6 +459,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos }: Requisico
         onClose={() => setModalOpen(false)}
         unidades={unidades}
         produtos={produtos}
+        activeUnidadeId={activeUnidadeId}
       />
 
       {/* ── Modal confirmar exclusão ─────────────────────────────────────────── */}
