@@ -71,11 +71,17 @@ export default async function RequisicoesPage() {
       return q;
     })(),
 
-    supabase
-      .from("unidades")
-      .select("id, nome, slug, cor_hex")
-      .eq("ativa", true)
-      .order("nome"),
+    // Quando unidade específica ativa: retorna só ela. Quando "todas": retorna todas.
+    unidadeId
+      ? supabase
+          .from("unidades")
+          .select("id, nome, slug, cor_hex")
+          .eq("id", unidadeId)
+      : supabase
+          .from("unidades")
+          .select("id, nome, slug, cor_hex")
+          .eq("ativa", true)
+          .order("nome"),
 
     // Produtos filtrados pela unidade ativa (para o wizard de Nova Requisição)
     unidadeId
