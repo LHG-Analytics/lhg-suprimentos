@@ -179,7 +179,7 @@ export async function listAllRequisicoes(
         "PesquisarReq",
         creds,
         {
-          pagina,
+          pagina: page,
           registros_por_pagina: PER_PAGE,
           apenas_importado_api: "N", // inclui requisições criadas manualmente no Omie (não só via API)
         },
