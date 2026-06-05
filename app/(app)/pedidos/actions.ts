@@ -556,3 +556,37 @@ export async function excluirPedidoOmie(
   revalidatePath("/pedidos");
   return { ok: true };
 }
+
+// ── excluirPedidoLocal ─────────────────────────────────────────────────────────
+
+export async function excluirPedidoLocal(
+  pedidoId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: pedido, error: fetchErr } = await supabase
+    .from("pedidos")
+    .select("id, status, omie_status")
+    .eq("id", pedidoId)
+    .single();
+
+  if (fetchErr || !pedido) return { erro: "Pedido não encontrado" };
+  if (pedido.omie_status === "sincronizado") {
+    return { erro: "Pedido sincronizado com o Omie. Exclua-o do Omie antes de remover aqui." };
+  }
+  if (["recebido", "finalizado"].includes(pedido.status)) {
+    return { erro: "Pedidos já recebidos não podem ser excluídos." };
+  }
+
+  await supabase.from("pedido_itens").delete().eq("pedido_id", pedidoId);
+  await supabase.from("pedido_eventos").delete().eq("pedido_id", pedidoId);
+  await supabase.from("pedido_unidades").delete().eq("pedido_id", pedidoId);
+
+  const { error } = await supabase.from("pedidos").delete().eq("id", pedidoId);
+  if (error) return { erro: error.message };
+
+  revalidatePath("/pedidos");
+  return { ok: true };
+}

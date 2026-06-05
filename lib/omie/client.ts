@@ -217,9 +217,14 @@ export async function omiePost<TParam, TResponse>(
           fsLow.includes("nao existem registros") ||
           fsLow.includes("nenhum registro");
 
+        // REDUNDANT nunca deve ser retentado — o retry faz mais chamadas dentro
+        // do janela de 60s do Omie e piora o problema exponencialmente
+        const isRedundant =
+          fs.includes("redundante") || fs.toUpperCase().includes("REDUNDANT");
+
         // Outros erros: retentáveis (SOAP-ENV / 5xx) ou definitivos
         const retryable =
-          !isEmpty && (fc.startsWith("SOAP-ENV") || fc.startsWith("5"));
+          !isEmpty && !isRedundant && (fc.startsWith("SOAP-ENV") || fc.startsWith("5"));
         if (!retryable || attempt === maxRetries) {
           throw new OmieError(fs, fc, res.status);
         }

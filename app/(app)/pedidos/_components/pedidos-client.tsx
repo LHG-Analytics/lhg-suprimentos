@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { aprovarPedido, marcarRecebido, pushPedidoOmie } from "../actions";
+import { aprovarPedido, marcarRecebido, pushPedidoOmie, excluirPedidoLocal } from "../actions";
 import { ModalEmail } from "./modal-email";
 import { ModalRejeitar } from "./modal-rejeitar";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -342,9 +342,10 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
 // ── Detalhe Pedido LHG (conteúdo) ────────────────────────────────────────────
 
 function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedido; onAtualizado: () => void; onClose: () => void }) {
-  const [pending, start]      = useTransition();
+  const [pending, start]          = useTransition();
   const [emailOpen, setEmailOpen] = useState(false);
   const [rejeitarOpen, setRejeitarOpen] = useState(false);
+  const [confirmarExcluir, setConfirmarExcluir] = useState(false);
 
   const forn    = pedido.fornecedores;
   const st      = STATUS_CONFIG[pedido.status] ?? STATUS_CONFIG.rascunho;
@@ -381,6 +382,20 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
         else { toast.success(`Pedido enviado ao Omie (#${res.omie_codigo})`); }
         onAtualizado();
       } catch (err) { toast.error(err instanceof Error ? err.message : "Erro ao enviar ao Omie"); }
+    });
+  }
+
+  function handleExcluir() {
+    start(async () => {
+      const res = await excluirPedidoLocal(pedido.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        setConfirmarExcluir(false);
+      } else {
+        toast.success("Pedido excluído");
+        onClose();
+        onAtualizado();
+      }
     });
   }
 
@@ -460,6 +475,32 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
               {pending ? "Enviando…" : "Enviar ao Omie"}
             </button>
           ) : null}
+
+          {/* Excluir pedido — só disponível quando não sincronizado com Omie */}
+          {pedido.omie_status !== "sincronizado" && !["recebido","finalizado"].includes(pedido.status) && (
+            confirmarExcluir ? (
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span className="text-[11px] text-muted-foreground">Confirmar exclusão?</span>
+                <button onClick={handleExcluir} disabled={pending}
+                  className="inline-flex items-center gap-1 rounded-md border border-red-700/60 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50">
+                  {pending ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />}Excluir
+                </button>
+                <button onClick={() => setConfirmarExcluir(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground/80 px-2 py-1 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmarExcluir(true)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-red-400 hover:border-red-700/40 hover:bg-red-500/10 transition-colors",
+                  pedido.omie_status === "sincronizado" ? "hidden" : "",
+                  !pedido.omie_status || pedido.omie_status === "erro" ? "ml-auto" : "",
+                )}>
+                <XCircle size={12} />Excluir
+              </button>
+            )
+          )}
         </div>
       </div>
 
