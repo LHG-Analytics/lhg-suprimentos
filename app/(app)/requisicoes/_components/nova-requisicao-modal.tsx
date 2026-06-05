@@ -823,64 +823,53 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                         </div>
                       </div>
 
-                      {/* ── Desktop: grid original ── */}
-                      <div className="hidden sm:block px-3 py-1.5">
-                        {/* Toggle tipo de item */}
-                        <div className="flex gap-1 mb-2">
-                          <button
-                            type="button"
-                            onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                              item.tipo === "catalogo"
-                                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25"
-                                : "bg-muted text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Catálogo
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                              item.tipo === "livre"
-                                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25"
-                                : "bg-muted text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Texto livre
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2">
-                          {/* Produto */}
-                          {item.tipo === "catalogo" ? (
-                            <ProdutoCombobox
-                              value={item.produto}
-                              onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                              produtos={produtos}
-                              familiaFiltro={familiaFiltro}
-                            />
-                          ) : (
-                            <div className="flex gap-1.5 col-span-3">
+                      {/* ── Desktop: grid alinhado com header ── */}
+                      <div className="hidden sm:grid sm:grid-cols-[1fr_72px_56px_80px_1fr_32px] gap-2 px-3 py-1.5 items-center">
+                          {/* Produto — toggle + campo dentro da mesma célula */}
+                          <div className="min-w-0 flex items-center gap-1">
+                            {/* Mini toggle catálogo/livre */}
+                            <div className="flex shrink-0 rounded overflow-hidden border border-border/60 text-[10px] font-medium">
+                              <button
+                                type="button"
+                                onClick={() => updateItem(item._key, { tipo: "catalogo" as const, produto_nome_livre: "" })}
+                                className={cn(
+                                  "px-1.5 py-0.5 transition-colors",
+                                  item.tipo === "catalogo"
+                                    ? "bg-emerald-500/20 text-emerald-400"
+                                    : "bg-transparent text-muted-foreground/50 hover:text-foreground",
+                                )}
+                              >Cat</button>
+                              <button
+                                type="button"
+                                onClick={() => updateItem(item._key, { tipo: "livre" as const, produto_id: "", produto: null })}
+                                className={cn(
+                                  "px-1.5 py-0.5 transition-colors border-l border-border/60",
+                                  item.tipo === "livre"
+                                    ? "bg-amber-500/20 text-amber-400"
+                                    : "bg-transparent text-muted-foreground/50 hover:text-foreground",
+                                )}
+                              >Livre</button>
+                            </div>
+                            {/* Campo produto */}
+                            {item.tipo === "catalogo" ? (
+                              <div className="flex-1 min-w-0">
+                                <ProdutoCombobox
+                                  value={item.produto}
+                                  onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
+                                  produtos={produtos}
+                                  familiaFiltro={familiaFiltro}
+                                />
+                              </div>
+                            ) : (
                               <input
                                 type="text"
-                                placeholder="Descreva o produto não encontrado no catálogo..."
+                                placeholder="Descreva o produto..."
                                 value={item.produto_nome_livre}
                                 onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })}
-                                className="flex-1 h-9 px-3 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
+                                className="flex-1 min-w-0 h-7 px-2 rounded bg-background border border-amber-500/30 text-foreground text-[12px] focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/50"
                               />
-                              <select
-                                value={item.produto_unidade_med}
-                                onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
-                                className="w-20 h-9 px-2 rounded-lg bg-background border border-amber-500/30 text-foreground text-sm focus:outline-none focus:border-amber-500"
-                              >
-                                {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
-                                  <option key={u} value={u}>{u}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                            )}
+                          </div>
 
                           {/* Quantidade */}
                           <input
@@ -889,36 +878,38 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                             step={1}
                             value={item.quantidade}
                             onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
-                            className={cn(
-                              "w-full rounded border border-transparent bg-transparent",
-                              "px-2 py-1.5 text-[12px] text-foreground font-mono text-center",
-                              "focus:outline-none focus:border-border hover:border-border transition-colors",
-                              "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none",
-                              item.tipo === "livre" && "col-start-4",
-                            )}
+                            className="w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-[12px] text-foreground font-mono text-center focus:outline-none focus:border-border hover:border-border transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                           />
 
                           {/* Unidade de medida */}
-                          {item.tipo === "catalogo" && (
-                            <div className="flex items-center justify-center">
+                          <div className="flex items-center justify-center">
+                            {item.tipo === "catalogo" ? (
                               <span className="text-[11px] font-mono text-muted-foreground uppercase">
                                 {item.produto?.unidade_med ?? "—"}
                               </span>
-                            </div>
-                          )}
+                            ) : (
+                              <select
+                                value={item.produto_unidade_med}
+                                onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })}
+                                className="w-full h-7 px-1 rounded bg-background border border-amber-500/30 text-foreground text-[11px] focus:outline-none"
+                              >
+                                {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
 
                           {/* Último custo */}
-                          {item.tipo === "catalogo" && (
-                            <div className="flex items-center justify-end">
-                              {item.produto?.preco_custo ? (
-                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                                  {formatBRL(item.produto.preco_custo)}
-                                </span>
-                              ) : (
-                                <span className="text-[11px] text-muted-foreground/30">—</span>
-                              )}
-                            </div>
-                          )}
+                          <div className="flex items-center justify-end">
+                            {item.tipo === "catalogo" && item.produto?.preco_custo ? (
+                              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                {formatBRL(item.produto.preco_custo)}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground/30">—</span>
+                            )}
+                          </div>
 
                           {/* Observação */}
                           <input
@@ -948,7 +939,6 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                           >
                             <Trash2 size={13} />
                           </button>
-                        </div>
                       </div>
                     </div>
                   ))}

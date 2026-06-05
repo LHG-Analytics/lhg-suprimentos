@@ -297,16 +297,10 @@ export async function pushPedidoOmie(
       : produtosIncluir,
   };
 
-  // Log da estrutura real que será enviada ao Omie
-  console.log("[pushPedidoOmie] payload real:", JSON.stringify({
-    call: foiRedundant ? "UpsertPedCompra" : "IncluirPedCompra",
-    param: [payload],
-  }));
-
   try {
-    // 1ª tentativa → IncluirPedCompra. Após REDUNDANT → UpsertPedCompra (idempotente)
-    const fn = foiRedundant ? upsertPedCompra : incluirPedCompra;
-    const nCodPed = await fn(creds, payload);
+    // Sempre UpsertPedCompra — idempotente (cria se não existe, atualiza se existe).
+    // Elimina o problema de REDUNDANT que ocorria com IncluirPedCompra.
+    const nCodPed = await upsertPedCompra(creds, payload);
 
     const omieRef = String(nCodPed);
 
