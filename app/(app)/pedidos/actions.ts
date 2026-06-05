@@ -279,7 +279,8 @@ export async function pushPedidoOmie(
       dDtPrevisao: dataPrevisao,
       cCodParc:    "999",
       nQtdeParc,
-      cCodCateg,
+      // Só envia cCodCateg se tiver valor — string vazia causa erro no Omie
+      ...(cCodCateg ? { cCodCateg } : {}),
       nCodCC,
       cNumPedido:  pedido.numero,
       cObs:        `${obsTexto} [${cCodIntPed.slice(-4)}]`, // sufixo único quebra hash REDUNDANT
