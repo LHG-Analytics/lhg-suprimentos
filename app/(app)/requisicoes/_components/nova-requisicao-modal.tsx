@@ -271,18 +271,20 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
   const [categQuery,      setCategQuery]      = useState("");
   const [categCarregando, setCategCarregando] = useState(false);
 
-  // Carrega categorias ao abrir o modal — usa 1ª unidade selecionada ou 1ª disponível
+  // Recarrega categorias toda vez que o modal abre OU a unidade muda
+  // (sem cache para garantir descrições corretas do Omie)
   useEffect(() => {
-    if (!open || categorias.length > 0) return;
+    if (!open) return;
     const unidadeId = form.unidade_ids[0] ?? unidades[0]?.id;
     if (!unidadeId) return;
+    setCategorias([]);
     setCategCarregando(true);
     listarCategoriasOmie(unidadeId)
       .then(res => { if ("categorias" in res) setCategorias(res.categorias); })
       .catch(() => {})
       .finally(() => setCategCarregando(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, form.unidade_ids[0]]);
 
   function reset() {
     setStep(1);
