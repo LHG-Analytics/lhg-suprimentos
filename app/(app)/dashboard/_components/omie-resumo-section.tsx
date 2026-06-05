@@ -41,44 +41,40 @@ interface OmieResumoSectionProps {
 // ── Componente ─────────────────────────────────────────────────────────────────
 
 export async function OmieResumoSection({ from, to }: OmieResumoSectionProps) {
-  // Converte ISO → formato Omie (DD/MM/YYYY)
-  const fromDate = new Date(from + "T00:00:00");
-  const toDate   = new Date(to   + "T00:00:00");
-  const dInicio  = formatOmieDate(fromDate);
-  const dFim     = formatOmieDate(toDate);
-
-  // Unidade ativa (mesmo cookie que o UnidadeContext usa)
-  const cookieStore = await cookies();
-  const unidadeSlug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
-
-  // Busca credenciais no Supabase (service client — leitura segura server-side)
-  const supabase = createServiceClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query: any = supabase
-    .from("unidades")
-    .select("slug, nome, omie_app_key, omie_app_secret")
-    .eq("ativa", true)
-    .not("omie_app_key",    "is", null)
-    .not("omie_app_secret", "is", null);
-
-  if (unidadeSlug !== "todas") {
-    query = query.eq("slug", unidadeSlug);
-  }
-
-  const { data: unidades } = await query.limit(1).maybeSingle();
-
-  // Sem unidade configurada → não renderiza o widget (sem quebrar o dashboard)
-  if (!unidades) return null;
-
   try {
+    // Converte ISO → formato Omie (DD/MM/YYYY)
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate   = new Date(to   + "T00:00:00");
+    const dInicio  = formatOmieDate(fromDate);
+    const dFim     = formatOmieDate(toDate);
+
+    // Unidade ativa
+    const cookieStore = await cookies();
+    const unidadeSlug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+    const supabase = createServiceClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase
+      .from("unidades")
+      .select("slug, nome, omie_app_key, omie_app_secret")
+      .eq("ativa", true)
+      .not("omie_app_key",    "is", null)
+      .not("omie_app_secret", "is", null);
+
+    if (unidadeSlug !== "todas") {
+      query = query.eq("slug", unidadeSlug);
+    }
+
+    const { data: unidade } = await query.limit(1).maybeSingle();
+    if (!unidade) return null;
+
     const resumo = await getCachedResumo(
-      unidades.omie_app_key   as string,
-      unidades.omie_app_secret as string,
+      unidade.omie_app_key    as string,
+      unidade.omie_app_secret as string,
       dInicio,
       dFim,
     );
 
-    // Rótulo de período legível em pt-BR
     const periodoLabel = `${fromDate.toLocaleDateString("pt-BR", {
       day: "2-digit", month: "short", year: "numeric",
     })} – ${toDate.toLocaleDateString("pt-BR", {
@@ -88,12 +84,12 @@ export async function OmieResumoSection({ from, to }: OmieResumoSectionProps) {
     return (
       <OmieResumoWidget
         resumo={resumo}
-        unidadeNome={unidades.nome as string}
+        unidadeNome={unidade.nome as string}
         periodoLabel={periodoLabel}
       />
     );
-  } catch {
-    // Falha silenciosa — Omie fora do ar não deve quebrar o dashboard
+  } catch (err) {
+    console.error("[OmieResumoSection] erro:", err);
     return null;
   }
 }
