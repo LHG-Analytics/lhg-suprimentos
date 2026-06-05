@@ -106,7 +106,7 @@ export async function excluirPedCompra(
 // ── consultarPedCompra ─────────────────────────────────────────────────────────
 
 /**
- * Consulta um Pedido de Compra no Omie.
+ * Consulta um Pedido de Compra no Omie pelo nCodPed.
  */
 export async function consultarPedCompra(
   creds: OmieCredentials,
@@ -118,4 +118,31 @@ export async function consultarPedCompra(
     creds,
     { nCodPed },
   );
+}
+
+// ── buscarPedCompraPorIntCod ───────────────────────────────────────────────────
+
+/**
+ * Consulta pelo código de integração (cCodIntPed = pedido.id do sistema).
+ * Útil no retry após erro REDUNDANT: o Omie já criou o pedido mas a resposta
+ * foi perdida. Retorna null se não encontrado.
+ */
+export async function buscarPedCompraPorIntCod(
+  creds: OmieCredentials,
+  cCodIntPed: string,
+): Promise<number | null> {
+  try {
+    const res = await omiePost<
+      { cCodIntPed: string },
+      { cabecalho?: { nCodPed?: number } }
+    >(
+      "/produtos/pedidocompra/",
+      "ConsultarPedCompra",
+      creds,
+      { cCodIntPed },
+    );
+    return res.cabecalho?.nCodPed ?? null;
+  } catch {
+    return null;
+  }
 }

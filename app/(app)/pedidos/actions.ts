@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { OmieError } from "@/lib/omie/client";
-import { incluirPedCompra, alterarPedCompra, excluirPedCompra } from "@/lib/omie/pedidos";
+import { incluirPedCompra, alterarPedCompra, excluirPedCompra, buscarPedCompraPorIntCod } from "@/lib/omie/pedidos";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -240,6 +240,35 @@ export async function pushPedidoOmie(
     revalidatePath("/pedidos");
     return { omie_codigo: omieRef };
   } catch (err) {
+    const isRedundant = err instanceof OmieError && err.message.includes("REDUNDANT");
+
+    // Erro REDUNDANT = Omie detectou chamada duplicada — o pedido pode já ter sido
+    // criado com sucesso numa tentativa anterior mas a resposta foi perdida.
+    // Tentamos buscar o pedido pelo cCodIntPed antes de registrar como erro.
+    if (isRedundant) {
+      const nCodExistente = await buscarPedCompraPorIntCod(creds, pedidoId);
+      if (nCodExistente) {
+        const omieRef = String(nCodExistente);
+        await supabase
+          .from("pedidos")
+          .update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null })
+          .eq("id", pedidoId);
+        await supabase.from("pedido_eventos").insert({
+          pedido_id: pedidoId,
+          tipo:      "omie",
+          texto:     `Pedido recuperado do Omie após erro REDUNDANT — nCodPed: ${omieRef}`,
+          autor_id:  user.id,
+        });
+        revalidatePath("/pedidos");
+        return { omie_codigo: omieRef };
+      }
+      // Pedido não encontrado no Omie — registra erro orientando a aguardar
+      const msg = "Omie: requisição duplicada detectada. Aguarde 60 segundos e tente novamente.";
+      await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
+      revalidatePath("/pedidos");
+      return { erro: msg };
+    }
+
     const msg = err instanceof OmieError
       ? `Omie: ${err.message}`
       : err instanceof Error ? err.message : "Erro desconhecido ao enviar ao Omie";
