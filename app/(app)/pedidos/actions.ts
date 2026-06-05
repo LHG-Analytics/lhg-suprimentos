@@ -153,7 +153,7 @@ export async function pushPedidoOmie(
         produtos ( omie_codigo, nome, unidade_med )
       ),
       pedido_unidades (
-        unidades ( omie_app_key, omie_app_secret, omie_conta_corrente )
+        unidades ( omie_app_key, omie_app_secret, omie_conta_corrente, omie_categoria_compras )
       )
     `)
     .eq("id", pedidoId)
@@ -163,7 +163,7 @@ export async function pushPedidoOmie(
     return { erro: pedErr?.message ?? "Pedido não encontrado" };
   }
 
-  type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null; omie_conta_corrente?: number | null } | null };
+  type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null; omie_conta_corrente?: number | null; omie_categoria_compras?: string | null } | null };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pus     = pedido.pedido_unidades as any as PedidoUnidade[] | null;
   const unidade = pus?.[0]?.unidades;
@@ -243,36 +243,20 @@ export async function pushPedidoOmie(
   if (foiRedundant) dataBase.setDate(dataBase.getDate() + 1);
   const dataPrevisao = dataBase.toLocaleDateString("pt-BR");
 
-  const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
-
-  // Busca omie_codigo da Requisição vinculada via cotação → para passar como nCodReq
-  // Isso avança a Requisição existente no Omie para Pedido de Compra em vez de criar duplicata
-  let nCodReq: number | undefined;
-  if (pedido.cotacao_id) {
-    const { data: cotacao } = await supabase
-      .from("cotacoes")
-      .select("requisicao_id")
-      .eq("id", pedido.cotacao_id)
-      .maybeSingle();
-    if (cotacao?.requisicao_id) {
-      const { data: req } = await supabase
-        .from("requisicoes")
-        .select("omie_codigo")
-        .eq("id", cotacao.requisicao_id)
-        .maybeSingle();
-      if (req?.omie_codigo) {
-        nCodReq = Number(req.omie_codigo);
-        console.log(`[pushPedidoOmie] vinculando Requisição Omie nCodReq=${nCodReq}`);
-      }
-    }
-  }
+  const nCodCC    = unidade.omie_conta_corrente    ? Number(unidade.omie_conta_corrente)    : undefined;
+  const cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
 
   const obsTexto = pedido.condicao_pgto
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
     : `LHG Suprimentos ${pedido.numero}`;
 
   console.log("[pushPedidoOmie] enviando para Omie:", JSON.stringify({
-    cCodIntPed, nCodFor: forn.omie_codigo, nCodCC, nQtdeParc, dDtPrevisao: dataPrevisao,
+    cCodIntPed,
+    nCodFor:  Number(forn.omie_codigo),
+    nCodCC,
+    cCodCateg,
+    nQtdeParc,
+    dDtPrevisao: dataPrevisao,
     produtos: produtosIncluir.map(p => ({ nCodProd: p.nCodProd, nQtde: p.nQtde, nValUnit: p.nValUnit })),
   }));
 
@@ -280,33 +264,18 @@ export async function pushPedidoOmie(
     const nCodPed = await incluirPedCompra(creds, {
       cabecalho_incluir: {
         cCodIntPed,
-        nCodFor:      Number(forn.omie_codigo),
-        dDtPrevisao:  dataPrevisao,
-        cCodParc:     "",
+        nCodFor:     Number(forn.omie_codigo),
+        dDtPrevisao: dataPrevisao,
+        cCodParc:    "999",
         nQtdeParc,
-        cCodIntFor:   "",
-        cCodCateg:    "",
-        nCodCompr:    0,
-        cContato:     "",
-        cContrato:    "",
+        cCodCateg,
         nCodCC,
-        nCodIntCC:    0,
-        nCodProj:     0,
-        nCodReq,      // vincula à Requisição existente no Omie
-        cNumPedido:   pedido.numero,
-        cObs:         obsTexto,
-        cObsInt:      `Pedido gerado automaticamente pelo sistema LHG Suprimentos`,
+        cNumPedido:  pedido.numero,
+        cObs:        obsTexto,
+        cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
       },
       frete_incluir: {
-        nCodTransp:    0,
-        cCodIntTransp: "",
-        cTpFrete:      "9",
-        nQtdVol:       0,
-        nPesoLiq:      0,
-        nPesoBruto:    0,
-        nValFrete:     0,
-        nValSeguro:    0,
-        nValOutras:    0,
+        cTpFrete: "9",
       },
       produtos_incluir: produtosIncluir,
     });
