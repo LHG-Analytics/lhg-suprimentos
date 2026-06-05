@@ -281,8 +281,9 @@ export async function pushPedidoOmie(
       (err.message.includes("REDUNDANT") || err.message.toLowerCase().includes("redundante"));
 
     if (isRedundant) {
-      // Pedido provavelmente já existe no Omie mas resposta foi perdida.
-      // Busca pelos últimos 7 dias filtrado por fornecedor e lApenasImportadoApi=S
+      // REDUNDANT = Omie já tem um pedido com esses dados (ou cCodIntPed já usado).
+      // Busca em todos os status dos últimos 30 dias pelo nCodFor para recuperar nCodPed.
+      console.log(`[pushPedidoOmie] REDUNDANT para fornecedor ${forn.omie_codigo} — buscando pedido existente no Omie`);
       const nCodExistente = await recuperarPedCompraPorFornecedor(creds, Number(forn.omie_codigo));
       if (nCodExistente) {
         const omieRef = String(nCodExistente);
@@ -293,12 +294,13 @@ export async function pushPedidoOmie(
         await supabase.from("pedido_eventos").insert({
           pedido_id: pedidoId,
           tipo:      "omie",
-          texto:     `Pedido recuperado do Omie após REDUNDANT (busca por fornecedor) — nCodPed: ${omieRef}`,
+          texto:     `Pedido recuperado do Omie após REDUNDANT — nCodPed: ${omieRef}`,
           autor_id:  user.id,
         });
         revalidatePath("/pedidos");
         return { omie_codigo: omieRef };
       }
+      console.log(`[pushPedidoOmie] Pedido não encontrado no Omie para fornecedor ${forn.omie_codigo}`);
     }
 
     const rawMsg = err instanceof OmieError ? err.message : err instanceof Error ? err.message : "Erro desconhecido";

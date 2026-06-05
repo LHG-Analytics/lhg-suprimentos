@@ -135,41 +135,47 @@ export async function recuperarPedCompraPorFornecedor(
   creds: OmieCredentials,
   nCodFor: number,
 ): Promise<number | null> {
-  try {
-    const hoje    = new Date();
-    const seteDias = new Date(hoje.getTime() - 7 * 86_400_000);
-    const fmt = (d: Date) => {
-      const dd = String(d.getDate()).padStart(2, "0");
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      return `${dd}/${mm}/${d.getFullYear()}`;
-    };
+  const fmt = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  };
+  const hoje    = new Date();
+  const trintaDias = new Date(hoje.getTime() - 30 * 86_400_000);
 
-    const res = await omiePost<
-      {
-        nPagina: number; nRegsPorPagina: number;
-        lApenasImportadoApi: "S";
-        lExibirPedidosPendentes: "T";
-        dDataInicial: string; dDataFinal: string;
-      },
-      { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number; nCodFor?: number } }> }
-    >(
-      "/produtos/pedidocompra/",
-      "PesquisarPedCompra",
-      creds,
-      {
-        nPagina: 1,
-        nRegsPorPagina: 20,
-        lApenasImportadoApi: "S",      // apenas pedidos criados via API
-        lExibirPedidosPendentes: "T",  // todos os pendentes
-        dDataInicial: fmt(seteDias),
-        dDataFinal:   fmt(hoje),
-      },
-    );
+  // Busca em múltiplos filtros de status para garantir encontrar o pedido
+  const filtros = [
+    { lExibirPedidosPendentes: "T" as const },
+    { lExibirPedidosFaturados: "T" as const },
+    { lExibirPedidosEncerrados: "T" as const },
+  ];
 
-    const pedidos = res.pedidos_pesquisa ?? [];
-    const match = pedidos.find(p => p.cabecalho_consulta?.nCodFor === nCodFor);
-    return match?.cabecalho_consulta?.nCodPed ?? null;
-  } catch {
-    return null;
+  for (const filtro of filtros) {
+    try {
+      const res = await omiePost<
+        Record<string, unknown>,
+        { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number; nCodFor?: number } }> }
+      >(
+        "/produtos/pedidocompra/",
+        "PesquisarPedCompra",
+        creds,
+        {
+          nPagina: 1,
+          nRegsPorPagina: 50,
+          lApenasImportadoApi: "N",  // inclui todos (API e manuais)
+          ...filtro,
+          dDataInicial: fmt(trintaDias),
+          dDataFinal:   fmt(hoje),
+        },
+      );
+      const match = (res.pedidos_pesquisa ?? [])
+        .find(p => p.cabecalho_consulta?.nCodFor === nCodFor);
+      if (match?.cabecalho_consulta?.nCodPed) {
+        return match.cabecalho_consulta.nCodPed;
+      }
+    } catch {
+      // continua para o próximo filtro
+    }
   }
+  return null;
 }
