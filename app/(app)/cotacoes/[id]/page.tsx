@@ -33,7 +33,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
          cotacao_itens(
            id, quantidade, melhor_forn, selecionado_forn,
            produtos(id, codigo, nome, unidade_med, categoria),
-           cotacao_matriz(cotacao_item_id, fornecedor_id, preco_unitario, prazo_entrega_dias, condicao_pagamento)
+           cotacao_matriz(cotacao_item_id, fornecedor_id, preco_unitario, prazo_entrega_dias, condicao_pagamento, observacao)
          )`,
       )
       .eq("id", id)

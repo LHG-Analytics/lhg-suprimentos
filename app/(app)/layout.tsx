@@ -37,7 +37,8 @@ export default async function AppLayout({
     supabase
       .from("cotacoes")
       .select("*", { count: "exact", head: true })
-      .in("status", ["rascunho", "cotacao", "pendente"]),
+      .in("status", ["rascunho", "cotacao", "pendente"])
+      .is("deleted_at", null),
   ]);
 
   // Fallback caso perfil ainda não exista (primeiro acesso)

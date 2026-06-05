@@ -174,7 +174,8 @@ const MatrizCellSchema = z.object({
   fornecedor_id:      z.string().uuid(),
   preco_unitario:     z.number().positive().nullable(),
   prazo_entrega_dias: z.number().int().min(0).nullable().optional(),
-  condicao_pagamento: z.string().optional(),
+  condicao_pagamento: z.string().nullable().optional(),
+  observacao:         z.string().nullable().optional(),
 });
 
 export async function upsertMatrizCell(input: z.infer<typeof MatrizCellSchema>) {
