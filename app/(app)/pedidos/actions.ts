@@ -209,12 +209,7 @@ export async function pushPedidoOmie(
     return { erro: msg };
   }
 
-  const dataPrevisao = pedido.entrega_prev
-    ? new Date(pedido.entrega_prev).toLocaleDateString("pt-BR")
-    : new Date(Date.now() + 7 * 86_400_000).toLocaleDateString("pt-BR");
-
   // Conta parcelas pelo número de valores separados por "/" em condicao_pgto
-  // Ex: "30/60" → 2, "30/60/90" → 3, "à vista" ou "30 dias" → 1
   function parseParcelas(condicao: string | null): number {
     if (!condicao) return 1;
     const partes = condicao.split("/").filter(p => /^\s*\d+/.test(p.trim()));
@@ -222,26 +217,31 @@ export async function pushPedidoOmie(
   }
   const nQtdeParc = parseParcelas(pedido.condicao_pgto);
 
-  // Verifica se já houve tentativas anteriores (omie_erro contém "REDUNDANT" ou "duplicada")
+  // Busca tentativas anteriores do banco (omie_erro, omie_codigo)
   const { data: pedidoAtual } = await supabase
     .from("pedidos")
     .select("omie_erro, omie_codigo")
     .eq("id", pedidoId)
     .single();
 
-  // Se já tem omie_codigo sincronizado (pode ter sido criado mas sem resposta salva), retorna
   if (pedidoAtual?.omie_codigo) {
     await supabase.from("pedidos").update({ omie_status: "sincronizado", omie_erro: null }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { omie_codigo: pedidoAtual.omie_codigo };
   }
 
-  // Em retentativas após REDUNDANT, usa sufixo de timestamp para garantir unicidade
-  // (o Omie rejeita cCodIntPed já utilizado permanentemente, não apenas por 60s)
   const foiRedundant = pedidoAtual?.omie_erro?.includes("REDUNDANT") || pedidoAtual?.omie_erro?.includes("duplicada");
   const cCodIntPed   = foiRedundant
     ? `${pedidoId.slice(0, 18)}-${Date.now().toString(36)}`
     : pedidoId;
+
+  // Omie hasheia nCodFor+nCodProd+nQtde+nValUnit+dDtPrevisao para REDUNDANT (ignora cCodIntPed).
+  // No retry, somamos 1 dia à data para mudar o hash e sair do loop.
+  const dataBase = pedido.entrega_prev
+    ? new Date(pedido.entrega_prev + "T12:00:00")
+    : new Date(Date.now() + 7 * 86_400_000);
+  if (foiRedundant) dataBase.setDate(dataBase.getDate() + 1);
+  const dataPrevisao = dataBase.toLocaleDateString("pt-BR");
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
