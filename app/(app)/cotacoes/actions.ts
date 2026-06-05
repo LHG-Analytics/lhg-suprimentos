@@ -230,16 +230,19 @@ export async function gerarPedidosDeCotacao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Buscar itens da cotação com células da matriz
+  // Buscar itens da cotação com células da matriz (inclui prazo_entrega_dias)
   const { data: itens, error: itensErr } = await supabase
     .from("cotacao_itens")
-    .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento)")
+    .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)")
     .eq("cotacao_id", cotacaoId);
 
   if (itensErr || !itens) throw new Error(itensErr?.message ?? "Erro ao buscar itens");
 
-  // Agrupar por fornecedor
-  const grupos = new Map<string, { preco_unitario: number; quantidade: number; produto_id: string; condicao_pgto: string | null }[]>();
+  // Agrupar por fornecedor — rastreia também o maior prazo de entrega entre os itens
+  const grupos = new Map<string, {
+    preco_unitario: number; quantidade: number; produto_id: string;
+    condicao_pgto: string | null; prazo_entrega_dias: number | null;
+  }[]>();
 
   for (const item of itens) {
     const fornId = selecoes[item.id];
@@ -250,10 +253,11 @@ export async function gerarPedidosDeCotacao(
 
     if (!grupos.has(fornId)) grupos.set(fornId, []);
     grupos.get(fornId)!.push({
-      preco_unitario: cell.preco_unitario,
-      quantidade:     item.quantidade,
-      produto_id:     item.produto_id,
-      condicao_pgto:  cell.condicao_pagamento,
+      preco_unitario:     cell.preco_unitario,
+      quantidade:         item.quantidade,
+      produto_id:         item.produto_id,
+      condicao_pgto:      cell.condicao_pagamento,
+      prazo_entrega_dias: cell.prazo_entrega_dias ?? null,
     });
   }
 
@@ -278,6 +282,15 @@ export async function gerarPedidosDeCotacao(
     const valor_total = linhas.reduce((acc, l) => acc + l.preco_unitario * l.quantidade, 0);
     const condicao    = linhas[0]?.condicao_pgto ?? null;
 
+    // Prazo de entrega = maior prazo entre os itens deste fornecedor (pior caso)
+    const maxPrazo = linhas.reduce<number | null>((max, l) => {
+      if (l.prazo_entrega_dias == null) return max;
+      return max == null ? l.prazo_entrega_dias : Math.max(max, l.prazo_entrega_dias);
+    }, null);
+    const entrega_prev = maxPrazo != null
+      ? new Date(Date.now() + maxPrazo * 86_400_000).toISOString().slice(0, 10)
+      : null;
+
     const { data: pedido, error: pedErr } = await supabase
       .from("pedidos")
       .insert({
@@ -288,6 +301,7 @@ export async function gerarPedidosDeCotacao(
         status:        "aguardando_aprovacao",
         valor_total,
         condicao_pgto: condicao,
+        entrega_prev,
       })
       .select("id")
       .single();

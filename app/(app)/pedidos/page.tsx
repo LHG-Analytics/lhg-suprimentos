@@ -17,8 +17,8 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosClient } from "./_components/pedidos-client";
 
-const FILTROS_VALIDOS = ["pendentes","faturados","recebidos","cancelados","encerrados","rec_parciais","fat_parciais"] as const;
-type FiltroOmie = typeof FILTROS_VALIDOS[number];
+// Sempre exibe apenas pedidos aguardando entrega (filtro_omie = 'pendentes')
+type FiltroOmie = "pendentes";
 
 // Tipo explícito para o row de omie_pedidos_compra após a migration de `itens`
 interface OmieRow {
@@ -41,15 +41,8 @@ interface OmieRow {
   unidades: { nome: string; slug: string } | null;
 }
 
-export default async function PedidosPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ filtro?: string }>;
-}) {
-  const { filtro: filtroParam } = await searchParams;
-  const filtroAtivo: FiltroOmie = FILTROS_VALIDOS.includes(filtroParam as FiltroOmie)
-    ? (filtroParam as FiltroOmie)
-    : "pendentes";
+export default async function PedidosPage() {
+  const filtroAtivo: FiltroOmie = "pendentes";
 
   const supabase = await createClient();
 

@@ -86,22 +86,10 @@ interface OmiePedido {
   unidades: { nome: string; slug: string } | null;
 }
 
-type FiltroOmie = "pendentes" | "faturados" | "recebidos" | "cancelados" | "encerrados" | "rec_parciais" | "fat_parciais";
-
-const FILTROS_OMIE: { key: FiltroOmie; label: string }[] = [
-  { key: "pendentes",    label: "Pendentes"    },
-  { key: "faturados",    label: "Faturados"    },
-  { key: "recebidos",    label: "Recebidos"    },
-  { key: "cancelados",   label: "Cancelados"   },
-  { key: "encerrados",   label: "Encerrados"   },
-  { key: "rec_parciais", label: "Rec. Parciais" },
-  { key: "fat_parciais", label: "Fat. Parciais" },
-];
-
 interface Props {
   pedidos: Pedido[];
   omie_pedidos: OmiePedido[];
-  filtroAtivo: FiltroOmie;
+  filtroAtivo: "pendentes";
 }
 
 // ── Configurações de status ───────────────────────────────────────────────────
@@ -575,7 +563,7 @@ function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onC
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAtivo }: Props) {
+export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
   const router = useRouter();
 
   const [busca,        setBusca]        = useState("");
@@ -585,43 +573,31 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
   const [page,         setPage]         = useState(0);
   const [dataInicio,   setDataInicio]   = useState<string>("");
   const [dataFim,      setDataFim]      = useState<string>("");
+  const [syncing,      setSyncing]      = useState(false);
 
-  // counts retornados pelo Omie para cada filtro (após sync individual)
-  const [filtroSyncCounts,  setFiltroSyncCounts]  = useState<Record<string, number>>({});
-  const [filtroSyncing,     setFiltroSyncing]     = useState<Record<string, boolean>>({});
-
-  // ── Sync por filtro: navega imediatamente, sincroniza em background ──────────
-  async function handleFiltroSync(filtro: FiltroOmie) {
-    if (filtroSyncing[filtro]) return;
-    // Se já é o filtro ativo, só atualiza do banco sem chamar o Omie
-    if (filtro === filtroAtivo) {
-      router.refresh();
-      return;
-    }
-    // 1. Navega imediatamente (mostra dados já no banco para esse filtro)
-    router.push(`/pedidos?filtro=${filtro}`);
-    // 2. Sincroniza em background
-    setFiltroSyncing(prev => ({ ...prev, [filtro]: true }));
+  // ── Sincronizar pedidos pendentes do Omie ────────────────────────────────────
+  async function handleSync() {
+    setSyncing(true);
     try {
       const res  = await fetch("/api/omie/sync-pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filtro }),
+        body: JSON.stringify({ filtro: "pendentes" }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(`Erro ao sincronizar ${filtro}: ${data?.error ?? res.status}`);
+        toast.error(`Erro ao sincronizar: ${data?.error ?? res.status}`);
         return;
       }
-      type SyncRes = { total?: number; detalhe?: { totalRegistrosOmie?: number } };
-      const r = (data.results as SyncRes[] | undefined)?.[0];
-      const totalOmie = r?.detalhe?.totalRegistrosOmie ?? r?.total ?? 0;
-      setFiltroSyncCounts(prev => ({ ...prev, [filtro]: totalOmie }));
-      router.refresh(); // 3. Refresh com dados frescos do banco
+      type SyncRes = { total?: number };
+      const total = (data.results as SyncRes[] | undefined)
+        ?.reduce((acc, r) => acc + (r.total ?? 0), 0) ?? 0;
+      toast.success(`${total} pedido${total !== 1 ? "s" : ""} sincronizado${total !== 1 ? "s" : ""}`);
+      router.refresh();
     } catch (err) {
       toast.error(`Erro: ${err instanceof Error ? err.message : "desconhecido"}`);
     } finally {
-      setFiltroSyncing(prev => ({ ...prev, [filtro]: false }));
+      setSyncing(false);
     }
   }
 
@@ -742,38 +718,20 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, filtroAt
             <ShoppingCart size={18} className="text-muted-foreground" />
             Pedidos de Compra
           </h1>
+          <p className="text-[12px] text-muted-foreground mt-0.5">Aguardando entrega</p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Filtros Omie — cada botão sincroniza e exibe o status correspondente */}
-          {FILTROS_OMIE.map(f => {
-            const isAtivo   = filtroAtivo === f.key;
-            const isSyncing = filtroSyncing[f.key];
-            return (
-              <button
-                key={f.key}
-                onClick={() => handleFiltroSync(f.key)}
-                disabled={isSyncing}
-                title={`Sincronizar e exibir pedidos "${f.label}" do Omie`}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40",
-                  isAtivo
-                    ? "border-amber-500/50 bg-amber-500/15 text-amber-400"
-                    : "border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/70",
-                )}
-              >
-                {isSyncing
-                  ? <Loader2 size={10} className="animate-spin" />
-                  : <RefreshCw size={10} className={isAtivo ? "text-amber-400" : ""} />}
-                {f.label}
-                {filtroSyncCounts[f.key] != null && (
-                  <span className={cn("ml-0.5 font-mono text-[10px]", isAtivo ? "text-amber-300" : "text-amber-400")}>
-                    {filtroSyncCounts[f.key]}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          {/* Sincronizar com Omie */}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            title="Sincronizar pedidos pendentes com o Omie"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors disabled:opacity-40"
+          >
+            {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Sincronizar
+          </button>
 
           {/* Novo Pedido LHG */}
           <button
