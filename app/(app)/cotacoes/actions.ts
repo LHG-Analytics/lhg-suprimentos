@@ -443,6 +443,23 @@ export async function enviarEmailCotacao(
 
   if (cotErr || !cotacao) throw new Error(cotErr?.message ?? "Cotação não encontrada");
 
+  // Busca email_remetente da primeira unidade da cotação (para usar no from)
+  const { data: cotUnid } = await supabase
+    .from("cotacao_unidades")
+    .select("unidade_id")
+    .eq("cotacao_id", cotacaoId)
+    .limit(1)
+    .maybeSingle();
+  let emailRemetente: string | null = null;
+  if (cotUnid?.unidade_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: unid } = await supabase.from("unidades").select("email_remetente" as any).eq("id", cotUnid.unidade_id).maybeSingle();
+    emailRemetente = (unid as any)?.email_remetente ?? null;
+  }
+  const fromEmail = emailRemetente
+    ? `Compras LHG Motéis <${emailRemetente}>`
+    : "Compras LHG Motéis <compras@lhgmoteis.com.br>";
+
   // Filtrar fornecedores-alvo
   type FornRow = {
     fornecedor_id: string;
@@ -483,7 +500,10 @@ export async function enviarEmailCotacao(
             <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.produtos?.codigo ?? ""}</td>
             <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.quantidade}</td>
             <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:center;font-size:13px;color:#a1a1aa">${i.produtos?.unidade_med ?? "UN"}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">__________</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">___________</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">___________</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">___________</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #27272a;text-align:right;font-size:13px;color:#71717a">___________</td>
           </tr>`,
       )
       .join("");
@@ -524,6 +544,9 @@ export async function enviarEmailCotacao(
             <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Qtd</th>
             <th style="padding:8px 12px;text-align:center;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Un.</th>
             <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Preço Unit.</th>
+            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Valor Total</th>
+            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Prazo Entrega</th>
+            <th style="padding:8px 12px;text-align:right;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.08em">Prazo Pagamento</th>
           </tr>
         </thead>
         <tbody>${itensLinhas}</tbody>
@@ -558,7 +581,7 @@ export async function enviarEmailCotacao(
         const resend = new Resend(resendKey);
 
         await resend.emails.send({
-          from:    "Compras LHG Motéis <compras@lhgmoteis.com.br>",
+          from:    fromEmail,
           to:      [forn.email],
           subject: `Solicitação de Cotação ${cotacao.numero} — LHG Motéis`,
           html:    htmlBody,
@@ -797,24 +820,49 @@ export async function aprovarCotacao(
       autor_id:  user.id,
     });
 
-    // Tentar enviar email ao fornecedor (silencioso se falhar)
-    if (forn.email) {
+    // Tentar enviar email ao fornecedor usando template React Email
+    if (forn.email && process.env.RESEND_API_KEY) {
       try {
         const { Resend } = await import("resend");
-        const resend = new Resend(process.env.RESEND_API_KEY!);
+        const { render } = await import("@react-email/components");
+        const { PedidoCompraFornecedorEmail } = await import("@/emails/pedido-compra-fornecedor");
+
+        const emailItens = itensForn
+          .filter(i => i.produtos?.nome)
+          .map(item => {
+            const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+            return {
+              nome:          item.produtos!.nome,
+              unidade:       item.produtos!.unidade_med ?? "UN",
+              quantidade:    item.quantidade,
+              precoUnitario: entrada?.preco_unitario ?? 0,
+            };
+          });
+
+        const htmlBody = await render(
+          PedidoCompraFornecedorEmail({
+            numero,
+            fornNome:     forn.nome_fantasia ?? forn.razao_social,
+            itens:        emailItens,
+            valorTotal,
+            entregaLabel: dtPrevisao,
+            condicaoPgto: condicaoPgto ?? null,
+            mensagem:     `Pedido de compra referente à cotação ${cotacao.titulo}.`,
+          }),
+        );
+
+        // Email remetente: usa o da unidade se configurado, senão o padrão
+        const unidadeEmail = (unidade as { email_remetente?: string | null }).email_remetente;
+        const fromEmail = unidadeEmail
+          ? `LHG Suprimentos <${unidadeEmail}>`
+          : "LHG Suprimentos <suprimentos@lhgmoteis.com.br>";
+
+        const resend = new Resend(process.env.RESEND_API_KEY);
         await resend.emails.send({
-          from: "LHG Suprimentos <suprimentos@lhgmoteis.com.br>",
-          to:   forn.email,
+          from:    fromEmail,
+          to:      forn.email,
           subject: `Pedido de Compra ${numero} — LHG Suprimentos`,
-          html: `
-            <h2>Pedido de Compra ${numero}</h2>
-            <p>Prezado(a) ${forn.nome_fantasia ?? forn.razao_social},</p>
-            <p>Seu fornecimento foi aprovado. Segue o pedido de compra referente à cotação <strong>${cotacao.titulo}</strong>.</p>
-            <p><strong>Valor total:</strong> R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-            <p><strong>Previsão de entrega:</strong> ${dtPrevisao}</p>
-            ${condicaoPgto ? `<p><strong>Condição de pagamento:</strong> ${condicaoPgto}</p>` : ""}
-            <p>Atenciosamente,<br/>LHG Suprimentos</p>
-          `,
+          html:    htmlBody,
         });
       } catch { /* silencioso */ }
     }
