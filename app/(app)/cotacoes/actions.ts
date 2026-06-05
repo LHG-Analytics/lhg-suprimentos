@@ -326,7 +326,7 @@ export async function gerarPedidosDeCotacao(
             produto_id:     l.produto_id,
             quantidade:     l.quantidade,
             preco_unitario: l.preco_unitario,
-            valor_total:    l.preco_unitario * l.quantidade,
+            // valor_total é GENERATED ALWAYS AS (quantidade * preco_unitario) — não inserir
           })),
         );
 
