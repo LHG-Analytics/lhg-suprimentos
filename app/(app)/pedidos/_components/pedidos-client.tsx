@@ -118,25 +118,42 @@ const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = 
 
 function TentarNovamenteButton({ pedidoId }: { pedidoId: string }) {
   const [pending, start] = useTransition();
-  const [cooldown, setCooldown] = useState(0);
   const router = useRouter();
+  const storageKey = `omie-cooldown-${pedidoId}`;
 
-  // Decrementa o countdown a cada segundo
+  // Inicializa cooldown do localStorage para sobreviver ao remount causado por revalidatePath
+  const [cooldown, setCooldown] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return 0;
+    const expiresAt = parseInt(stored, 10);
+    const remaining = Math.ceil((expiresAt - Date.now()) / 1000);
+    return remaining > 0 ? remaining : 0;
+  });
+
   useEffect(() => {
-    if (cooldown <= 0) return;
+    if (cooldown <= 0) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
     const t = setTimeout(() => setCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [cooldown]);
+  }, [cooldown, storageKey]);
+
+  function iniciarCooldown(segundos: number) {
+    const expiresAt = Date.now() + segundos * 1000;
+    localStorage.setItem(storageKey, String(expiresAt));
+    setCooldown(segundos);
+  }
 
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
     start(async () => {
       const res = await pushPedidoOmie(pedidoId);
       if ("erro" in res && res.erro) {
-        // Extrai quantos segundos o Omie pede para aguardar
         const match = res.erro.match(/Aguarde (\d+) segundo/i);
         if (match) {
-          setCooldown(parseInt(match[1]) + 3); // +3s de margem
+          iniciarCooldown(parseInt(match[1]) + 5); // +5s de margem extra
         }
         toast.error(res.erro);
       } else {
