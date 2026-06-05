@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { OmieError } from "@/lib/omie/client";
-import { incluirPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor, consultarPedCompraPorCodIntPed } from "@/lib/omie/pedidos";
+import { incluirPedCompra, upsertPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor, consultarPedCompraPorCodIntPed } from "@/lib/omie/pedidos";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -237,18 +237,12 @@ export async function pushPedidoOmie(
 
   const foiRedundant = pedidoAtual?.omie_erro?.includes("REDUNDANT") || pedidoAtual?.omie_erro?.includes("duplicada");
 
-  // Extrai o cCodIntPed da tentativa anterior salvo no omie_erro (formato: "... | codInt=XXX")
-  const lastCodIntPed = pedidoAtual?.omie_erro?.match(/\|codInt=([^\s]+)/)?.[1];
-
-  // Na 1ª tentativa: usa pedidoId. No retry: usa código único novo (nunca o mesmo que causou REDUNDANT)
+  // cCodIntPed curto (max 20 chars, sem hífens) para garantir compatibilidade Omie
+  // 1ª tentativa: "P" + 19 hex chars do pedidoId
+  // Retry: "R" + timestamp base36 (sempre diferente, ~11 chars)
   const cCodIntPed = foiRedundant
-    ? `${pedidoId.slice(0, 18)}-${Date.now().toString(36)}`
-    : pedidoId;
-
-  // lastCodIntPed guardado mas não usado para consulta — apenas logging
-  if (lastCodIntPed) {
-    console.log(`[pushPedidoOmie] código anterior: ${lastCodIntPed} — nova tentativa com cCodIntPed diferente: ${cCodIntPed}`);
-  }
+    ? `R${Date.now().toString(36).toUpperCase()}`
+    : `P${pedidoId.replace(/-/g, "").slice(0, 19).toUpperCase()}`;
 
   const dataBase = pedido.entrega_prev
     ? new Date(pedido.entrega_prev + "T12:00:00")
@@ -276,35 +270,33 @@ export async function pushPedidoOmie(
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
     : `LHG Suprimentos ${pedido.numero}`;
 
-  console.log("[pushPedidoOmie] enviando para Omie:", JSON.stringify({
-    cCodIntPed,
-    nCodFor:  Number(forn.omie_codigo),
-    nCodCC,
-    cCodCateg,
-    nQtdeParc,
-    dDtPrevisao: dataPrevisao,
-    produtos: produtosIncluir.map(p => ({ nCodProd: p.nCodProd, nQtde: p.nQtde, nValUnit: p.nValUnit })),
+  const payload: import("@/lib/omie/pedidos").OmiePedParamIncluir = {
+    cabecalho_incluir: {
+      cCodIntPed,
+      nCodFor:     Number(forn.omie_codigo),
+      dDtPrevisao: dataPrevisao,
+      cCodParc:    "999",
+      nQtdeParc,
+      cCodCateg,
+      nCodCC,
+      cNumPedido:  pedido.numero,
+      cObs:        obsTexto,
+      cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
+    },
+    frete_incluir: { cTpFrete: "9" },
+    produtos_incluir: produtosIncluir,
+  };
+
+  // Log da estrutura real que será enviada ao Omie
+  console.log("[pushPedidoOmie] payload real:", JSON.stringify({
+    call: foiRedundant ? "UpsertPedCompra" : "IncluirPedCompra",
+    param: [payload],
   }));
 
   try {
-    const nCodPed = await incluirPedCompra(creds, {
-      cabecalho_incluir: {
-        cCodIntPed,
-        nCodFor:     Number(forn.omie_codigo),
-        dDtPrevisao: dataPrevisao,
-        cCodParc:    "999",
-        nQtdeParc,
-        cCodCateg,
-        nCodCC,
-        cNumPedido:  pedido.numero,
-        cObs:        obsTexto,
-        cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
-      },
-      frete_incluir: {
-        cTpFrete: "9",
-      },
-      produtos_incluir: produtosIncluir,
-    });
+    // 1ª tentativa → IncluirPedCompra. Após REDUNDANT → UpsertPedCompra (idempotente)
+    const fn = foiRedundant ? upsertPedCompra : incluirPedCompra;
+    const nCodPed = await fn(creds, payload);
 
     const omieRef = String(nCodPed);
 

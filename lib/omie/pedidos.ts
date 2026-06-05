@@ -80,6 +80,23 @@ export async function incluirPedCompra(
   return res.nCodPed ?? 0;
 }
 
+/**
+ * Cria ou atualiza um Pedido de Compra no Omie (idempotente por cCodIntPed).
+ * Usado como fallback quando IncluirPedCompra retorna REDUNDANT.
+ */
+export async function upsertPedCompra(
+  creds: OmieCredentials,
+  param: OmiePedParamIncluir,
+): Promise<number> {
+  const res = await omiePost<OmiePedParamIncluir, IncluirPedCompraResponse>(
+    "/produtos/pedidocompra/",
+    "UpsertPedCompra",
+    creds,
+    param,
+  );
+  return res.nCodPed ?? 0;
+}
+
 // ── alterarPedCompra ───────────────────────────────────────────────────────────
 
 export interface OmiePedCabecalhoAlterar {
