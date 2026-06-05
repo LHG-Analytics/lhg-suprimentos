@@ -146,7 +146,7 @@ export async function pushPedidoOmie(
   const { data: pedido, error: pedErr } = await supabase
     .from("pedidos")
     .select(`
-      id, numero, valor_total, condicao_pgto, entrega_prev,
+      id, numero, valor_total, condicao_pgto, entrega_prev, cotacao_id,
       fornecedores ( omie_codigo, razao_social, nome_fantasia ),
       pedido_itens (
         id, quantidade, preco_unitario,
@@ -245,6 +245,28 @@ export async function pushPedidoOmie(
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
+  // Busca omie_codigo da Requisição vinculada via cotação → para passar como nCodReq
+  // Isso avança a Requisição existente no Omie para Pedido de Compra em vez de criar duplicata
+  let nCodReq: number | undefined;
+  if (pedido.cotacao_id) {
+    const { data: cotacao } = await supabase
+      .from("cotacoes")
+      .select("requisicao_id")
+      .eq("id", pedido.cotacao_id)
+      .maybeSingle();
+    if (cotacao?.requisicao_id) {
+      const { data: req } = await supabase
+        .from("requisicoes")
+        .select("omie_codigo")
+        .eq("id", cotacao.requisicao_id)
+        .maybeSingle();
+      if (req?.omie_codigo) {
+        nCodReq = Number(req.omie_codigo);
+        console.log(`[pushPedidoOmie] vinculando Requisição Omie nCodReq=${nCodReq}`);
+      }
+    }
+  }
+
   const obsTexto = pedido.condicao_pgto
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
     : `LHG Suprimentos ${pedido.numero}`;
@@ -270,6 +292,7 @@ export async function pushPedidoOmie(
         nCodCC,
         nCodIntCC:    0,
         nCodProj:     0,
+        nCodReq,      // vincula à Requisição existente no Omie
         cNumPedido:   pedido.numero,
         cObs:         obsTexto,
         cObsInt:      `Pedido gerado automaticamente pelo sistema LHG Suprimentos`,

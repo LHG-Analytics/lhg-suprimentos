@@ -34,6 +34,7 @@ export interface OmiePedCabecalhoIncluir {
   cNumPedido?:  string;
   cObs?:        string;
   cObsInt?:     string;
+  nCodReq?:     number;   // código da Requisição no Omie — avança a req para pedido de compra
 }
 
 export interface OmiePedFreteIncluir {
