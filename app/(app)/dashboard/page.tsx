@@ -27,6 +27,9 @@ import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 // ── Metadados ─────────────────────────────────────────────────────────────────
 export const metadata = { title: "Dashboard" };
 
+// Cache de 60s no servidor — reduz invocações de CPU no plano Hobby
+export const revalidate = 60;
+
 // ── Mapa de unidades canônicas (slug → {nome, cor}) ───────────────────────────
 // Reflete UNIDADES em lib/unidade-context.tsx sem importar o módulo "use client"
 const SLUG_META: Record<string, { nome: string; cor: string }> = {
@@ -504,10 +507,8 @@ export default async function DashboardPage({
         />
       </div>
 
-      {/* ── Resumo de Compras Omie — carrega via Suspense (chamada Omie) ── */}
-      <Suspense fallback={<OmieResumoWidgetSkeleton />}>
-        <OmieResumoSection from={periodoFrom} to={periodoTo} />
-      </Suspense>
+      {/* OmieResumoSection removida do dashboard — consome CPU excessivo no plano Hobby */}
+      {/* Reativar quando migrar para Vercel Pro */}
 
       {/* ── Gráfico + Ações + Status Omie ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[420px]">
