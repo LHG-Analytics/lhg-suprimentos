@@ -650,28 +650,26 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
                     </div>
 
                     {/* Ações */}
-                    <div className="self-center flex justify-end gap-1">
+                    <div className="self-center flex justify-end items-center gap-1">
                       {c.status !== "aprovado" && (
-                        <>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
-                            title="Editar cotação"
-                            aria-label="Editar"
-                            className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(e, c)}
-                            disabled={deletingId === c.id}
-                            title="Excluir cotação"
-                            aria-label="Excluir"
-                            className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
-                          >
-                            {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                          </button>
-                        </>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditCot(c); }}
+                          title="Editar cotação"
+                          aria-label="Editar"
+                          className="p-1 rounded text-muted-foreground/30 hover:text-sky-400 hover:bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Pencil size={13} />
+                        </button>
                       )}
+                      <button
+                        onClick={(e) => handleDelete(e, c)}
+                        disabled={deletingId === c.id}
+                        title="Excluir cotação"
+                        aria-label="Excluir"
+                        className="p-1 rounded text-muted-foreground/30 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all disabled:cursor-not-allowed"
+                      >
+                        {deletingId === c.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
                       {c.status === "aprovado" && (
                         <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                       )}
