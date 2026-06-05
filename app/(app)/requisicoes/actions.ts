@@ -161,12 +161,14 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
         } else {
         const { data: itensReq } = await supabase
           .from("requisicao_itens")
-          .select("id, produto_id, quantidade, produtos(omie_codigo)")
+          .select("id, produto_id, quantidade, produtos(omie_codigo, preco_custo)")
           .eq("requisicao_id", req.id);
 
         const omieItens = (itensReq ?? []).map((i) => {
-          const prod = i.produtos as { omie_codigo: string | null } | null;
-          return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
+          const prod = i.produtos as { omie_codigo: string | null; preco_custo: number | null } | null;
+          // Usa preco_custo como preço estimado — Omie exige nValUnit > 0 para converter em Pedido de Compra
+          const precoUnit = prod?.preco_custo && prod.preco_custo > 0 ? prod.preco_custo : 0.01;
+          return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit };
         });
 
         // dtSugestao é obrigatório no Omie — usa data de hoje + 7 dias como prazo sugerido

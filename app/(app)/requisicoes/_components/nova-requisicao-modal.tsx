@@ -625,9 +625,13 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos }: Props
                       );
                     })()}
                   </div>
-                  {form.codCateg && (
+                  {form.codCateg ? (
                     <p className="text-[11px] text-emerald-400 mt-1">
                       ✓ {form.codCateg} — {categorias.find(c => c.codigo === form.codCateg)?.descricao}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-amber-400/80 mt-1">
+                      ⚠ Nenhuma categoria selecionada — será usada a categoria padrão da unidade. Busque e clique em uma categoria para selecionar.
                     </p>
                   )}
                 </div>
