@@ -236,6 +236,14 @@ export async function gerarPedidosDeCotacao(
       return { erro: `Esta cotação já gerou ${jaExistem} pedido(s). Acesse a tela de Pedidos.` };
     }
 
+    // Buscar prazo da cotação (fallback quando prazo_entrega_dias não preenchido na matriz)
+    const { data: cotacaoPrazo } = await supabase
+      .from("cotacoes")
+      .select("prazo")
+      .eq("id", cotacaoId)
+      .maybeSingle();
+    const cotacaoPrazoDate = cotacaoPrazo?.prazo ?? null;
+
     // Buscar unidades da cotação para vincular ao pedido
     const { data: cotacaoUnidades } = await supabase
       .from("cotacao_unidades")
@@ -299,9 +307,10 @@ export async function gerarPedidosDeCotacao(
         if (l.prazo_entrega_dias == null) return max;
         return max == null ? l.prazo_entrega_dias : Math.max(max, l.prazo_entrega_dias);
       }, null);
+      // Prioridade: prazo_entrega_dias da matriz → prazo da cotação → null
       const entrega_prev = maxPrazo != null
         ? new Date(Date.now() + maxPrazo * 86_400_000).toISOString().slice(0, 10)
-        : null;
+        : cotacaoPrazoDate ?? null;
 
       const { data: pedido, error: pedErr } = await supabase
         .from("pedidos")
