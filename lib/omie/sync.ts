@@ -861,23 +861,33 @@ export async function syncRequisicoes(
               : 0;
             const numero = `REQ-${year}-${String(lastNum + 1).padStart(4, "0")}`;
 
+            // Busca qualquer usuário admin/comprador da unidade para usar como solicitante
+            const { data: anyUser } = await supabase
+              .from("user_profiles")
+              .select("id")
+              .in("role", ["admin", "comprador"])
+              .limit(1)
+              .maybeSingle();
+
             const { data: req, error: reqErr } = await supabase
               .from("requisicoes")
               .insert({
                 numero,
-                titulo:              item.obsReqCompra ?? `Requisição Omie ${item.codIntReqCompra ?? item.codReqCompra}`,
-                urgencia:            "normal",
-                status:              "aguardando_cotacao",
-                origem:              "omie",
-                omie_codigo:         item.codReqCompra,
-                omie_unidade_id:     unidadeId,
+                titulo:               item.obsReqCompra ?? `Requisição Omie ${item.codIntReqCompra ?? item.codReqCompra}`,
+                urgencia:             "normal",
+                status:               "aguardando_cotacao",
+                origem:               "omie",
+                omie_codigo:          item.codReqCompra,
+                omie_unidade_id:      unidadeId,
                 omie_sincronizado_em: new Date().toISOString(),
-              })
+                // solicitante_id pode ser null se não houver usuário disponível (ALTER COLUMN DROP NOT NULL)
+                ...(anyUser ? { solicitante_id: anyUser.id } : {}),
+              } as Parameters<typeof supabase.from>[0] extends "requisicoes" ? never : never)
               .select("id")
               .single();
 
             if (reqErr || !req) {
-              console.error("[sync/req] criar req local:", reqErr?.message);
+              console.error("[sync/req] criar req local:", reqErr?.message, reqErr?.code);
               erros++;
               continue;
             }
