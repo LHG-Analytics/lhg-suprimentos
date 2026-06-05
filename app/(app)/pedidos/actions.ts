@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { OmieError } from "@/lib/omie/client";
-import { incluirPedCompra, alterarPedCompra, excluirPedCompra } from "@/lib/omie/pedidos";
+import { incluirPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor } from "@/lib/omie/pedidos";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -277,10 +277,32 @@ export async function pushPedidoOmie(
     revalidatePath("/pedidos");
     return { omie_codigo: omieRef };
   } catch (err) {
-    const rawMsg = err instanceof OmieError ? err.message : err instanceof Error ? err.message : "Erro desconhecido";
-    // Preserva "REDUNDANT" no omie_erro para que a próxima tentativa use sufixo -r
-    const msg = err instanceof OmieError ? `Omie: ${rawMsg}` : rawMsg;
+    const isRedundant = err instanceof OmieError &&
+      (err.message.includes("REDUNDANT") || err.message.toLowerCase().includes("redundante"));
 
+    if (isRedundant) {
+      // Pedido provavelmente já existe no Omie mas resposta foi perdida.
+      // Busca pelos últimos 7 dias filtrado por fornecedor e lApenasImportadoApi=S
+      const nCodExistente = await recuperarPedCompraPorFornecedor(creds, Number(forn.omie_codigo));
+      if (nCodExistente) {
+        const omieRef = String(nCodExistente);
+        await supabase
+          .from("pedidos")
+          .update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null })
+          .eq("id", pedidoId);
+        await supabase.from("pedido_eventos").insert({
+          pedido_id: pedidoId,
+          tipo:      "omie",
+          texto:     `Pedido recuperado do Omie após REDUNDANT (busca por fornecedor) — nCodPed: ${omieRef}`,
+          autor_id:  user.id,
+        });
+        revalidatePath("/pedidos");
+        return { omie_codigo: omieRef };
+      }
+    }
+
+    const rawMsg = err instanceof OmieError ? err.message : err instanceof Error ? err.message : "Erro desconhecido";
+    const msg = err instanceof OmieError ? `Omie: ${rawMsg}` : rawMsg;
     await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { erro: msg };

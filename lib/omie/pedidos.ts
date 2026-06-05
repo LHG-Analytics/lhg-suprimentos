@@ -123,28 +123,52 @@ export async function consultarPedCompra(
   );
 }
 
-// ── buscarPedCompraPorIntCod ───────────────────────────────────────────────────
+// ── recuperarPedCompraPorFornecedor ───────────────────────────────────────────
 
 /**
- * Consulta pelo código de integração (cCodIntPed = pedido.id do sistema).
- * Útil no retry após erro REDUNDANT: o Omie já criou o pedido mas a resposta
- * foi perdida. Retorna null se não encontrado.
+ * Busca pedidos de compra recentes (últimos 7 dias) de um fornecedor específico.
+ * Útil para recuperar o nCodPed quando REDUNDANT indica que o pedido já existe
+ * mas a resposta foi perdida.
+ * Retorna o nCodPed mais recente desse fornecedor, ou null se não encontrado.
  */
-export async function buscarPedCompraPorIntCod(
+export async function recuperarPedCompraPorFornecedor(
   creds: OmieCredentials,
-  cCodIntPed: string,
+  nCodFor: number,
 ): Promise<number | null> {
   try {
+    const hoje    = new Date();
+    const seteDias = new Date(hoje.getTime() - 7 * 86_400_000);
+    const fmt = (d: Date) => {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      return `${dd}/${mm}/${d.getFullYear()}`;
+    };
+
     const res = await omiePost<
-      { cCodIntPed: string },
-      { cabecalho?: { nCodPed?: number } }
+      {
+        nPagina: number; nRegsPorPagina: number;
+        lApenasImportadoApi: "S";
+        lExibirPedidosPendentes: "T";
+        dDataInicial: string; dDataFinal: string;
+      },
+      { pedidos_pesquisa?: Array<{ cabecalho_consulta?: { nCodPed?: number; nCodFor?: number } }> }
     >(
       "/produtos/pedidocompra/",
-      "ConsultarPedCompra",
+      "PesquisarPedCompra",
       creds,
-      { cCodIntPed },
+      {
+        nPagina: 1,
+        nRegsPorPagina: 20,
+        lApenasImportadoApi: "S",      // apenas pedidos criados via API
+        lExibirPedidosPendentes: "T",  // todos os pendentes
+        dDataInicial: fmt(seteDias),
+        dDataFinal:   fmt(hoje),
+      },
     );
-    return res.cabecalho?.nCodPed ?? null;
+
+    const pedidos = res.pedidos_pesquisa ?? [];
+    const match = pedidos.find(p => p.cabecalho_consulta?.nCodFor === nCodFor);
+    return match?.cabecalho_consulta?.nCodPed ?? null;
   } catch {
     return null;
   }

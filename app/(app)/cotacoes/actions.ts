@@ -230,6 +230,13 @@ export async function gerarPedidosDeCotacao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Buscar unidades da cotação para vincular ao pedido (necessário para pushPedidoOmie encontrar credenciais)
+  const { data: cotacaoUnidades } = await supabase
+    .from("cotacao_unidades")
+    .select("unidade_id")
+    .eq("cotacao_id", cotacaoId);
+  const unidadeIds = (cotacaoUnidades ?? []).map(cu => cu.unidade_id);
+
   // Buscar itens da cotação com células da matriz (inclui prazo_entrega_dias)
   const { data: itens, error: itensErr } = await supabase
     .from("cotacao_itens")
@@ -322,6 +329,13 @@ export async function gerarPedidosDeCotacao(
       );
 
     if (itensInsErr) throw new Error(itensInsErr.message);
+
+    // Vincular pedido às unidades da cotação (obrigatório para pushPedidoOmie encontrar credenciais)
+    if (unidadeIds.length > 0) {
+      await supabase.from("pedido_unidades").insert(
+        unidadeIds.map(uid => ({ pedido_id: pedido.id, unidade_id: uid })),
+      );
+    }
   }
 
   // Atualizar status da cotação para "aprovado" (pedidos gerados)
