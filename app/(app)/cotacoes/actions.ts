@@ -231,6 +231,15 @@ export async function gerarPedidosDeCotacao(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { erro: "Não autenticado" };
 
+    // Guarda contra chamadas duplicadas: se já existem pedidos desta cotação, aborta
+    const { count: jaExistem } = await supabase
+      .from("pedidos")
+      .select("id", { count: "exact", head: true })
+      .eq("cotacao_id", cotacaoId);
+    if (jaExistem && jaExistem > 0) {
+      return { erro: `Esta cotação já gerou ${jaExistem} pedido(s). Acesse a tela de Pedidos.` };
+    }
+
     // Buscar unidades da cotação para vincular ao pedido
     const { data: cotacaoUnidades } = await supabase
       .from("cotacao_unidades")

@@ -5,7 +5,7 @@
  * Modal de confirmação para gerar pedidos de compra a partir da cotação.
  * Agrupa os itens selecionados por fornecedor e cria um pedido por fornecedor.
  */
-import { useTransition } from "react";
+import { useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { X, ShoppingCart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ function formatBRL(v: number | null) {
 export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedores, matrizMap }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const submittingRef = useRef(false); // guarda contra cliques simultâneos
 
   if (!open) return null;
 
@@ -67,18 +68,24 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
   }
 
   function handleConfirmar() {
+    if (submittingRef.current || pending) return; // bloqueia cliques simultâneos
+    submittingRef.current = true;
     start(async () => {
-      const res = await gerarPedidosDeCotacao(cotacao.id, selecoes);
-      if ("erro" in res) {
-        toast.error(`Erro ao gerar pedidos: ${res.erro}`);
-        return;
+      try {
+        const res = await gerarPedidosDeCotacao(cotacao.id, selecoes);
+        if ("erro" in res) {
+          toast.error(`Erro ao gerar pedidos: ${res.erro}`);
+          return;
+        }
+        toast.success(
+          `${res.numeroPedidos} pedido${res.numeroPedidos !== 1 ? "s" : ""} gerado${res.numeroPedidos !== 1 ? "s" : ""}`,
+          { description: "Os pedidos foram criados e aguardam aprovação" },
+        );
+        onClose();
+        router.push("/pedidos");
+      } finally {
+        submittingRef.current = false;
       }
-      toast.success(
-        `${res.numeroPedidos} pedido${res.numeroPedidos !== 1 ? "s" : ""} gerado${res.numeroPedidos !== 1 ? "s" : ""}`,
-        { description: "Os pedidos foram criados e aguardam aprovação" },
-      );
-      onClose();
-      router.push("/pedidos");
     });
   }
 
