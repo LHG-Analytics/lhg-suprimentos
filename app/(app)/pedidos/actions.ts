@@ -153,7 +153,7 @@ export async function pushPedidoOmie(
         produtos ( omie_codigo, nome, unidade_med )
       ),
       pedido_unidades (
-        unidades ( omie_app_key, omie_app_secret )
+        unidades ( omie_app_key, omie_app_secret, omie_conta_corrente )
       )
     `)
     .eq("id", pedidoId)
@@ -163,8 +163,9 @@ export async function pushPedidoOmie(
     return { erro: pedErr?.message ?? "Pedido não encontrado" };
   }
 
-  type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
-  const pus     = pedido.pedido_unidades as PedidoUnidade[] | null;
+  type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null; omie_conta_corrente?: number | null } | null };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pus     = pedido.pedido_unidades as any as PedidoUnidade[] | null;
   const unidade = pus?.[0]?.unidades;
 
   if (!unidade?.omie_app_key || !unidade?.omie_app_secret) {
@@ -226,9 +227,14 @@ export async function pushPedidoOmie(
     return { omie_codigo: pedidoAtual.omie_codigo };
   }
 
-  // Em retentativas após REDUNDANT, usa sufixo para evitar deduplicação permanente do Omie
+  // Em retentativas após REDUNDANT, usa sufixo de timestamp para garantir unicidade
+  // (o Omie rejeita cCodIntPed já utilizado permanentemente, não apenas por 60s)
   const foiRedundant = pedidoAtual?.omie_erro?.includes("REDUNDANT") || pedidoAtual?.omie_erro?.includes("duplicada");
-  const cCodIntPed   = foiRedundant ? `${pedidoId}-r` : pedidoId;
+  const cCodIntPed   = foiRedundant
+    ? `${pedidoId.slice(0, 18)}-${Date.now().toString(36)}`
+    : pedidoId;
+
+  const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
   try {
     const nCodPed = await incluirPedCompra(creds, {
@@ -236,7 +242,11 @@ export async function pushPedidoOmie(
         cCodIntPed,
         nCodFor:     Number(forn.omie_codigo),
         dDtPrevisao: dataPrevisao,
-        cObs:        `Pedido gerado pelo sistema LHG Suprimentos — ${pedido.numero}`,
+        nCodCC,
+        nQtdeParc:   1,
+        cObs:        pedido.condicao_pgto
+          ? `${pedido.condicao_pgto} — Pedido LHG Suprimentos ${pedido.numero}`
+          : `Pedido gerado pelo sistema LHG Suprimentos — ${pedido.numero}`,
       },
       produtos_incluir: produtosIncluir,
     });

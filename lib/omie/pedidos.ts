@@ -18,10 +18,13 @@ export interface OmiePedItemIncluir {
 }
 
 export interface OmiePedCabecalhoIncluir {
-  cCodIntPed:   string;   // pedido.id
+  cCodIntPed:   string;   // pedido.id (ou variação no retry)
   nCodFor:      number;   // fornecedor.omie_codigo
   dDtPrevisao?: string;   // DD/MM/YYYY
   cObs?:        string;
+  nCodCC?:      number;   // conta corrente (ex: Itaú)
+  nQtdeParc?:   number;   // número de parcelas
+  cCodParc?:    string;   // código da condição de pagamento Omie
 }
 
 export interface OmiePedParamIncluir {
