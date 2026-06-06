@@ -261,7 +261,7 @@ export function FornecedoresClient({ fornecedores, lastLog, unidades }: Forneced
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="hidden sm:grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="hidden sm:grid grid-cols-[2fr_1fr_1.5fr_1fr] gap-4 px-5 py-3.5 border-b border-border/80">
           {["EMPRESA", "CNPJ", "CONTATO", "LOCALIZAÇÃO"].map(
             (h) => (
               <div

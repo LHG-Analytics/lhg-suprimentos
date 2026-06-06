@@ -10,7 +10,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sparkles, Send, Loader2, Plus, User, Copy, Check,
   TrendingDown, BarChart2, Package, ShoppingCart, MessageSquare,
-  Trash2, ChevronRight,
+  Trash2, ChevronRight, PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -218,6 +218,7 @@ export function ChatClient({ userId, userName, contexto, sessoesIniciais }: Prop
   const [input,         setInput]         = useState("");
   const [isLoading,     setIsLoading]     = useState(false);
   const [loadingSessao, setLoadingSessao] = useState(false);
+  const [sidebarOpen,   setSidebarOpen]   = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
 
@@ -407,8 +408,22 @@ export function ChatClient({ userId, userName, contexto, sessoesIniciais }: Prop
   return (
     <div className="flex h-[calc(100vh-56px)] overflow-hidden">
 
+      {/* ── Overlay mobile ─────────────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-20 bg-black/50"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Sidebar de sessões ─────────────────────────────────────────────── */}
-      <aside className="w-[220px] shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden">
+      <aside className={cn(
+        "shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden",
+        "transition-[width] duration-200",
+        // Mobile: drawer absoluto; Desktop: sempre visível
+        "fixed md:relative top-0 left-0 h-full z-30 md:z-auto",
+        sidebarOpen ? "w-[220px]" : "w-0 md:w-[220px]",
+      )}>
         <div className="p-2 border-b border-sidebar-border">
           <button
             onClick={novaSessao}
@@ -447,8 +462,16 @@ export function ChatClient({ userId, userName, contexto, sessoesIniciais }: Prop
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 shrink-0">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3">
+            {/* Toggle sidebar — visível só em mobile */}
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              aria-label="Alternar histórico"
+            >
+              {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
+            </button>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
               <Sparkles size={15} className="text-white" />
             </div>
@@ -492,7 +515,7 @@ export function ChatClient({ userId, userName, contexto, sessoesIniciais }: Prop
                 </p>
               </div>
 
-              <div className="w-full grid grid-cols-2 gap-2">
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {SUGESTOES.map((s, i) => (
                   <button
                     key={i}

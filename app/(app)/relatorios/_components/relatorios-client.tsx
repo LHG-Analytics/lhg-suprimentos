@@ -203,8 +203,8 @@ export function RelatoriosClient({ resumo, fornecedores, categorias, evolucao }:
                     </Pie>
                     <Tooltip
                       formatter={(v) => typeof v === "number" ? formatBRL(v) : String(v)}
-                      contentStyle={{ background: "#09090b", border: "1px solid #27272a", borderRadius: 8, fontSize: 12 }}
-                      itemStyle={{ color: "#a1a1aa" }}
+                      contentStyle={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                      itemStyle={{ color: "hsl(var(--muted-foreground))" }}
                     />
                   </PieChart>
                 </ResponsiveContainer>

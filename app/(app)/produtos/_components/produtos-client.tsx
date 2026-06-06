@@ -269,7 +269,7 @@ export function ProdutosClient({ produtos, lastLog, unidades }: ProdutosClientPr
       {/* ── Tabela ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header */}
-        <div className="hidden sm:grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="hidden sm:grid grid-cols-[2.5fr_1fr_1.2fr_1fr_1fr_80px] gap-4 px-5 py-3.5 border-b border-border/80">
           {["PRODUTO", "CATEGORIA ORÇAMENTO", "FAMÍLIA OMIE", "UNIDADE", "PREÇO CUSTO", "STATUS"].map((h) => (
             <div
               key={h}

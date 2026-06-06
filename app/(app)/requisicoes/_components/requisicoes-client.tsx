@@ -253,7 +253,7 @@ export function RequisicoesClient({ requisicoes, unidades, produtos, activeUnida
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header da tabela — oculto no mobile */}
-        <div className="hidden sm:grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
+        <div className="hidden sm:grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3.5 border-b border-border/80">
           {(
             [
               { label: "Nº",          align: "left"  },

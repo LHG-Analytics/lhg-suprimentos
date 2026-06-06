@@ -201,7 +201,7 @@ export function GastosChart({ series, labels }: Props) {
                   stroke={s.cor}
                   strokeWidth={unidade.id === s.id ? 2.5 : 2}
                   dot={false}
-                  activeDot={{ r: 4, fill: s.cor, stroke: isDark ? "#09090b" : "#ffffff", strokeWidth: 2 }}
+                  activeDot={{ r: 4, fill: s.cor, stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 />
               ))}
             </LineChart>

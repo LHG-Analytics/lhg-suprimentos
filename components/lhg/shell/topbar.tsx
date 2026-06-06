@@ -104,7 +104,7 @@ export function Topbar({ onToggleMobile, notifications, unreadCount, onMarkAllRe
         className={cn(
           "h-14 border-b border-border",
           "bg-card/80 backdrop-blur-md",
-          "sticky top-0 z-20",
+          "sticky top-0 z-30",
           "px-3 sm:px-4 flex items-center gap-2 sm:gap-3",
         )}
       >

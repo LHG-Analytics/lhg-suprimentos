@@ -273,7 +273,7 @@ export function Sidebar({
       {/* Backdrop mobile */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]"
+          className="lg:hidden fixed inset-0 z-[35] bg-black/50 backdrop-blur-[2px]"
           onClick={() => setMobileOpen(false)}
           aria-hidden="true"
         />
@@ -285,7 +285,7 @@ export function Sidebar({
           "shrink-0 h-screen border-r border-sidebar-border bg-sidebar flex flex-col",
           "transition-[width,transform] duration-200",
           "lg:sticky lg:top-0 lg:translate-x-0",
-          "fixed top-0 left-0 z-50 lg:z-auto",
+          "fixed top-0 left-0 z-40 lg:z-auto",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
