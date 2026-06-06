@@ -8,7 +8,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Sparkles, X, ArrowUpRight, Send } from "lucide-react";
+import { Sparkles, X, ArrowUpRight, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BREADCRUMB_MAP } from "./nav-config";
 import { createClient } from "@/lib/supabase/client";
@@ -92,16 +92,19 @@ function renderInline(s: string) {
   );
 }
 
-// ── Helper: monta contexto rico da matriz de cotação ─────────────────────────
+// ── Helper: monta contexto rico da matriz de cotação + histórico de preços ────
 async function fetchCotacaoContext(cotacaoId: string): Promise<string> {
   const supabase = createClient();
+
+  // Busca cotação completa + ai_resumo
   const { data } = await supabase
     .from("cotacoes")
     .select(`
-      numero, titulo, status, urgente, valor_estimado, economia, prazo,
+      numero, titulo, status, urgente, valor_estimado, economia, prazo, ai_resumo,
       cotacao_fornecedores(fornecedores(id, razao_social, nome_fantasia, rating, pontualidade_pct)),
       cotacao_itens(
-        quantidade,
+        id, quantidade,
+        produto_id,
         produtos(nome, unidade_med, categoria),
         cotacao_matriz(fornecedor_id, preco_unitario, prazo_entrega_dias, condicao_pagamento, observacao)
       )
@@ -120,45 +123,151 @@ async function fetchCotacaoContext(cotacaoId: string): Promise<string> {
     ])
   );
 
+  // Extrai IDs de produtos desta cotação para buscar histórico
+  const produtoIds: string[] = (c.cotacao_itens ?? [])
+    .map((i: any) => i.produto_id)
+    .filter(Boolean);
+
+  // Busca histórico de preços dos últimos 6 meses para estes produtos
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let historicoMap = new Map<string, { precos: number[]; fornecedores: string[] }>();
+  if (produtoIds.length > 0) {
+    const seisM = new Date();
+    seisM.setMonth(seisM.getMonth() - 6);
+
+    const { data: histData } = await supabase
+      .from("cotacao_itens")
+      .select(`
+        produto_id,
+        produtos(nome),
+        cotacao_id,
+        cotacoes!inner(created_at, status),
+        cotacao_matriz(preco_unitario, fornecedor_id, fornecedores(nome_fantasia, razao_social))
+      `)
+      .in("produto_id", produtoIds)
+      .neq("cotacao_id", cotacaoId)
+      .eq("cotacoes.status", "aprovado")
+      .gte("cotacoes.created_at", seisM.toISOString())
+      .order("cotacoes.created_at", { ascending: false })
+      .limit(200);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const row of (histData ?? []) as any[]) {
+      const prodNome = row.produtos?.nome ?? row.produto_id;
+      if (!historicoMap.has(prodNome)) {
+        historicoMap.set(prodNome, { precos: [], fornecedores: [] });
+      }
+      const entry = historicoMap.get(prodNome)!;
+      for (const m of (row.cotacao_matriz ?? [])) {
+        if (m.preco_unitario) {
+          entry.precos.push(Number(m.preco_unitario));
+          const fornNome = m.fornecedores?.nome_fantasia ?? m.fornecedores?.razao_social ?? "";
+          if (fornNome && !entry.fornecedores.includes(fornNome)) {
+            entry.fornecedores.push(fornNome);
+          }
+        }
+      }
+    }
+  }
+
+  // Monta o contexto
   const linhas: string[] = [
     `## Cotação ${c.numero}: ${c.titulo}`,
     `Status: ${c.status}${c.urgente ? " · URGENTE" : ""}`,
     c.prazo ? `Prazo: ${c.prazo}` : "",
     c.valor_estimado ? `Valor estimado: R$ ${Number(c.valor_estimado).toFixed(2)}` : "",
     c.economia ? `Economia IA calculada: R$ ${Number(c.economia).toFixed(2)}` : "",
-    "",
-    "### Matriz de preços por item e fornecedor:",
   ].filter(Boolean);
 
+  // Inclui resumo IA já calculado, se disponível
+  if (c.ai_resumo) {
+    linhas.push("", "### Análise IA anterior:", c.ai_resumo);
+  }
+
+  linhas.push("", "### Matriz de preços por item e fornecedor:");
+
   for (const item of (c.cotacao_itens ?? [])) {
-    const prod = item.produtos;
+    const prod = item.produtos as any;
     if (!prod) continue;
-    linhas.push(`\n**${prod.nome}** (${item.quantidade} ${prod.unidade_med}) — ${prod.categoria}`);
-    for (const m of (item.cotacao_matriz ?? [])) {
-      const fornNome = fornMap.get(m.fornecedor_id) ?? m.fornecedor_id;
-      const preco    = m.preco_unitario ? `R$ ${Number(m.preco_unitario).toFixed(2)}/un` : "sem preço";
-      const prazo    = m.prazo_entrega_dias ? `${m.prazo_entrega_dias}d entrega` : "";
-      const pgto     = m.condicao_pagamento ?? "";
-      const obs      = m.observacao ? ` (${m.observacao})` : "";
-      linhas.push(`  - ${fornNome}: ${preco}${prazo ? ` · ${prazo}` : ""}${pgto ? ` · ${pgto}` : ""}${obs}`);
+
+    // Preço histórico deste produto
+    const hist = historicoMap.get(prod.nome);
+    let histInfo = "";
+    if (hist && hist.precos.length > 0) {
+      const min  = Math.min(...hist.precos);
+      const max  = Math.max(...hist.precos);
+      const avg  = hist.precos.reduce((a: number, b: number) => a + b, 0) / hist.precos.length;
+      histInfo   = ` [Histórico 6m: mín R$${min.toFixed(2)} · méd R$${avg.toFixed(2)} · máx R$${max.toFixed(2)}]`;
+    }
+
+    linhas.push(`\n**${prod.nome}** (${(item as any).quantidade} ${prod.unidade_med}) — ${prod.categoria}${histInfo}`);
+
+    for (const m of ((item as any).cotacao_matriz ?? [])) {
+      const fornNome  = fornMap.get(m.fornecedor_id) ?? m.fornecedor_id;
+      const preco     = m.preco_unitario ? `R$ ${Number(m.preco_unitario).toFixed(2)}/un` : "sem preço";
+      const prazo     = m.prazo_entrega_dias ? `${m.prazo_entrega_dias}d` : "";
+      const pgto      = m.condicao_pagamento ?? "";
+      const obs       = m.observacao ? ` (${m.observacao})` : "";
+
+      // Indicador vs histórico
+      let vsHist = "";
+      if (hist && hist.precos.length > 0 && m.preco_unitario) {
+        const avg    = hist.precos.reduce((a: number, b: number) => a + b, 0) / hist.precos.length;
+        const diff   = ((Number(m.preco_unitario) - avg) / avg) * 100;
+        if (Math.abs(diff) >= 5) {
+          vsHist = diff > 0 ? ` ↑${diff.toFixed(0)}% vs histórico` : ` ↓${Math.abs(diff).toFixed(0)}% vs histórico`;
+        }
+      }
+
+      linhas.push(`  - ${fornNome}: ${preco}${prazo ? ` · ${prazo}` : ""}${pgto ? ` · ${pgto}` : ""}${vsHist}${obs}`);
     }
   }
 
   return linhas.join("\n");
 }
 
+// ── Persistência de histórico do chip (localStorage) ─────────────────────────
+const CHIP_STORAGE_KEY = "lhg-chip-history-v1";
+const CHIP_TTL_MS      = 24 * 60 * 60 * 1000; // 24h
+
+function loadChipHistory(): Message[] {
+  try {
+    const raw = localStorage.getItem(CHIP_STORAGE_KEY);
+    if (!raw) return [];
+    const { messages, ts } = JSON.parse(raw) as { messages: Message[]; ts: number };
+    if (Date.now() - ts > CHIP_TTL_MS) { localStorage.removeItem(CHIP_STORAGE_KEY); return []; }
+    return messages.slice(-30); // máx 30 mensagens
+  } catch { return []; }
+}
+
+function saveChipHistory(messages: Message[]) {
+  try {
+    localStorage.setItem(CHIP_STORAGE_KEY, JSON.stringify({ messages: messages.slice(-30), ts: Date.now() }));
+  } catch { /* storage cheio — ignora */ }
+}
+
 // ── Componente principal ───────────────────────────────────────────────────────
 export function AiChip() {
-  const [open, setOpen]           = useState(false);
-  const [input, setInput]         = useState("");
-  const [streaming, setStreaming] = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [input, setInput]           = useState("");
+  const [streaming, setStreaming]   = useState(false);
   const [cotacaoCtx, setCotacaoCtx] = useState<string>("");
-  const [messages, setMessages]   = useState<Message[]>([]);
+  const [messages, setMessages]     = useState<Message[]>([]);
+  const [histLoaded, setHistLoaded] = useState(false);
   const scrollRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
   const abortRef   = useRef<AbortController | null>(null);
   const pathname   = usePathname();
   const router     = useRouter();
+
+  // Carrega histórico do localStorage uma única vez na montagem
+  useEffect(() => {
+    if (!histLoaded) {
+      const hist = loadChipHistory();
+      if (hist.length > 0) setMessages(hist);
+      setHistLoaded(true);
+    }
+  }, [histLoaded]);
 
   // Detecta se está na página de detalhe de cotação e busca o contexto da matriz
   const cotacaoMatch = pathname.match(/^\/cotacoes\/([a-f0-9-]{36})$/);
@@ -178,12 +287,22 @@ export function AiChip() {
   useEffect(() => {
     if (cotacaoMatch?.[1]) {
       fetchCotacaoCtx(cotacaoMatch[1]);
+      // Em cotação: inicia conversa limpa (contexto específico da cotação)
+      setMessages([]);
     } else {
       setCotacaoCtx("");
+      // Em outras páginas: restaura histórico persistido
+      const hist = loadChipHistory();
+      if (hist.length > 0) setMessages(hist);
     }
-    // Reset conversa ao mudar de página
-    setMessages([]);
-  }, [pathname, cotacaoMatch, fetchCotacaoCtx]);
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Salva histórico no localStorage sempre que mensagens mudam (exceto em cotação)
+  useEffect(() => {
+    if (!cotacaoMatch && histLoaded && messages.length > 0) {
+      saveChipHistory(messages);
+    }
+  }, [messages, cotacaoMatch, histLoaded]);
 
   // Auto-scroll
   useEffect(() => {
@@ -351,10 +470,19 @@ export function AiChip() {
             <button
               onClick={() => router.push("/chat")}
               className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="Abrir página completa"
+              title="Abrir chat completo"
             >
               <ArrowUpRight size={13} />
             </button>
+            {messages.length > 0 && (
+              <button
+                onClick={() => { setMessages([]); localStorage.removeItem(CHIP_STORAGE_KEY); }}
+                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Limpar conversa"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
             <button
               onClick={() => { abortRef.current?.abort(); setOpen(false); }}
               className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
