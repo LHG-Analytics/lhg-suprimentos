@@ -228,12 +228,9 @@ function NovaCotacaoModal({
                 urgente ? "left-[18px] bg-red-400" : "left-0.5 bg-muted-foreground",
               )} />
             </div>
-            <div>
-              <span className={cn("text-sm font-medium", urgente ? "text-red-300" : "text-muted-foreground")}>
-                Cotação urgente
-              </span>
-              <p className="text-[11px] text-muted-foreground/70">Prazo reduzido e notificação imediata</p>
-            </div>
+            <span className={cn("text-sm font-medium", urgente ? "text-red-300" : "text-muted-foreground")}>
+              Cotação urgente
+            </span>
           </label>
         </div>
 

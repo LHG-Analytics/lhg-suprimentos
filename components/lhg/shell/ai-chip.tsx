@@ -6,11 +6,12 @@
  * Conectado na API real /api/chat (OpenRouter, streaming SSE).
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sparkles, X, ArrowUpRight, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BREADCRUMB_MAP } from "./nav-config";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface Message {
@@ -21,6 +22,11 @@ interface Message {
 
 // ── Sugestões por contexto ─────────────────────────────────────────────────────
 const SUGGESTIONS: Record<string, string[]> = {
+  cotacao_detalhe: [
+    "Qual fornecedor leva essa cotação considerando preço e prazo?",
+    "Há discrepâncias grandes de preço entre fornecedores?",
+    "Qual condição de pagamento é mais vantajosa?",
+  ],
   "/cotacoes": [
     "Qual fornecedor tem melhor custo-benefício nas cotações abertas?",
     "Há oportunidade de consolidar pedidos?",
@@ -86,25 +92,98 @@ function renderInline(s: string) {
   );
 }
 
+// ── Helper: monta contexto rico da matriz de cotação ─────────────────────────
+async function fetchCotacaoContext(cotacaoId: string): Promise<string> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("cotacoes")
+    .select(`
+      numero, titulo, status, urgente, valor_estimado, economia, prazo,
+      cotacao_fornecedores(fornecedores(id, razao_social, nome_fantasia, rating, pontualidade_pct)),
+      cotacao_itens(
+        quantidade,
+        produtos(nome, unidade_med, categoria),
+        cotacao_matriz(fornecedor_id, preco_unitario, prazo_entrega_dias, condicao_pagamento, observacao)
+      )
+    `)
+    .eq("id", cotacaoId)
+    .single();
+
+  if (!data) return "";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = data as any;
+  const fornMap = new Map<string, string>(
+    (c.cotacao_fornecedores ?? []).map((cf: any) => [
+      cf.fornecedores?.id,
+      cf.fornecedores?.nome_fantasia ?? cf.fornecedores?.razao_social ?? "?",
+    ])
+  );
+
+  const linhas: string[] = [
+    `## Cotação ${c.numero}: ${c.titulo}`,
+    `Status: ${c.status}${c.urgente ? " · URGENTE" : ""}`,
+    c.prazo ? `Prazo: ${c.prazo}` : "",
+    c.valor_estimado ? `Valor estimado: R$ ${Number(c.valor_estimado).toFixed(2)}` : "",
+    c.economia ? `Economia IA calculada: R$ ${Number(c.economia).toFixed(2)}` : "",
+    "",
+    "### Matriz de preços por item e fornecedor:",
+  ].filter(Boolean);
+
+  for (const item of (c.cotacao_itens ?? [])) {
+    const prod = item.produtos;
+    if (!prod) continue;
+    linhas.push(`\n**${prod.nome}** (${item.quantidade} ${prod.unidade_med}) — ${prod.categoria}`);
+    for (const m of (item.cotacao_matriz ?? [])) {
+      const fornNome = fornMap.get(m.fornecedor_id) ?? m.fornecedor_id;
+      const preco    = m.preco_unitario ? `R$ ${Number(m.preco_unitario).toFixed(2)}/un` : "sem preço";
+      const prazo    = m.prazo_entrega_dias ? `${m.prazo_entrega_dias}d entrega` : "";
+      const pgto     = m.condicao_pagamento ?? "";
+      const obs      = m.observacao ? ` (${m.observacao})` : "";
+      linhas.push(`  - ${fornNome}: ${preco}${prazo ? ` · ${prazo}` : ""}${pgto ? ` · ${pgto}` : ""}${obs}`);
+    }
+  }
+
+  return linhas.join("\n");
+}
+
 // ── Componente principal ───────────────────────────────────────────────────────
 export function AiChip() {
-  const [open, setOpen]       = useState(false);
-  const [input, setInput]     = useState("");
+  const [open, setOpen]           = useState(false);
+  const [input, setInput]         = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Olá! Sou o copiloto de compras da LHG. Posso analisar cotações, fornecedores e pedidos usando os dados reais do sistema. Em que posso ajudar?",
-    },
-  ]);
+  const [cotacaoCtx, setCotacaoCtx] = useState<string>("");
+  const [messages, setMessages]   = useState<Message[]>([]);
   const scrollRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
   const abortRef   = useRef<AbortController | null>(null);
   const pathname   = usePathname();
   const router     = useRouter();
 
-  const suggestions  = SUGGESTIONS[pathname] ?? SUGGESTIONS.default;
+  // Detecta se está na página de detalhe de cotação e busca o contexto da matriz
+  const cotacaoMatch = pathname.match(/^\/cotacoes\/([a-f0-9-]{36})$/);
+
+  const suggestions  = cotacaoMatch
+    ? SUGGESTIONS.cotacao_detalhe
+    : SUGGESTIONS[pathname] ?? SUGGESTIONS.default;
   const contextLabel = BREADCRUMB_MAP[pathname]?.[BREADCRUMB_MAP[pathname].length - 1] ?? "Dashboard";
+  const boasVindas   = cotacaoCtx
+    ? "Matriz desta cotação carregada. Posso comparar preços entre fornecedores, analisar condições de pagamento e recomendar a melhor escolha. O que quer saber?"
+    : "Olá! Sou o copiloto de compras da LHG. Posso analisar cotações, fornecedores e pedidos usando os dados reais do sistema. Em que posso ajudar?";
+  const fetchCotacaoCtx = useCallback(async (id: string) => {
+    const ctx = await fetchCotacaoContext(id);
+    setCotacaoCtx(ctx);
+  }, []);
+
+  useEffect(() => {
+    if (cotacaoMatch?.[1]) {
+      fetchCotacaoCtx(cotacaoMatch[1]);
+    } else {
+      setCotacaoCtx("");
+    }
+    // Reset conversa ao mudar de página
+    setMessages([]);
+  }, [pathname, cotacaoMatch, fetchCotacaoCtx]);
 
   // Auto-scroll
   useEffect(() => {
@@ -152,7 +231,9 @@ export function AiChip() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           messages: history.map(m => ({ role: m.role, content: m.content })),
-          contexto: `Contexto atual da tela: ${contextLabel}`,
+          contexto: cotacaoCtx
+            ? `Contexto atual: ${contextLabel}\n\n${cotacaoCtx}`
+            : `Contexto atual da tela: ${contextLabel}`,
         }),
         signal: abortRef.current.signal,
       });
@@ -284,6 +365,15 @@ export function AiChip() {
 
           {/* Mensagens */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+            {/* Mensagem de boas-vindas sempre visível no topo */}
+            <div className="flex gap-2">
+              <div className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-br from-lhg-400 to-lhg-600 flex items-center justify-center text-zinc-950 mt-0.5">
+                <Sparkles size={11} strokeWidth={2.5} />
+              </div>
+              <div className="max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed break-words bg-muted/40 border border-border/80 text-foreground">
+                {renderMarkdown(boasVindas)}
+              </div>
+            </div>
             {messages.map((msg, i) => (
               <div key={i} className={cn("flex gap-2", msg.role === "user" && "justify-end")}>
                 {msg.role === "assistant" && (
@@ -309,7 +399,7 @@ export function AiChip() {
           </div>
 
           {/* Sugestões */}
-          {messages.length <= 1 && (
+          {messages.length === 0 && (
             <div className="px-3 pb-2 space-y-1.5 shrink-0">
               {suggestions.map((s, i) => (
                 <button
