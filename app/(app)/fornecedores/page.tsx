@@ -57,13 +57,16 @@ export default async function FornecedoresPage() {
           .select(selectFields)
           .order("razao_social"),
 
-    supabase
-      .from("integracao_logs")
-      .select("created_at, total, novos, status")
-      .eq("entidade", "fornecedores")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    (() => {
+      let q = supabase
+        .from("integracao_logs")
+        .select("created_at, total, novos, status")
+        .eq("entidade", "fornecedores")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (unidadeId) q = q.eq("unidade_id", unidadeId);
+      return q.maybeSingle();
+    })(),
   ]);
 
   return (

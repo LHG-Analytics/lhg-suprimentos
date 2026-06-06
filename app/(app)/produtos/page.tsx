@@ -59,13 +59,16 @@ export default async function ProdutosPage() {
           .order("categoria")
           .order("nome"),
 
-    supabase
-      .from("integracao_logs")
-      .select("created_at, total, novos, status")
-      .eq("entidade", "produtos")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    (() => {
+      let q = supabase
+        .from("integracao_logs")
+        .select("created_at, total, novos, status")
+        .eq("entidade", "produtos")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (unidadeId) q = q.eq("unidade_id", unidadeId);
+      return q.maybeSingle();
+    })(),
   ]);
 
   return (
