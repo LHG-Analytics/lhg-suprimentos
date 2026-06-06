@@ -886,12 +886,12 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
 
         {/* Header da tabela */}
-        <div className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3 border-b border-border/80">
+        <div className="grid grid-cols-[80px_1fr_100px] md:grid-cols-[80px_2fr_96px_96px_130px] gap-4 px-5 py-3.5 border-b border-border/80">
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PEDIDO</div>
           <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">FORNECEDOR / ITENS</div>
-          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA DA COMPRA</div>
-          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO ENTREGA</div>
-          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">CUSTO</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">DATA DA<br/>COMPRA</div>
+          <div className="hidden md:block text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">PREVISÃO<br/>ENTREGA</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground text-right">CUSTO</div>
         </div>
 
         {/* Linhas */}
@@ -957,7 +957,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
                     </div>
 
                     {/* Custo */}
-                    <div className="font-mono text-sm font-semibold text-foreground">
+                    <div className="font-mono text-sm font-semibold text-foreground text-right">
                       {formatBRL(p.valor_total)}
                     </div>
                   </li>

@@ -507,9 +507,23 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       {/* ── Tabela ──────────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header — oculto no mobile */}
-        <div className="hidden sm:grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3 border-b border-border/80">
-          {["Nº", "TÍTULO", "UNIDADE", "ITENS", "FORN.", "VALOR EST.", "ECONOMIA IA", "STATUS", "PRAZO", ""].map(h => (
-            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">{h}</div>
+        <div className="hidden sm:grid grid-cols-[100px_1fr_100px_60px_60px_110px_110px_120px_80px_64px] gap-3 px-5 py-3.5 border-b border-border/80">
+          {([
+            { label: "Nº",          align: "left"  },
+            { label: "TÍTULO",      align: "left"  },
+            { label: "UNIDADE",     align: "left"  },
+            { label: "ITENS",       align: "right" },
+            { label: "FORN.",       align: "right" },
+            { label: "VALOR EST.",  align: "right" },
+            { label: "ECONOMIA IA", align: "right" },
+            { label: "STATUS",      align: "left"  },
+            { label: "PRAZO",       align: "left"  },
+            { label: "",            align: "left"  },
+          ] as const).map(h => (
+            <div key={h.label} className={cn(
+              "text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground",
+              h.align === "right" && "text-right",
+            )}>{h.label}</div>
           ))}
         </div>
 
