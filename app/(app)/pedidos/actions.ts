@@ -182,16 +182,23 @@ export async function pushPedidoOmie(
   // (cada conta Omie tem IDs internos próprios para o mesmo fornecedor físico)
   const fornecedorId = (pedido as { fornecedor_id?: string | null }).fornecedor_id;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: fornUnidadeRow } = await (supabase as any)
+  const { data: fornUnidadeRow, error: fuErr } = await (supabase as any)
     .from("fornecedor_unidade")
     .select("omie_codigo")
     .eq("fornecedor_id", fornecedorId ?? "")
     .eq("unidade_id", unidade.id)
-    .maybeSingle() as { data: { omie_codigo: string } | null };
+    .maybeSingle() as { data: { omie_codigo: string } | null; error: { message: string } | null };
+
+  if (fuErr) {
+    console.error("[pushPedidoOmie] Erro ao buscar fornecedor_unidade:", fuErr.message, { fornecedorId, unidadeId: unidade.id });
+  }
+  console.log("[pushPedidoOmie] fornecedor_unidade lookup:", { fornecedorId, unidadeId: unidade.id, found: !!fornUnidadeRow?.omie_codigo, err: fuErr?.message });
 
   const forn = pedido.fornecedores as { razao_social: string; nome_fantasia: string | null } | null;
   if (!fornUnidadeRow?.omie_codigo) {
-    const msg = "Fornecedor sem código Omie para esta unidade. Sincronize os fornecedores da unidade ativa primeiro.";
+    const msg = fuErr
+      ? `Erro DB fornecedor_unidade: ${fuErr.message}`
+      : "Fornecedor sem código Omie para esta unidade. Sincronize os fornecedores da unidade ativa primeiro.";
     await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { erro: msg };
