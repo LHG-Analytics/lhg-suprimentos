@@ -300,9 +300,15 @@ export async function pushPedidoOmie(
 
     const omieRef = String(nCodPed);
 
+    // Salva omie_codigo + garante que entrega_prev está preenchido no BD
+    // (quando era null, usamos dataBase como fallback para o Omie — agora gravamos também)
+    const entregaPrevUpdate = pedido.entrega_prev
+      ? {}
+      : { entrega_prev: dataBase.toISOString().slice(0, 10) };
+
     await supabase
       .from("pedidos")
-      .update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null })
+      .update({ omie_status: "sincronizado", omie_codigo: omieRef, omie_erro: null, ...entregaPrevUpdate })
       .eq("id", pedidoId);
 
     await supabase.from("pedido_eventos").insert({
