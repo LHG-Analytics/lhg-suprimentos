@@ -74,13 +74,13 @@ ${budgetCtx}
 ${contexto ? `\n## Contexto atual do sistema\n${contexto}` : ""}`;
 
   const payload = {
-    model:    process.env.OPENROUTER_MODEL ?? "anthropic/claude-haiku-4-5",
+    model:    process.env.OPENROUTER_MODEL ?? "openai/gpt-4.1-mini",
     stream:   true,
     messages: [
       { role: "system", content: systemPrompt },
       ...messages,
     ],
-    max_tokens: 1024,
+    max_tokens: 2048,
   };
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

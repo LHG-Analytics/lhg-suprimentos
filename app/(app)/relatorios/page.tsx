@@ -5,6 +5,7 @@
  * Server Component — busca tudo no Supabase sem waterfall.
  */
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/utils";
 import { RelatoriosClient } from "./_components/relatorios-client";
@@ -23,7 +24,7 @@ function getRange(meses: number) {
 
 // ── Dados ─────────────────────────────────────────────────────────────────────
 
-async function fetchResumo(supabase: SupabaseClient) {
+async function fetchResumo(supabase: SupabaseClient, pedidoIds: string[] | null) {
   const { start: start3 } = getRange(3);
   const { startIso: start12 } = getRange(12);
 
@@ -33,24 +34,34 @@ async function fetchResumo(supabase: SupabaseClient) {
     { data: economiaRows },
   ] = await Promise.all([
     // Pedidos dos últimos 12 meses (finalizados + recebidos)
-    supabase
-      .from("pedidos")
-      .select("valor_total, created_at, fornecedor_id")
-      .in("status", ["recebido", "finalizado"] as const)
-      .gte("created_at", start12),
+    (() => {
+      let q = supabase
+        .from("pedidos")
+        .select("valor_total, created_at, fornecedor_id")
+        .in("status", ["recebido", "finalizado"] as const)
+        .gte("created_at", start12);
+      if (pedidoIds !== null) {
+        q = pedidoIds.length > 0
+          ? q.in("id", pedidoIds)
+          : q.in("id", ["00000000-0000-0000-0000-000000000000"]);
+      }
+      return q;
+    })(),
 
-    // Cotações aprovadas dos últimos 12 meses (para economia)
+    // Cotações aprovadas dos últimos 12 meses (sem deletadas)
     supabase
       .from("cotacoes")
       .select("economia, economia_pct, created_at")
       .eq("status", "aprovado")
+      .is("deleted_at", null)
       .gte("created_at", start12),
 
-    // Economia últimos 3 meses separada para comparação
+    // Economia últimos 3 meses separada para comparação (sem deletadas)
     supabase
       .from("cotacoes")
       .select("economia")
       .eq("status", "aprovado")
+      .is("deleted_at", null)
       .gte("created_at", start3.toISOString()),
   ]);
 
@@ -70,10 +81,10 @@ async function fetchResumo(supabase: SupabaseClient) {
   };
 }
 
-async function fetchGastosPorFornecedor(supabase: SupabaseClient) {
+async function fetchGastosPorFornecedor(supabase: SupabaseClient, pedidoIds: string[] | null) {
   const { startIso } = getRange(12);
 
-  const { data } = await supabase
+  let q = supabase
     .from("pedidos")
     .select(`
       valor_total,
@@ -81,6 +92,12 @@ async function fetchGastosPorFornecedor(supabase: SupabaseClient) {
     `)
     .in("status", ["recebido", "finalizado"] as const)
     .gte("created_at", startIso);
+  if (pedidoIds !== null) {
+    q = pedidoIds.length > 0
+      ? q.in("id", pedidoIds)
+      : q.in("id", ["00000000-0000-0000-0000-000000000000"]);
+  }
+  const { data } = await q;
 
   // Agrega por fornecedor
   const map = new Map<string, {
@@ -106,10 +123,10 @@ async function fetchGastosPorFornecedor(supabase: SupabaseClient) {
     .slice(0, 12);
 }
 
-async function fetchGastosPorCategoria(supabase: SupabaseClient) {
+async function fetchGastosPorCategoria(supabase: SupabaseClient, pedidoIds: string[] | null) {
   const { startIso } = getRange(12);
 
-  const { data } = await supabase
+  let q = supabase
     .from("pedido_itens")
     .select(`
       valor_total,
@@ -118,6 +135,12 @@ async function fetchGastosPorCategoria(supabase: SupabaseClient) {
     `)
     .in("pedidos.status", ["recebido", "finalizado"] as const)
     .gte("pedidos.created_at", startIso);
+  if (pedidoIds !== null && pedidoIds.length > 0) {
+    q = q.in("pedido_id", pedidoIds);
+  } else if (pedidoIds !== null && pedidoIds.length === 0) {
+    q = q.in("pedido_id", ["00000000-0000-0000-0000-000000000000"]);
+  }
+  const { data } = await q;
 
   const map = new Map<string, number>();
   for (const item of data ?? []) {
@@ -130,19 +153,26 @@ async function fetchGastosPorCategoria(supabase: SupabaseClient) {
     .sort((a, b) => b.total - a.total);
 }
 
-async function fetchEvolucaoMensal(supabase: SupabaseClient) {
+async function fetchEvolucaoMensal(supabase: SupabaseClient, pedidoIds: string[] | null) {
   const { startIso } = getRange(12);
 
-  const { data: pedidos } = await supabase
+  let qPedidos = supabase
     .from("pedidos")
     .select("valor_total, created_at")
     .in("status", ["recebido", "finalizado"] as const)
     .gte("created_at", startIso);
+  if (pedidoIds !== null) {
+    qPedidos = pedidoIds.length > 0
+      ? qPedidos.in("id", pedidoIds)
+      : qPedidos.in("id", ["00000000-0000-0000-0000-000000000000"]);
+  }
+  const { data: pedidos } = await qPedidos;
 
   const { data: cotacoes } = await supabase
     .from("cotacoes")
     .select("economia, created_at")
     .eq("status", "aprovado")
+    .is("deleted_at", null)
     .gte("created_at", startIso);
 
   // Agrupa por mês
@@ -180,11 +210,27 @@ export default async function RelatoriosPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Unidade ativa (cookie) — filtra dados da unidade selecionada na sidebar
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+
+  let pedidoIds: string[] | null = null;
+  if (slug && slug !== "todas") {
+    const { data: u } = await supabase.from("unidades").select("id").eq("slug", slug).single();
+    if (u?.id) {
+      const { data: pu } = await supabase
+        .from("pedido_unidades")
+        .select("pedido_id")
+        .eq("unidade_id", u.id);
+      pedidoIds = (pu ?? []).map(r => r.pedido_id);
+    }
+  }
+
   const [resumo, fornecedores, categorias, evolucao] = await Promise.all([
-    fetchResumo(supabase),
-    fetchGastosPorFornecedor(supabase),
-    fetchGastosPorCategoria(supabase),
-    fetchEvolucaoMensal(supabase),
+    fetchResumo(supabase, pedidoIds),
+    fetchGastosPorFornecedor(supabase, pedidoIds),
+    fetchGastosPorCategoria(supabase, pedidoIds),
+    fetchEvolucaoMensal(supabase, pedidoIds),
   ]);
 
   return (
