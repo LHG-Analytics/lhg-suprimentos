@@ -253,9 +253,27 @@ export function RequisicoesClient({ requisicoes, unidades, produtos, activeUnida
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {/* Header da tabela — oculto no mobile */}
         <div className="hidden sm:grid grid-cols-[100px_1fr_160px_100px_60px_110px_120px_80px_32px] gap-3 px-5 py-3 border-b border-border/80">
-          {["Nº", "TÍTULO", "SOLICITANTE", "UNIDADE", "ITENS", "VALOR EST.", "STATUS", "CRIADA", ""].map((h) => (
-            <div key={h} className="text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-              {h}
+          {(
+            [
+              { label: "Nº",          align: "left"  },
+              { label: "TÍTULO",      align: "left"  },
+              { label: "SOLICITANTE", align: "left"  },
+              { label: "UNIDADE",     align: "left"  },
+              { label: "ITENS",       align: "right" },
+              { label: "VALOR EST.",  align: "right" },
+              { label: "STATUS",      align: "left"  },
+              { label: "CRIADA",      align: "left"  },
+              { label: "",            align: "left"  },
+            ] as const
+          ).map((h) => (
+            <div
+              key={h.label}
+              className={cn(
+                "text-[10px] uppercase tracking-[0.12em] font-medium text-muted-foreground",
+                h.align === "right" && "text-right",
+              )}
+            >
+              {h.label}
             </div>
           ))}
         </div>
