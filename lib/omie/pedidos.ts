@@ -103,11 +103,14 @@ export async function upsertPedCompra(
     frete_upsert:     param.frete_incluir,
     produtos_upsert:  param.produtos_incluir,
   };
+  // maxRetries=1: sem retry automático — cada retry reseta o timer REDUNDANT do Omie
+  // causando loop infinito de REDUNDANT. Deixa o usuário controlar via countdown.
   const res = await omiePost<OmiePedParamUpsert, IncluirPedCompraResponse>(
     "/produtos/pedidocompra/",
     "UpsertPedCompra",
     creds,
     upsertParam,
+    1,
   );
   return res.nCodPed ?? 0;
 }
