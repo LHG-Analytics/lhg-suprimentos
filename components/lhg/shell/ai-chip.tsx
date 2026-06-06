@@ -135,6 +135,7 @@ async function fetchCotacaoContext(cotacaoId: string): Promise<string> {
     const seisM = new Date();
     seisM.setMonth(seisM.getMonth() - 6);
 
+    // Usa !inner para poder filtrar por cotacoes.status via dot-notation (PostgREST)
     const { data: histData } = await supabase
       .from("cotacao_itens")
       .select(`
@@ -148,7 +149,6 @@ async function fetchCotacaoContext(cotacaoId: string): Promise<string> {
       .neq("cotacao_id", cotacaoId)
       .eq("cotacoes.status", "aprovado")
       .gte("cotacoes.created_at", seisM.toISOString())
-      .order("cotacoes.created_at", { ascending: false })
       .limit(200);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -248,12 +248,13 @@ function saveChipHistory(messages: Message[]) {
 
 // ── Componente principal ───────────────────────────────────────────────────────
 export function AiChip() {
-  const [open, setOpen]             = useState(false);
-  const [input, setInput]           = useState("");
-  const [streaming, setStreaming]   = useState(false);
-  const [cotacaoCtx, setCotacaoCtx] = useState<string>("");
-  const [messages, setMessages]     = useState<Message[]>([]);
-  const [histLoaded, setHistLoaded] = useState(false);
+  const [open, setOpen]               = useState(false);
+  const [input, setInput]             = useState("");
+  const [streaming, setStreaming]     = useState(false);
+  const [cotacaoCtx, setCotacaoCtx]   = useState<string>("");
+  const [cotacaoLoading, setCotacaoLoading] = useState(false);
+  const [messages, setMessages]       = useState<Message[]>([]);
+  const [histLoaded, setHistLoaded]   = useState(false);
   const scrollRef  = useRef<HTMLDivElement>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
   const abortRef   = useRef<AbortController | null>(null);
@@ -276,12 +277,19 @@ export function AiChip() {
     ? SUGGESTIONS.cotacao_detalhe
     : SUGGESTIONS[pathname] ?? SUGGESTIONS.default;
   const contextLabel = BREADCRUMB_MAP[pathname]?.[BREADCRUMB_MAP[pathname].length - 1] ?? "Dashboard";
-  const boasVindas   = cotacaoCtx
-    ? "Matriz desta cotação carregada. Posso comparar preços entre fornecedores, analisar condições de pagamento e recomendar a melhor escolha. O que quer saber?"
-    : "Olá! Sou o copiloto de compras da LHG. Posso analisar cotações, fornecedores e pedidos usando os dados reais do sistema. Em que posso ajudar?";
+  const boasVindas = cotacaoLoading
+    ? "Carregando dados da cotação e histórico de preços…"
+    : cotacaoCtx
+      ? "Matriz e histórico de preços carregados. Posso comparar fornecedores, identificar preços acima do histórico e recomendar a melhor escolha. O que quer saber?"
+      : "Olá! Sou o copiloto de compras da LHG. Posso analisar cotações, fornecedores e pedidos usando os dados reais do sistema. Em que posso ajudar?";
   const fetchCotacaoCtx = useCallback(async (id: string) => {
-    const ctx = await fetchCotacaoContext(id);
-    setCotacaoCtx(ctx);
+    setCotacaoLoading(true);
+    try {
+      const ctx = await fetchCotacaoContext(id);
+      setCotacaoCtx(ctx);
+    } finally {
+      setCotacaoLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -551,20 +559,24 @@ export function AiChip() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 }}
-                placeholder="Pergunte ao copiloto…"
-                className="flex-1 bg-transparent h-9 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
+                disabled={cotacaoLoading}
+                placeholder={cotacaoLoading ? "Carregando dados da cotação…" : "Pergunte ao copiloto…"}
+                className="flex-1 bg-transparent h-9 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none disabled:opacity-60"
               />
               <button
                 onClick={() => send()}
-                disabled={!input.trim() || streaming}
+                disabled={!input.trim() || streaming || cotacaoLoading}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
-                  input.trim() && !streaming
+                  input.trim() && !streaming && !cotacaoLoading
                     ? "bg-lhg-500 text-zinc-950 hover:bg-lhg-400"
                     : "text-muted-foreground/70 cursor-not-allowed",
                 )}
               >
-                <Send size={13} />
+                {cotacaoLoading
+                  ? <span className="w-3 h-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                  : <Send size={13} />
+                }
               </button>
             </div>
             <p className="mt-1.5 text-[10px] text-muted-foreground/70 text-center">
