@@ -39,6 +39,7 @@ interface Produto  {
   id: string; codigo: string; nome: string;
   unidade_med: string; categoria: string;
   familia_omie: string | null; preco_custo: number | null;
+  omie_unidade_id: string | null;
 }
 
 interface RequisicoesClientProps {

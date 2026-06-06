@@ -151,7 +151,7 @@ export async function pushPedidoOmie(
       fornecedores ( razao_social, nome_fantasia ),
       pedido_itens (
         id, quantidade, preco_unitario,
-        produtos ( omie_codigo, nome, unidade_med )
+        produtos ( omie_codigo, omie_unidade_id, nome, unidade_med )
       ),
       pedido_unidades (
         unidades ( id, omie_app_key, omie_app_secret, omie_conta_corrente, omie_categoria_compras )
@@ -202,18 +202,39 @@ export async function pushPedidoOmie(
     id: string;
     quantidade: number;
     preco_unitario: number;
-    produtos: { omie_codigo: string | null; nome: string; unidade_med: string } | null;
+    produtos: { omie_codigo: string | null; omie_unidade_id: string | null; nome: string; unidade_med: string } | null;
   };
   const itens = pedido.pedido_itens as PedidoItemRaw[] | null;
 
+  // Busca omie_codigo dos produtos pela unidade do pedido.
+  // Garante que usamos o código certo mesmo que o produto linkado seja de outra unidade.
+  const nomeProdutos = (itens ?? []).map(i => i.produtos?.nome).filter(Boolean) as string[];
+  let produtoOmieMap = new Map<string, string>(); // nome -> omie_codigo da unidade certa
+  if (nomeProdutos.length > 0) {
+    const { data: produtosUnidade } = await supabase
+      .from("produtos")
+      .select("nome, omie_codigo")
+      .eq("omie_unidade_id", unidade.id)
+      .in("nome", nomeProdutos);
+    for (const p of produtosUnidade ?? []) {
+      if (p.nome && p.omie_codigo) produtoOmieMap.set(p.nome, p.omie_codigo);
+    }
+  }
+
   const produtosIncluir = (itens ?? [])
-    .filter((item) => item.produtos?.omie_codigo)
-    .map((item, i) => ({
-      cCodIntItem: `${pedidoId.slice(0, 8)}-${i + 1}`,
-      nCodProd:    Number(item.produtos!.omie_codigo!),
-      nQtde:       item.quantidade,
-      nValUnit:    item.preco_unitario,
-    }));
+    .map((item, i) => {
+      // Prefere o código da unidade certa; fallback para o código linkado diretamente
+      const omieCode = (item.produtos?.nome ? produtoOmieMap.get(item.produtos.nome) : undefined)
+        ?? item.produtos?.omie_codigo;
+      if (!omieCode) return null;
+      return {
+        cCodIntItem: `${pedidoId.slice(0, 8)}-${i + 1}`,
+        nCodProd:    Number(omieCode),
+        nQtde:       item.quantidade,
+        nValUnit:    item.preco_unitario,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   if (produtosIncluir.length === 0) {
     const msg = "Nenhum item com código Omie. Sincronize os produtos primeiro.";

@@ -10,7 +10,7 @@
  * Redesign: filtro de família virou <select> compacto (era flex-wrap de 30+ chips).
  * Tokens semânticos para suporte light/dark mode.
  */
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   X, ChevronLeft, ChevronRight, Plus, Trash2, Search,
@@ -27,6 +27,7 @@ interface Produto  {
   id: string; codigo: string; nome: string;
   unidade_med: string; categoria: string;
   familia_omie: string | null; preco_custo: number | null;
+  omie_unidade_id: string | null;
 }
 interface ItemRow {
   _key:                string;
@@ -255,9 +256,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
   const [errors,  setErrors]  = useState<Record<string, string>>({});
   const [familiaFiltro, setFamiliaFiltro] = useState("");
 
-  const familiasDisponiveis = Array.from(
-    new Set(produtos.map(p => p.familia_omie).filter(Boolean))
-  ).sort() as string[];
+  // Derivado de produtosDaUnidade (declarado após o useState do form)
 
   // Determina a pré-seleção de unidade: prioridade para unidade ativa do cookie,
   // fallback para única unidade disponível, senão vazio.
@@ -277,6 +276,21 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
     itens:         [emptyItem()],
     codCateg:      "",
   });
+
+  // Filtra produtos pela(s) unidade(s) selecionadas no form.
+  // Garante que mesmo com "todas" ativo na sidebar (produtos de todas as unidades),
+  // o dropdown só mostra os da unidade escolhida — cada Omie tem IDs próprios.
+  const produtosDaUnidade = useMemo(() => {
+    if (form.unidade_ids.length === 0) return [];
+    return produtos.filter((p: Produto) =>
+      !p.omie_unidade_id || form.unidade_ids.includes(p.omie_unidade_id)
+    );
+  }, [produtos, form.unidade_ids]);
+
+  const familiasDisponiveis = useMemo(() =>
+    Array.from(new Set(produtosDaUnidade.map((p: Produto) => p.familia_omie).filter(Boolean))).sort() as string[],
+    [produtosDaUnidade],
+  );
 
   const [categorias,      setCategorias]      = useState<CategoriaOmie[]>([]);
   const [categQuery,      setCategQuery]      = useState("");
@@ -756,7 +770,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                           </button>
                           {item.tipo === "catalogo" ? (
                             <div className="flex-1 min-w-0">
-                              <ProdutoCombobox value={item.produto} onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })} produtos={produtos} familiaFiltro={familiaFiltro} />
+                              <ProdutoCombobox value={item.produto} onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })} produtos={produtosDaUnidade} familiaFiltro={familiaFiltro} />
                             </div>
                           ) : (
                             <input type="text" placeholder="Descreva o produto..." value={item.produto_nome_livre} onChange={(e) => updateItem(item._key, { produto_nome_livre: e.target.value })} className="flex-1 h-8 px-2.5 rounded-md bg-background border border-amber-500/30 text-foreground text-[12px] focus:outline-none focus:border-amber-500 placeholder:text-muted-foreground/40" />
@@ -809,7 +823,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                           <ProdutoCombobox
                             value={item.produto}
                             onChange={(p) => updateItem(item._key, { produto_id: p.id, produto: p })}
-                            produtos={produtos}
+                            produtos={produtosDaUnidade}
                             familiaFiltro={familiaFiltro}
                           />
                         ) : (

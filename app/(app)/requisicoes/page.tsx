@@ -83,17 +83,20 @@ export default async function RequisicoesPage() {
           .eq("ativa", true)
           .order("nome"),
 
-    // Produtos filtrados pela unidade ativa (para o wizard de Nova Requisição)
+    // Produtos para o wizard de Nova Requisição — sempre inclui omie_unidade_id
+    // para que o modal filtre pela unidade selecionada no formulário.
+    // Quando unidade específica ativa: pré-filtra no servidor (mais eficiente).
+    // Quando "todas": busca todos; o modal filtra client-side pela unidade do form.
     unidadeId
       ? supabase
           .from("produtos")
-          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
+          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
           .eq("ativo", true)
           .eq("omie_unidade_id", unidadeId)
           .order("nome")
       : supabase
           .from("produtos")
-          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo")
+          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
           .eq("ativo", true)
           .order("nome"),
   ]);
