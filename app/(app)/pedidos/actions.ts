@@ -147,13 +147,14 @@ export async function pushPedidoOmie(
     .from("pedidos")
     .select(`
       id, numero, valor_total, condicao_pgto, entrega_prev, cotacao_id,
-      fornecedores ( omie_codigo, razao_social, nome_fantasia ),
+      fornecedor_id,
+      fornecedores ( razao_social, nome_fantasia ),
       pedido_itens (
         id, quantidade, preco_unitario,
         produtos ( omie_codigo, nome, unidade_med )
       ),
       pedido_unidades (
-        unidades ( omie_app_key, omie_app_secret, omie_conta_corrente, omie_categoria_compras )
+        unidades ( id, omie_app_key, omie_app_secret, omie_conta_corrente, omie_categoria_compras )
       )
     `)
     .eq("id", pedidoId)
@@ -163,7 +164,7 @@ export async function pushPedidoOmie(
     return { erro: pedErr?.message ?? "Pedido não encontrado" };
   }
 
-  type PedidoUnidade = { unidades: { omie_app_key: string | null; omie_app_secret: string | null; omie_conta_corrente?: number | null; omie_categoria_compras?: string | null } | null };
+  type PedidoUnidade = { unidades: { id: string; omie_app_key: string | null; omie_app_secret: string | null; omie_conta_corrente?: number | null; omie_categoria_compras?: string | null } | null };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pus     = pedido.pedido_unidades as any as PedidoUnidade[] | null;
   const unidade = pus?.[0]?.unidades;
@@ -177,13 +178,25 @@ export async function pushPedidoOmie(
 
   const creds = { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret };
 
-  const forn = pedido.fornecedores as { omie_codigo: string | null; razao_social: string; nome_fantasia: string | null } | null;
-  if (!forn?.omie_codigo) {
-    const msg = "Fornecedor sem código Omie. Sincronize os fornecedores primeiro.";
+  // Busca o código Omie do fornecedor específico para esta unidade
+  // (cada conta Omie tem IDs internos próprios para o mesmo fornecedor físico)
+  const fornecedorId = (pedido as { fornecedor_id?: string | null }).fornecedor_id;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: fornUnidadeRow } = await (supabase as any)
+    .from("fornecedor_unidade")
+    .select("omie_codigo")
+    .eq("fornecedor_id", fornecedorId ?? "")
+    .eq("unidade_id", unidade.id)
+    .maybeSingle() as { data: { omie_codigo: string } | null };
+
+  const forn = pedido.fornecedores as { razao_social: string; nome_fantasia: string | null } | null;
+  if (!fornUnidadeRow?.omie_codigo) {
+    const msg = "Fornecedor sem código Omie para esta unidade. Sincronize os fornecedores da unidade ativa primeiro.";
     await supabase.from("pedidos").update({ omie_status: "erro", omie_erro: msg }).eq("id", pedidoId);
     revalidatePath("/pedidos");
     return { erro: msg };
   }
+  const fornUnidade = fornUnidadeRow;
 
   type PedidoItemRaw = {
     id: string;
@@ -275,7 +288,7 @@ export async function pushPedidoOmie(
   const payload: import("@/lib/omie/pedidos").OmiePedParamIncluir = {
     cabecalho_incluir: {
       cCodIntPed,
-      nCodFor:     Number(forn.omie_codigo),
+      nCodFor:     Number(fornUnidade.omie_codigo),
       dDtPrevisao: dataPrevisao,
       cCodParc:    "999",
       nQtdeParc,

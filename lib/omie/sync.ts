@@ -196,6 +196,7 @@ export async function syncFornecedores(
     for (let i = 0; i < mappedItems.length; i += BATCH) {
       const batch = mappedItems.slice(i, i + BATCH);
 
+      // 1. Upsert global fornecedores (sem sobrescrever omie_codigo global)
       const { error } = await supabase
         .from("fornecedores")
         .upsert(batch, { onConflict: "cnpj", ignoreDuplicates: false });
@@ -203,8 +204,40 @@ export async function syncFornecedores(
       if (error) {
         console.error("[omie/sync] Erro upsert fornecedores:", error.message);
         erros += batch.length;
-      } else {
-        novos += batch.length;
+        continue;
+      }
+
+      novos += batch.length;
+
+      // 2. Upsert fornecedor_unidade: salva omie_codigo por unidade (evita sobrescrever outra unidade)
+      const cnpjs = batch.map(b => b.cnpj).filter(Boolean) as string[];
+      if (cnpjs.length > 0) {
+        const { data: fornIds } = await supabase
+          .from("fornecedores")
+          .select("id, cnpj")
+          .in("cnpj", cnpjs);
+
+        if (fornIds?.length) {
+          const cnpjToCode = new Map(batch.map(b => [b.cnpj, b.omie_codigo]));
+          const fornUnidadeRows = fornIds
+            .filter(f => f.cnpj && cnpjToCode.get(f.cnpj))
+            .map(f => ({
+              fornecedor_id: f.id as string,
+              unidade_id: unidadeId,
+              omie_codigo: cnpjToCode.get(f.cnpj!)!,
+              omie_sincronizado_em: new Date().toISOString(),
+            }));
+
+          if (fornUnidadeRows.length > 0) {
+            const { error: fuErr } = await supabase
+              .from("fornecedor_unidade")
+              .upsert(fornUnidadeRows, { onConflict: "fornecedor_id,unidade_id" });
+
+            if (fuErr) {
+              console.error("[omie/sync] Erro upsert fornecedor_unidade:", fuErr.message);
+            }
+          }
+        }
       }
     }
 
