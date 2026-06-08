@@ -15,6 +15,7 @@
 
 import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
       } else if (entidade === "requisicoes") {
         const r = await syncRequisicoes(supabase, creds, unidade.id);
         results.push(r);
+        revalidatePath("/requisicoes");
       } else if (entidade === "cmc" && !produtosSincronizados) {
         // Só CMC em background — responde imediatamente, evita timeout.
         // Com 3 locais de estoque por produto: 200×3×280ms ≈ 168s (acima dos 300s do handler).

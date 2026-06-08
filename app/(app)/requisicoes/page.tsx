@@ -7,6 +7,8 @@
  * "Todas as unidades" retorna catálogo completo.
  * Ao criar requisição, somente produtos da unidade selecionada estão disponíveis.
  */
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
