@@ -454,22 +454,7 @@ export async function enviarEmailCotacao(
 
   if (cotErr || !cotacao) throw new Error(cotErr?.message ?? "Cotação não encontrada");
 
-  // Busca email_remetente da primeira unidade da cotação (para usar no from)
-  const { data: cotUnid } = await supabase
-    .from("cotacao_unidades")
-    .select("unidade_id")
-    .eq("cotacao_id", cotacaoId)
-    .limit(1)
-    .maybeSingle();
-  let emailRemetente: string | null = null;
-  if (cotUnid?.unidade_id) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: unid } = await supabase.from("unidades").select("email_remetente" as any).eq("id", cotUnid.unidade_id).maybeSingle();
-    emailRemetente = (unid as any)?.email_remetente ?? null;
-  }
-  const fromEmail = emailRemetente
-    ? `Compras LHG Motéis <${emailRemetente}>`
-    : "Compras LHG Motéis <compras@lhgmoteis.com.br>";
+  const fromEmail = "Compras LHG Motéis <compras@lhgmoteis.com.br>";
 
   // Filtrar fornecedores-alvo
   type FornRow = {
@@ -867,11 +852,7 @@ export async function aprovarCotacao(
           }),
         );
 
-        // Email remetente: usa o da unidade se configurado, senão o padrão
-        const unidadeEmail = (unidade as { email_remetente?: string | null }).email_remetente;
-        const fromEmail = unidadeEmail
-          ? `LHG Suprimentos <${unidadeEmail}>`
-          : "LHG Suprimentos <suprimentos@lhgmoteis.com.br>";
+        const fromEmail = "Compras LHG Motéis <compras@lhgmoteis.com.br>";
 
         const resend = new Resend(process.env.RESEND_API_KEY);
         const { error: resendErr } = await resend.emails.send({
