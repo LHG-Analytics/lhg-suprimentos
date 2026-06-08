@@ -591,12 +591,17 @@ export async function enviarEmailCotacao(
         const { Resend } = await import("resend");
         const resend = new Resend(resendKey);
 
-        await resend.emails.send({
+        const { error: resendErr } = await resend.emails.send({
           from:    fromEmail,
           to:      [forn.email],
           subject: `Solicitação de Cotação ${cotacao.numero} — LHG Motéis`,
           html:    htmlBody,
         });
+
+        if (resendErr) {
+          erros.push(`${fornNome}: ${resendErr.message}`);
+          continue;
+        }
 
         enviados.push(forn.email);
       } catch (err) {
@@ -869,13 +874,18 @@ export async function aprovarCotacao(
           : "LHG Suprimentos <suprimentos@lhgmoteis.com.br>";
 
         const resend = new Resend(process.env.RESEND_API_KEY);
-        await resend.emails.send({
+        const { error: resendErr } = await resend.emails.send({
           from:    fromEmail,
           to:      forn.email,
           subject: `Pedido de Compra ${numero} — LHG Suprimentos`,
           html:    htmlBody,
         });
-      } catch { /* silencioso */ }
+        if (resendErr) {
+          console.error(`[pedido/email] Falha ao enviar para ${forn.email}:`, resendErr.message);
+        }
+      } catch (err) {
+        console.error(`[pedido/email] Exceção ao enviar para ${forn.email}:`, err);
+      }
     }
 
     pedidosCriados.push({
