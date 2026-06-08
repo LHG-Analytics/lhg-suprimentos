@@ -77,7 +77,7 @@ export async function criarConvite(
         const resend = new Resend(resendKey);
 
         await resend.emails.send({
-          from:    "LHG Suprimentos <no-reply@lhgsuprimentos.com.br>",
+          from:    "LHG Suprimentos <compras@lhgmoteis.com.br>",
           to:      [email],
           subject: "Você foi convidado para o LHG Suprimentos",
           html: `
