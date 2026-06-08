@@ -53,34 +53,48 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
+    const email = user.email?.toLowerCase().trim();
+
+    // Verificar convite válido SEMPRE — antes de checar o perfil.
+    // O trigger trg_on_auth_user_created cria o perfil automaticamente com
+    // role='solicitante' ao criar auth.users. Se o usuário tem convite com outro
+    // role, precisamos aplicá-lo mesmo que o perfil já exista.
+    const { data: invite } = email
+      ? await supabase
+          .from("invites")
+          .select("id, role")
+          .eq("email", email)
+          .is("used_at", null)
+          .gte("expires_at", new Date().toISOString())
+          .maybeSingle()
+      : { data: null };
+
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("id")
+      .select("id, role")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!profile) {
-      // Verificar se existe convite válido para o email do usuário
-      const email = user.email?.toLowerCase().trim();
+    if (invite) {
+      const nomeFromGoogle =
+        user.user_metadata?.full_name ??
+        user.user_metadata?.name ??
+        email?.split("@")[0] ??
+        "Usuário";
 
-      const { data: invite } = email
-        ? await supabase
-            .from("invites")
-            .select("id, role")
-            .eq("email", email)
-            .is("used_at", null)
-            .gte("expires_at", new Date().toISOString())
-            .maybeSingle()
-        : { data: null };
+      if (profile) {
+        // Perfil já existe (criado pelo trigger com role='solicitante') —
+        // atualizar para o role correto do convite.
+        const { error: updateError } = await supabase
+          .from("user_profiles")
+          .update({ role: invite.role, nome: nomeFromGoogle })
+          .eq("id", user.id);
 
-      if (invite) {
-        // Criar perfil com o role do convite
-        const nomeFromGoogle =
-          user.user_metadata?.full_name ??
-          user.user_metadata?.name ??
-          email?.split("@")[0] ??
-          "Usuário";
-
+        if (updateError) {
+          console.error("[auth/callback] Erro ao atualizar role via convite:", updateError.message);
+        }
+      } else {
+        // Perfil não existe — criar com o role do convite.
         const { error: insertError } = await supabase
           .from("user_profiles")
           .insert({
@@ -95,19 +109,19 @@ export async function GET(request: NextRequest) {
           await supabase.auth.signOut();
           return NextResponse.redirect(`${origin}/login?error=profile_error`);
         }
-
-        // Marcar convite como usado
-        await supabase
-          .from("invites")
-          .update({ used_at: new Date().toISOString() })
-          .eq("id", invite.id);
-
-        console.log(`[auth/callback] Novo usuário ${email} criado via convite (role: ${invite.role})`);
-      } else {
-        // Sem perfil e sem convite → negar acesso
-        await supabase.auth.signOut();
-        return NextResponse.redirect(`${origin}/login?error=not_invited`);
       }
+
+      // Marcar convite como usado
+      await supabase
+        .from("invites")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", invite.id);
+
+      console.log(`[auth/callback] Usuário ${email} com role '${invite.role}' via convite`);
+    } else if (!profile) {
+      // Sem perfil e sem convite → negar acesso
+      await supabase.auth.signOut();
+      return NextResponse.redirect(`${origin}/login?error=not_invited`);
     }
   }
 
