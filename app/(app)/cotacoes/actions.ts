@@ -864,31 +864,48 @@ export async function aprovarCotacao(
     });
   }
 
-  // 8. Calcular valor estimado e economia
-  const valorAprovadoTotal = Array.from(grupos.entries()).reduce((acc, [fornId, itensForn]) => {
-    return acc + itensForn.reduce((s, item) => {
-      const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
-      return s + item.quantidade * (entrada?.preco_unitario ?? 0);
-    }, 0);
-  }, 0);
+  // 8. Calcular valor total aprovado e economia vs. concorrência
+  // Para cada item: compara o preço do fornecedor vencedor com a média dos
+  // fornecedores que perderam a cotação — mede ganho real da disputa competitiva.
+  let valorAprovadoTotal = 0;
+  let mediaRejeitadosTotal = 0;
+  let itensComConcorrencia = 0;
 
-  const valorEstimadoTotal = itens.reduce((acc, item) => {
-    const custo = item.produtos?.preco_custo;
-    if (!custo) return acc;
-    return acc + item.quantidade * custo;
-  }, 0);
+  for (const item of itens) {
+    const fornVencedor = item.selecionado_forn;
+    if (!fornVencedor) continue;
 
-  const economiaCalc = valorEstimadoTotal > 0 ? valorEstimadoTotal - valorAprovadoTotal : null;
-  const economiaPctCalc = valorEstimadoTotal > 0 && economiaCalc !== null
-    ? (economiaCalc / valorEstimadoTotal) * 100
+    const entradaVencedor = item.cotacao_matriz.find(m => m.fornecedor_id === fornVencedor);
+    if (!entradaVencedor?.preco_unitario) continue;
+
+    const precoVencedor = entradaVencedor.preco_unitario;
+    valorAprovadoTotal += item.quantidade * precoVencedor;
+
+    // Média dos concorrentes (excluindo o vencedor, apenas com preço preenchido)
+    const precosConcorrentes = item.cotacao_matriz
+      .filter(m => m.fornecedor_id !== fornVencedor && m.preco_unitario != null && m.preco_unitario > 0)
+      .map(m => m.preco_unitario);
+
+    if (precosConcorrentes.length > 0) {
+      const mediaConcorrentes = precosConcorrentes.reduce((a, b) => a + b, 0) / precosConcorrentes.length;
+      mediaRejeitadosTotal += item.quantidade * mediaConcorrentes;
+      itensComConcorrencia++;
+    }
+  }
+
+  // Economia = quanto o vencedor foi mais barato que a média dos concorrentes
+  // Só calculável quando há ao menos 1 item com concorrência real
+  const economiaCalc      = itensComConcorrencia > 0 ? mediaRejeitadosTotal - valorAprovadoTotal : null;
+  const economiaPctCalc   = itensComConcorrencia > 0 && mediaRejeitadosTotal > 0
+    ? (economiaCalc! / mediaRejeitadosTotal) * 100
     : null;
 
   // 9. Atualizar status + campos financeiros da cotação
   await supabase.from("cotacoes").update({
-    status: "aprovado",
-    ...(valorEstimadoTotal > 0 ? { valor_estimado: valorEstimadoTotal } : {}),
-    ...(economiaCalc  !== null ? { economia:        economiaCalc  } : {}),
-    ...(economiaPctCalc !== null ? { economia_pct:  economiaPctCalc } : {}),
+    status:          "aprovado",
+    valor_estimado:  valorAprovadoTotal > 0 ? valorAprovadoTotal : undefined,
+    ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
+    ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),
   }).eq("id", cotacaoId);
 
   revalidatePath(`/cotacoes/${cotacaoId}`);
