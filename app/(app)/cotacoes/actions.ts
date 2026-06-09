@@ -469,7 +469,7 @@ export async function enviarEmailCotacao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Buscar cotação com itens e fornecedores
+  // Buscar cotação com itens, fornecedores e unidade
   const { data: cotacao, error: cotErr } = await supabase
     .from("cotacoes")
     .select(`
@@ -481,12 +481,24 @@ export async function enviarEmailCotacao(
       cotacao_fornecedores (
         fornecedor_id,
         fornecedores ( razao_social, nome_fantasia, email )
-      )
+      ),
+      cotacao_unidades ( unidades ( slug, nome ) )
     `)
     .eq("id", cotacaoId)
     .single();
 
   if (cotErr || !cotacao) throw new Error(cotErr?.message ?? "Cotação não encontrada");
+
+  // Resolve nome da empresa a partir da unidade vinculada à cotação
+  const SLUG_EMPRESA: Record<string, string> = {
+    "lush-ipiranga":         "LUSH IPIRANGA",
+    "lush-ipiranga-concavo": "RCC",
+    "lush-lapa":             "LUSH LAPA",
+    "andar-de-cima":         "ANDAR DE CIMA",
+  };
+  type UnidRow = { unidades: { slug: string; nome: string } | null };
+  const unidSlug = (cotacao.cotacao_unidades as UnidRow[])?.[0]?.unidades?.slug ?? "";
+  const empresaNome = SLUG_EMPRESA[unidSlug] ?? "LHG";
 
   const fromEmail = "Compras LHG Motéis <compras@lhgmoteis.com.br>";
 
@@ -613,7 +625,7 @@ export async function enviarEmailCotacao(
         const { error: resendErr } = await resend.emails.send({
           from:    fromEmail,
           to:      [forn.email],
-          subject: `Solicitação de Cotação ${cotacao.numero} — LHG Motéis`,
+          subject: `${empresaNome} - Cotação Nº ${cotacao.numero} - ${fornNome}`,
           html:    htmlBody,
         });
 

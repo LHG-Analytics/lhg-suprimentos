@@ -396,7 +396,7 @@ export async function enviarEmailFornecedor(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Buscar pedido + fornecedor + itens
+  // Buscar pedido + fornecedor + itens + unidade
   const { data: pedido, error: pedErr } = await supabase
     .from("pedidos")
     .select(`
@@ -405,7 +405,8 @@ export async function enviarEmailFornecedor(
       pedido_itens (
         quantidade, preco_unitario,
         produtos ( nome, unidade_med )
-      )
+      ),
+      pedido_unidades ( unidades ( slug, nome ) )
     `)
     .eq("id", pedidoId)
     .single();
@@ -414,6 +415,17 @@ export async function enviarEmailFornecedor(
 
   const forn = pedido.fornecedores as { razao_social: string; nome_fantasia: string | null; email: string | null } | null;
   if (!forn?.email) throw new Error("Fornecedor sem e-mail cadastrado");
+
+  const SLUG_EMPRESA: Record<string, string> = {
+    "lush-ipiranga":         "LUSH IPIRANGA",
+    "lush-ipiranga-concavo": "RCC",
+    "lush-lapa":             "LUSH LAPA",
+    "andar-de-cima":         "ANDAR DE CIMA",
+  };
+  type PedUnidEmail = { unidades: { slug: string; nome: string } | null };
+  const unidSlug = (pedido.pedido_unidades as PedUnidEmail[])?.[0]?.unidades?.slug ?? "";
+  const empresaNome = SLUG_EMPRESA[unidSlug] ?? "LHG";
+  const fornNomeEmail = forn.nome_fantasia ?? forn.razao_social;
 
   // Formata data de entrega
   const entregaLabel = pedido.entrega_prev
@@ -464,7 +476,7 @@ export async function enviarEmailFornecedor(
       await resend.emails.send({
         from:    "Compras LHG Motéis <compras@lhgmoteis.com.br>",
         to:      [forn.email],
-        subject: `Pedido de Compra ${pedido.numero} — LHG Motéis`,
+        subject: `${empresaNome} - Pedido de Compra Nº ${pedido.numero} - ${fornNomeEmail}`,
         html:    htmlBody,
       });
 
