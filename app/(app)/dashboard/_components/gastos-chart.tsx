@@ -78,6 +78,8 @@ export function GastosChart({ series, labels }: Props) {
   const { unidade } = useUnidade();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  // DEVE ficar antes de qualquer early return — Rules of Hooks
+  const [toggledOff, setToggledOff] = useState<string[]>([]);
   useEffect(() => setMounted(true), []);
 
   // Evita hydration mismatch: Recharts usa ResizeObserver (browser-only).
@@ -104,8 +106,6 @@ export function GastosChart({ series, labels }: Props) {
     unidade.id === "todas"
       ? series
       : series.filter((s) => s.id === unidade.id);
-
-  const [toggledOff, setToggledOff] = useState<string[]>([]);
   const activeSeries =
     unidade.id === "todas"
       ? filteredSeries.filter((s) => !toggledOff.includes(s.id))
