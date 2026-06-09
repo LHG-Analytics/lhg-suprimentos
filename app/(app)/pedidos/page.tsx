@@ -93,7 +93,7 @@ export default async function PedidosPage() {
   omieQuery = omieQuery.eq("filtro_omie", filtroAtivo);
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
-  const [{ data: pedidos }, omieResult, { data: fornecedores }] = await Promise.all([
+  const [{ data: pedidos }, omieResult, { data: fornecedores }, { data: produtos }] = await Promise.all([
     (() => {
       let q = supabase
         .from("pedidos")
@@ -130,6 +130,20 @@ export default async function PedidosPage() {
       .select("id, razao_social, nome_fantasia")
       .eq("ativo", true)
       .order("razao_social"),
+
+    // Catálogo de produtos para "Adicionar item" no modal de edição
+    unidadeId
+      ? supabase
+          .from("produtos")
+          .select("id, nome, codigo, unidade_med, categoria")
+          .eq("ativo", true)
+          .eq("omie_unidade_id", unidadeId)
+          .order("nome")
+      : supabase
+          .from("produtos")
+          .select("id, nome, codigo, unidade_med, categoria")
+          .eq("ativo", true)
+          .order("nome"),
   ]);
 
   // ── Enriquecer fornecedor_nome ────────────────────────────────────────────────
@@ -170,6 +184,7 @@ export default async function PedidosPage() {
       omie_pedidos={omie_pedidos}
       filtroAtivo={filtroAtivo}
       fornecedores={fornecedores ?? []}
+      produtos={produtos ?? []}
     />
   );
 }

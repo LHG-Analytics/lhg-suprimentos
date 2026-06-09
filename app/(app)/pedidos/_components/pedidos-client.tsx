@@ -94,11 +94,16 @@ interface OmiePedido {
   unidades: { nome: string; slug: string } | null;
 }
 
+interface ProdutoLite {
+  id: string; nome: string; codigo: string; unidade_med: string; categoria: string;
+}
+
 interface Props {
   pedidos: Pedido[];
   omie_pedidos: OmiePedido[];
   filtroAtivo: "pendentes";
   fornecedores: FornecedorLite[];
+  produtos: ProdutoLite[];
 }
 
 // ── Configurações de status ───────────────────────────────────────────────────
@@ -368,7 +373,7 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
 
 // ── Detalhe Pedido LHG (conteúdo) ────────────────────────────────────────────
 
-function PedidoDetalheConteudo({ pedido, fornecedores, onAtualizado, onClose }: { pedido: Pedido; fornecedores: FornecedorLite[]; onAtualizado: () => void; onClose: () => void }) {
+function PedidoDetalheConteudo({ pedido, fornecedores, produtos, onAtualizado, onClose }: { pedido: Pedido; fornecedores: FornecedorLite[]; produtos: ProdutoLite[]; onAtualizado: () => void; onClose: () => void }) {
   const [pending, start]          = useTransition();
   const [emailOpen, setEmailOpen] = useState(false);
   const [editarOpen, setEditarOpen] = useState(false);
@@ -634,19 +639,19 @@ function PedidoDetalheConteudo({ pedido, fornecedores, onAtualizado, onClose }: 
 
       {emailOpen   && <ModalEmail pedido={pedido} onClose={() => setEmailOpen(false)} onEnviado={onAtualizado} />}
       {rejeitarOpen && <ModalRejeitar pedidoId={pedido.id} onClose={() => setRejeitarOpen(false)} onRejeitado={onAtualizado} />}
-      {editarOpen  && <ModalEditarPedido pedido={pedido} fornecedores={fornecedores} onClose={() => setEditarOpen(false)} onEditado={onAtualizado} />}
+      {editarOpen  && <ModalEditarPedido pedido={pedido} fornecedores={fornecedores} produtos={produtos} onClose={() => setEditarOpen(false)} onEditado={onAtualizado} />}
     </div>
   );
 }
 
 // ── Modal Detalhe LHG ─────────────────────────────────────────────────────────
 
-function ModalLhgPedido({ pedido, fornecedores, onClose, onAtualizado }: { pedido: Pedido; fornecedores: FornecedorLite[]; onClose: () => void; onAtualizado: () => void }) {
+function ModalLhgPedido({ pedido, fornecedores, produtos, onClose, onAtualizado }: { pedido: Pedido; fornecedores: FornecedorLite[]; produtos: ProdutoLite[]; onClose: () => void; onAtualizado: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[4vh] px-4 pb-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-[760px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        <PedidoDetalheConteudo pedido={pedido} fornecedores={fornecedores} onAtualizado={onAtualizado} onClose={onClose} />
+        <PedidoDetalheConteudo pedido={pedido} fornecedores={fornecedores} produtos={produtos} onAtualizado={onAtualizado} onClose={onClose} />
       </div>
     </div>
   );
@@ -654,7 +659,7 @@ function ModalLhgPedido({ pedido, fornecedores, onClose, onAtualizado }: { pedid
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, fornecedores }: Props) {
+export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, fornecedores, produtos }: Props) {
   const router = useRouter();
 
   const [busca,        setBusca]        = useState("");
@@ -1017,6 +1022,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, forneced
           key={selectedLhg.id}
           pedido={selectedLhg}
           fornecedores={fornecedores}
+          produtos={produtos}
           onClose={() => setSelectedLhg(null)}
           onAtualizado={handleAtualizado}
         />

@@ -529,6 +529,7 @@ export async function editarPedido(
     entrega_prev?: string | null;
     condicao_pgto?: string | null;
     itens?: Array<{ id: string; quantidade: number; preco_unitario: number }>;
+    novosItens?: Array<{ produto_id: string; quantidade: number; preco_unitario: number }>;
   },
 ): Promise<{ ok: true } | { erro: string }> {
   const supabase = await createClient();
@@ -561,18 +562,34 @@ export async function editarPedido(
     }
   }
 
+  // Inserir novos itens se fornecidos
+  if (dados.novosItens?.length) {
+    const { error: insertErr } = await supabase.from("pedido_itens").insert(
+      dados.novosItens.map(i => ({
+        pedido_id:      pedidoId,
+        produto_id:     i.produto_id,
+        quantidade:     i.quantidade,
+        preco_unitario: i.preco_unitario,
+      })),
+    );
+    if (insertErr) return { erro: `Erro ao inserir itens: ${insertErr.message}` };
+  }
+
   // Recalcular valor_total mesclando novos valores com os valores do banco
   type ItemRaw = { id: string; quantidade: number; preco_unitario: number; produtos: { omie_codigo: string | null } | null };
   const dbItens = pedido.pedido_itens as ItemRaw[];
   const novosMap = new Map((dados.itens ?? []).map(i => [i.id, i]));
-  const novoTotal = dbItens.reduce((acc, dbItem) => {
+  const totalExistentes = dbItens.reduce((acc, dbItem) => {
     const updated = novosMap.get(dbItem.id);
     return acc + (updated?.quantidade ?? dbItem.quantidade) * (updated?.preco_unitario ?? dbItem.preco_unitario);
   }, 0);
+  const totalNovos = (dados.novosItens ?? []).reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0);
+  const novoTotal = totalExistentes + totalNovos;
 
-  // Verifica se o fornecedor mudou
+  // Verifica se o fornecedor mudou ou novos itens foram adicionados
   const fornecedorAtual = (pedido as { fornecedor_id?: string | null }).fornecedor_id;
   const fornecedorMudou = dados.fornecedor_id != null && dados.fornecedor_id !== fornecedorAtual;
+  const temNovosItens   = (dados.novosItens?.length ?? 0) > 0;
 
   // Monta update tipado explicitamente para satisfazer Supabase
   type PedidoUpdatePayload = {
@@ -589,12 +606,14 @@ export async function editarPedido(
   if (dados.condicao_pgto !== undefined) pedidoUpdate.condicao_pgto = dados.condicao_pgto ?? null;
   if (dados.fornecedor_id)               pedidoUpdate.fornecedor_id = dados.fornecedor_id;
 
-  // Se fornecedor mudou e o pedido já estava no Omie, marcar como pendente
-  // O usuário precisará excluir o pedido antigo no Omie e reenviar
-  if (fornecedorMudou && pedido.omie_status === "sincronizado") {
+  // Se fornecedor mudou OU novos itens adicionados em pedido já no Omie,
+  // marcar como pendente — o usuário precisa excluir no Omie e reenviar
+  if ((fornecedorMudou || temNovosItens) && pedido.omie_status === "sincronizado") {
     pedidoUpdate.omie_status = "pendente";
     pedidoUpdate.omie_codigo = null;
-    pedidoUpdate.omie_erro   = "Fornecedor alterado — exclua o pedido no Omie e reenvie";
+    pedidoUpdate.omie_erro   = fornecedorMudou
+      ? "Fornecedor alterado — exclua o pedido no Omie e reenvie"
+      : "Itens adicionados — exclua o pedido no Omie e reenvie";
   }
 
   await supabase.from("pedidos").update(pedidoUpdate).eq("id", pedidoId);
@@ -643,6 +662,7 @@ export async function editarPedido(
 
   const textoEvento = [
     dados.itens?.length ? "itens atualizados" : null,
+    temNovosItens ? `${dados.novosItens!.length} item(s) adicionado(s)` : null,
     fornecedorMudou ? "fornecedor alterado" : null,
     dados.condicao_pgto !== undefined ? "condição de pagamento" : null,
     dados.entrega_prev !== undefined ? "prazo de entrega" : null,
