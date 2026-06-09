@@ -711,7 +711,7 @@ export async function aprovarCotacao(
       cotacao_unidades(unidade_id, unidades(omie_app_key, omie_app_secret)),
       cotacao_itens(
         id, quantidade, selecionado_forn,
-        produtos(id, nome, omie_codigo, unidade_med),
+        produtos(id, nome, omie_codigo, unidade_med, preco_custo),
         cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)
       )
     `)
@@ -726,7 +726,7 @@ export async function aprovarCotacao(
     id: string;
     quantidade: number;
     selecionado_forn: string | null;
-    produtos: { id: string; nome: string; omie_codigo: string | null; unidade_med: string } | null;
+    produtos: { id: string; nome: string; omie_codigo: string | null; unidade_med: string; preco_custo: number | null } | null;
     cotacao_matriz: MatrizRaw[];
   };
 
@@ -864,8 +864,32 @@ export async function aprovarCotacao(
     });
   }
 
-  // 8. Atualizar status da cotação
-  await supabase.from("cotacoes").update({ status: "aprovado" }).eq("id", cotacaoId);
+  // 8. Calcular valor estimado e economia
+  const valorAprovadoTotal = Array.from(grupos.entries()).reduce((acc, [fornId, itensForn]) => {
+    return acc + itensForn.reduce((s, item) => {
+      const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+      return s + item.quantidade * (entrada?.preco_unitario ?? 0);
+    }, 0);
+  }, 0);
+
+  const valorEstimadoTotal = itens.reduce((acc, item) => {
+    const custo = item.produtos?.preco_custo;
+    if (!custo) return acc;
+    return acc + item.quantidade * custo;
+  }, 0);
+
+  const economiaCalc = valorEstimadoTotal > 0 ? valorEstimadoTotal - valorAprovadoTotal : null;
+  const economiaPctCalc = valorEstimadoTotal > 0 && economiaCalc !== null
+    ? (economiaCalc / valorEstimadoTotal) * 100
+    : null;
+
+  // 9. Atualizar status + campos financeiros da cotação
+  await supabase.from("cotacoes").update({
+    status: "aprovado",
+    ...(valorEstimadoTotal > 0 ? { valor_estimado: valorEstimadoTotal } : {}),
+    ...(economiaCalc  !== null ? { economia:        economiaCalc  } : {}),
+    ...(economiaPctCalc !== null ? { economia_pct:  economiaPctCalc } : {}),
+  }).eq("id", cotacaoId);
 
   revalidatePath(`/cotacoes/${cotacaoId}`);
   revalidatePath("/cotacoes");

@@ -315,13 +315,17 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
 
   // ── Mini-KPIs ──────────────────────────────────────────────────────────────
   const emCotacao     = cotacoes.filter(c => c.status === "cotacao").length;
-  const economiaTotal = cotacoes.reduce((acc, c) => acc + (c.economia ?? 0), 0);
-  const comCiclo      = cotacoes.filter(c => c.status !== "rascunho");
-  const cicloMedio    = comCiclo.length > 0
-    ? Math.round(comCiclo.reduce((acc, c) => {
+  // Soma economia apenas de cotações aprovadas com valor calculado (> 0)
+  const economiaTotal = cotacoes
+    .filter(c => c.status === "aprovado" && (c.economia ?? 0) > 0)
+    .reduce((acc, c) => acc + (c.economia ?? 0), 0);
+  // Ciclo médio: apenas cotações aprovadas (do rascunho até aprovação) com pelo menos 1 dia
+  const aprovadas     = cotacoes.filter(c => c.status === "aprovado");
+  const cicloMedio    = aprovadas.length > 0
+    ? Math.round(aprovadas.reduce((acc, c) => {
         const dias = (Date.now() - new Date(c.created_at).getTime()) / 86_400_000;
-        return acc + dias;
-      }, 0) / comCiclo.length)
+        return acc + Math.max(dias, 1);
+      }, 0) / aprovadas.length)
     : 0;
 
   // ── Counts por status ──────────────────────────────────────────────────────
@@ -401,10 +405,10 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
             sub:   emCotacao > 0 ? `${emCotacao} aguardando respostas` : "Nenhuma cotação aberta",
           },
           {
-            label: "ECONOMIA IA ACUMULADA",
+            label: "ECONOMIA GERADA",
             value: economiaTotal > 0 ? formatBRL(economiaTotal) : "R$ 0,00",
             color: "text-emerald-400",
-            sub:   "soma de todas as sugestões IA",
+            sub:   economiaTotal > 0 ? "estimado vs. preço aprovado" : "nenhuma cotação aprovada com valores",
           },
           {
             label: "CICLO MÉDIO (dias)",
