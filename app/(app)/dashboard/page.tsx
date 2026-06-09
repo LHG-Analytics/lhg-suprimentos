@@ -38,19 +38,57 @@ const SLUG_META: Record<string, { nome: string; cor: string }> = {
 // Altana excluída enquanto estiver disabled (ativa=false no banco)
 const SLUG_ORDER = ["lush-ipiranga", "lush-ipiranga-concavo", "lush-lapa", "andar-de-cima"];
 
-// ── Labels dos últimos 6 meses ────────────────────────────────────────────────
+// ── Labels de meses ───────────────────────────────────────────────────────────
 const MONTH_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const MONTH_LONG  = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-function getLast6Months(): { labels: string[]; keys: string[] } {
+/**
+ * Gera os labels e keys do gráfico com base no período selecionado.
+ * - Período <= 62 dias → agrega por dia (labels "DD/MM")
+ * - Período > 62 dias  → agrega por mês (labels "Mmm")
+ */
+function buildChartRange(fromStr: string, toStr: string): {
+  labels: string[];
+  keys: string[];
+  byDay: boolean;
+  subtitulo: string;
+} {
+  const fromDate = new Date(fromStr + "T00:00:00");
+  const toDate   = new Date(toStr   + "T00:00:00");
+  const diffDays = Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1;
+  const byDay    = diffDays <= 62;
+
   const labels: string[] = [];
-  const keys: string[]   = []; // "YYYY-MM"
-  const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  const keys: string[]   = [];
+
+  if (byDay) {
+    const d = new Date(fromDate);
+    while (d <= toDate) {
+      labels.push(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`);
+      keys.push(d.toISOString().split("T")[0]);
+      d.setDate(d.getDate() + 1);
+    }
+    // Subtítulo: se for o mês inteiro ou parcial, mostrar o nome do mês
+    const sameMonth = fromDate.getMonth() === toDate.getMonth() && fromDate.getFullYear() === toDate.getFullYear();
+    const subtitulo = sameMonth
+      ? `${MONTH_LONG[fromDate.getMonth()]} ${fromDate.getFullYear()} · pedidos enviados e recebidos`
+      : `${fromDate.toLocaleDateString("pt-BR")} a ${toDate.toLocaleDateString("pt-BR")} · pedidos enviados e recebidos`;
+    return { labels, keys, byDay, subtitulo };
+  }
+
+  // Por mês
+  const d = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+  const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+  while (d <= end) {
     labels.push(MONTH_SHORT[d.getMonth()]);
     keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    d.setMonth(d.getMonth() + 1);
   }
-  return { labels, keys };
+  const meses = labels.length;
+  const subtitulo = meses === 12
+    ? "Último ano · pedidos enviados e recebidos"
+    : `Últimos ${meses} meses · pedidos enviados e recebidos`;
+  return { labels, keys, byDay, subtitulo };
 }
 
 // ── Formato de data pt-BR ──────────────────────────────────────────────────────
@@ -112,16 +150,20 @@ async function fetchKpis(supabase: SupabaseClient) {
   };
 }
 
-// ── Dados do gráfico: gastos por unidade nos últimos 6 meses ─────────────────
-async function fetchChartData(supabase: SupabaseClient): Promise<{
+// ── Dados do gráfico: gastos por unidade no período selecionado ──────────────
+async function fetchChartData(
+  supabase: SupabaseClient,
+  fromStr: string,
+  toStr: string,
+): Promise<{
   series: ChartSerie[];
   labels: string[];
+  subtitulo: string;
 }> {
-  const { labels, keys } = getLast6Months();
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
-  sixMonthsAgo.setHours(0, 0, 0, 0);
+  const { labels, keys, byDay, subtitulo } = buildChartRange(fromStr, toStr);
+
+  const fromIso = new Date(fromStr + "T00:00:00").toISOString();
+  const toIso   = new Date(toStr   + "T23:59:59").toISOString();
 
   const { data: pedidos } = await supabase
     .from("pedidos")
@@ -131,34 +173,31 @@ async function fetchChartData(supabase: SupabaseClient): Promise<{
       pedido_unidades ( unidades ( id, slug, nome, cor_hex ) )
     `)
     .in("status", ["enviado", "em_transito", "recebido", "finalizado"] as const)
-    .gte("created_at", sixMonthsAgo.toISOString());
+    .gte("created_at", fromIso)
+    .lte("created_at", toIso);
 
-  // Agrega: grouped[slug][YYYY-MM] = total
   const grouped: Record<string, Record<string, number>> = {};
-  // Sobrescreve cor com cor_hex do DB se disponível
   const slugCorOverride: Record<string, string> = {};
 
   for (const p of pedidos ?? []) {
-    // Pega a primeira unidade do pedido (pedidos geralmente têm 1 unidade)
     const pus = p.pedido_unidades as Array<{
       unidades: { id: string; slug: string; nome: string; cor_hex: string | null } | null;
     }> | null;
     const u = pus?.[0]?.unidades;
     if (!u?.slug) continue;
 
-    const monthKey = p.created_at.slice(0, 7); // "YYYY-MM"
+    // Agrega por dia (YYYY-MM-DD) ou mês (YYYY-MM) conforme o período
+    const key = byDay ? p.created_at.slice(0, 10) : p.created_at.slice(0, 7);
     grouped[u.slug] = grouped[u.slug] ?? {};
-    grouped[u.slug][monthKey] = (grouped[u.slug][monthKey] ?? 0) + p.valor_total;
+    grouped[u.slug][key] = (grouped[u.slug][key] ?? 0) + p.valor_total;
 
     if (u.cor_hex) slugCorOverride[u.slug] = u.cor_hex;
   }
 
-  // Garante que todas as unidades canônicas aparecem mesmo sem pedidos
   SLUG_ORDER.forEach((slug) => {
     if (!grouped[slug]) grouped[slug] = {};
   });
 
-  // Monta series na ordem canônica
   const series: ChartSerie[] = SLUG_ORDER.map((slug) => {
     const meta = SLUG_META[slug];
     return {
@@ -169,7 +208,7 @@ async function fetchChartData(supabase: SupabaseClient): Promise<{
     };
   });
 
-  return { series, labels };
+  return { series, labels, subtitulo };
 }
 
 // ── Ações pendentes reais ─────────────────────────────────────────────────────
@@ -430,7 +469,7 @@ export default async function DashboardPage({
   // Promise.allSettled garante que uma falha isolada não derruba o dashboard inteiro.
   const results = await Promise.allSettled([
     fetchKpis(supabase),
-    fetchChartData(supabase),
+    fetchChartData(supabase, periodoFrom, periodoTo),
     fetchAcoes(supabase),
     fetchCotacoes(supabase),
     fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
@@ -440,7 +479,7 @@ export default async function DashboardPage({
   // Valores de fallback para cada seção
   const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null };
   const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
-  const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [] };
+  const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [], subtitulo: "pedidos enviados e recebidos" };
   const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
   const cotacoesRes   = results[3].status === "fulfilled" ? results[3].value : { rows: [], total: 0 };
   const gastosCat     = results[4].status === "fulfilled" ? results[4].value : {};
@@ -510,7 +549,7 @@ export default async function DashboardPage({
       {/* ── Gráfico + Ações + Status Omie ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-h-[420px]">
         <div className="lg:col-span-2 h-full">
-          <GastosChart series={chart.series} labels={chart.labels} />
+          <GastosChart series={chart.series} labels={chart.labels} subtitulo={chart.subtitulo} />
         </div>
         <div className="flex flex-col gap-3 h-full">
           <AcoesFeed acoes={acoes} />

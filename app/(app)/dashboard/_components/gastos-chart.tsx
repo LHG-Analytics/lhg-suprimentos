@@ -29,8 +29,9 @@ export interface ChartSerie {
 }
 
 interface Props {
-  series: ChartSerie[];
-  labels: string[];
+  series:    ChartSerie[];
+  labels:    string[];
+  subtitulo?: string;
 }
 
 function buildChartData(activeSeries: ChartSerie[], labels: string[]) {
@@ -74,7 +75,7 @@ function CustomTooltip({
   );
 }
 
-export function GastosChart({ series, labels }: Props) {
+export function GastosChart({ series, labels, subtitulo }: Props) {
   const { unidade } = useUnidade();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -130,7 +131,7 @@ export function GastosChart({ series, labels }: Props) {
             {unidade.id === "todas" ? "Gastos por unidade" : `Evolução de gastos · ${unidade.nome}`}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Últimos 6 meses · pedidos enviados e recebidos
+            {subtitulo ?? "pedidos enviados e recebidos"}
           </div>
         </div>
 
@@ -166,7 +167,7 @@ export function GastosChart({ series, labels }: Props) {
       {semDados ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-xs text-muted-foreground/50">
-            Nenhum pedido aprovado nos últimos 6 meses
+            Nenhum pedido aprovado no período
           </p>
         </div>
       ) : (
