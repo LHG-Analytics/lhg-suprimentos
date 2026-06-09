@@ -216,6 +216,40 @@ export async function adicionarFornecedorCotacao(
   revalidatePath(`/cotacoes/${cotacaoId}`);
 }
 
+// ── removerFornecedorCotacao ──────────────────────────────────────────────────
+
+export async function removerFornecedorCotacao(
+  cotacaoId: string,
+  fornecedorId: string,
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Busca itens da cotação para limpar cotacao_matriz
+  const { data: itens } = await supabase
+    .from("cotacao_itens")
+    .select("id")
+    .eq("cotacao_id", cotacaoId);
+
+  if (itens?.length) {
+    await supabase
+      .from("cotacao_matriz")
+      .delete()
+      .in("cotacao_item_id", itens.map(i => i.id))
+      .eq("fornecedor_id", fornecedorId);
+  }
+
+  const { error } = await supabase
+    .from("cotacao_fornecedores")
+    .delete()
+    .eq("cotacao_id", cotacaoId)
+    .eq("fornecedor_id", fornecedorId);
+
+  if (error) throw new Error(error.message);
+  revalidatePath(`/cotacoes/${cotacaoId}`);
+}
+
 // ── gerarPedidosDeCotacao ─────────────────────────────────────────────────────
 
 export async function gerarPedidosDeCotacao(
@@ -812,62 +846,14 @@ export async function aprovarCotacao(
       );
     }
 
-    // Pedido criado localmente — o envio ao Omie é feito manualmente via
-    // "Tentar novamente" nos Pedidos de Compra (possui retry, cCodCateg, nCodCC, UpsertPedCompra etc.)
+    // Pedido criado localmente — o envio ao Omie e o email ao fornecedor são feitos
+    // manualmente na tela de Pedidos de Compra.
     await supabase.from("pedido_eventos").insert({
       pedido_id: pedidoId,
       tipo:      "criacao",
-      texto:     `Pedido criado — use "Tentar novamente" nos Pedidos para enviar ao Omie`,
+      texto:     `Pedido criado — envie ao Omie e ao fornecedor pela tela de Pedidos`,
       autor_id:  user.id,
     });
-
-    // Tentar enviar email ao fornecedor usando template React Email
-    if (forn.email && process.env.RESEND_API_KEY) {
-      try {
-        const { Resend } = await import("resend");
-        const { render } = await import("@react-email/components");
-        const { PedidoCompraFornecedorEmail } = await import("@/emails/pedido-compra-fornecedor");
-
-        const emailItens = itensForn
-          .filter(i => i.produtos?.nome)
-          .map(item => {
-            const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
-            return {
-              nome:          item.produtos!.nome,
-              unidade:       item.produtos!.unidade_med ?? "UN",
-              quantidade:    item.quantidade,
-              precoUnitario: entrada?.preco_unitario ?? 0,
-            };
-          });
-
-        const htmlBody = await render(
-          PedidoCompraFornecedorEmail({
-            numero,
-            fornNome:     forn.nome_fantasia ?? forn.razao_social,
-            itens:        emailItens,
-            valorTotal,
-            entregaLabel: dtPrevisao,
-            condicaoPgto: condicaoPgto ?? null,
-            mensagem:     `Pedido de compra referente à cotação ${cotacao.titulo}.`,
-          }),
-        );
-
-        const fromEmail = "Compras LHG Motéis <compras@lhgmoteis.com.br>";
-
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const { error: resendErr } = await resend.emails.send({
-          from:    fromEmail,
-          to:      forn.email,
-          subject: `Pedido de Compra ${numero} — LHG Suprimentos`,
-          html:    htmlBody,
-        });
-        if (resendErr) {
-          console.error(`[pedido/email] Falha ao enviar para ${forn.email}:`, resendErr.message);
-        }
-      } catch (err) {
-        console.error(`[pedido/email] Exceção ao enviar para ${forn.email}:`, err);
-      }
-    }
 
     pedidosCriados.push({
       id:         pedidoId,

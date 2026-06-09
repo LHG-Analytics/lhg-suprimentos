@@ -524,7 +524,12 @@ export async function marcarRecebido(pedidoId: string) {
 
 export async function editarPedido(
   pedidoId: string,
-  dados: { entrega_prev?: string | null; condicao_pgto?: string | null },
+  dados: {
+    fornecedor_id?: string | null;
+    entrega_prev?: string | null;
+    condicao_pgto?: string | null;
+    itens?: Array<{ id: string; quantidade: number; preco_unitario: number }>;
+  },
 ): Promise<{ ok: true } | { erro: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -533,9 +538,9 @@ export async function editarPedido(
   const { data: pedido, error: fetchErr } = await supabase
     .from("pedidos")
     .select(`
-      id, omie_codigo, omie_status, status,
+      id, omie_codigo, omie_status, status, fornecedor_id,
       pedido_itens(id, quantidade, preco_unitario, produtos(omie_codigo)),
-      pedido_unidades(unidades(omie_app_key, omie_app_secret))
+      pedido_unidades(unidades(id, omie_app_key, omie_app_secret))
     `)
     .eq("id", pedidoId)
     .single();
@@ -545,49 +550,87 @@ export async function editarPedido(
     return { erro: "Pedidos recebidos ou finalizados não podem ser editados" };
   }
 
-  await supabase
-    .from("pedidos")
-    .update({
-      entrega_prev:  dados.entrega_prev ?? null,
-      condicao_pgto: dados.condicao_pgto ?? null,
-    })
-    .eq("id", pedidoId);
+  // Atualiza itens se fornecidos
+  if (dados.itens?.length) {
+    for (const item of dados.itens) {
+      await supabase
+        .from("pedido_itens")
+        .update({ quantidade: item.quantidade, preco_unitario: item.preco_unitario })
+        .eq("id", item.id)
+        .eq("pedido_id", pedidoId);
+    }
+  }
 
-  if (pedido.omie_status === "sincronizado" && pedido.omie_codigo) {
+  // Recalcular valor_total mesclando novos valores com os valores do banco
+  type ItemRaw = { id: string; quantidade: number; preco_unitario: number; produtos: { omie_codigo: string | null } | null };
+  const dbItens = pedido.pedido_itens as ItemRaw[];
+  const novosMap = new Map((dados.itens ?? []).map(i => [i.id, i]));
+  const novoTotal = dbItens.reduce((acc, dbItem) => {
+    const updated = novosMap.get(dbItem.id);
+    return acc + (updated?.quantidade ?? dbItem.quantidade) * (updated?.preco_unitario ?? dbItem.preco_unitario);
+  }, 0);
+
+  // Verifica se o fornecedor mudou
+  const fornecedorAtual = (pedido as { fornecedor_id?: string | null }).fornecedor_id;
+  const fornecedorMudou = dados.fornecedor_id != null && dados.fornecedor_id !== fornecedorAtual;
+
+  // Monta update tipado explicitamente para satisfazer Supabase
+  type PedidoUpdatePayload = {
+    entrega_prev?:  string | null;
+    condicao_pgto?: string | null;
+    fornecedor_id?: string;
+    valor_total:    number;
+    omie_status?:   "pendente" | "sincronizado" | "erro";
+    omie_codigo?:   string | null;
+    omie_erro?:     string | null;
+  };
+  const pedidoUpdate: PedidoUpdatePayload = { valor_total: novoTotal };
+  if (dados.entrega_prev  !== undefined) pedidoUpdate.entrega_prev  = dados.entrega_prev  ?? null;
+  if (dados.condicao_pgto !== undefined) pedidoUpdate.condicao_pgto = dados.condicao_pgto ?? null;
+  if (dados.fornecedor_id)               pedidoUpdate.fornecedor_id = dados.fornecedor_id;
+
+  // Se fornecedor mudou e o pedido já estava no Omie, marcar como pendente
+  // O usuário precisará excluir o pedido antigo no Omie e reenviar
+  if (fornecedorMudou && pedido.omie_status === "sincronizado") {
+    pedidoUpdate.omie_status = "pendente";
+    pedidoUpdate.omie_codigo = null;
+    pedidoUpdate.omie_erro   = "Fornecedor alterado — exclua o pedido no Omie e reenvie";
+  }
+
+  await supabase.from("pedidos").update(pedidoUpdate).eq("id", pedidoId);
+
+  // Sync Omie via alterarPedCompra quando sincronizado e fornecedor não mudou
+  if (pedido.omie_status === "sincronizado" && pedido.omie_codigo && !fornecedorMudou) {
     type PedUnid = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
     const unid = (pedido.pedido_unidades as PedUnid[])?.[0]?.unidades;
 
     if (unid?.omie_app_key && unid?.omie_app_secret) {
       try {
-        type ItemRaw = { id: string; quantidade: number; preco_unitario: number; produtos: { omie_codigo: string | null } | null };
-        const produtosAlterar = (pedido.pedido_itens as ItemRaw[])
+        const produtosAlterar = dbItens
           .filter(i => i.produtos?.omie_codigo)
-          .map((i, idx) => ({
-            cCodIntItem: `${pedidoId.slice(0, 8)}-${idx + 1}`,
-            nCodProd:    Number(i.produtos!.omie_codigo!),
-            nQtde:       i.quantidade,
-            nValUnit:    i.preco_unitario,
-          }));
+          .map((i, idx) => {
+            const updated = novosMap.get(i.id);
+            return {
+              cCodIntItem: `${pedidoId.slice(0, 8)}-${idx + 1}`,
+              nCodProd:    Number(i.produtos!.omie_codigo!),
+              nQtde:       updated?.quantidade  ?? i.quantidade,
+              nValUnit:    updated?.preco_unitario ?? i.preco_unitario,
+            };
+          });
 
         const dataPrevisao = dados.entrega_prev
-          ? new Date(dados.entrega_prev).toLocaleDateString("pt-BR")
+          ? new Date(dados.entrega_prev + "T12:00:00").toLocaleDateString("pt-BR")
           : undefined;
 
         await alterarPedCompra(
           { appKey: unid.omie_app_key, appSecret: unid.omie_app_secret },
           {
-            cabecalho_alterar: {
-              nCodPed:      Number(pedido.omie_codigo),
-              dDtPrevisao:  dataPrevisao,
-            },
+            cabecalho_alterar: { nCodPed: Number(pedido.omie_codigo), dDtPrevisao: dataPrevisao },
             produtos_alterar: produtosAlterar,
           },
         );
 
-        await supabase
-          .from("pedidos")
-          .update({ omie_status: "sincronizado" })
-          .eq("id", pedidoId);
+        await supabase.from("pedidos").update({ omie_status: "sincronizado" }).eq("id", pedidoId);
       } catch (err) {
         console.warn("[editarPedido] AlteraPedCompra falhou:", err instanceof Error ? err.message : err);
         await supabase
@@ -597,6 +640,20 @@ export async function editarPedido(
       }
     }
   }
+
+  const textoEvento = [
+    dados.itens?.length ? "itens atualizados" : null,
+    fornecedorMudou ? "fornecedor alterado" : null,
+    dados.condicao_pgto !== undefined ? "condição de pagamento" : null,
+    dados.entrega_prev !== undefined ? "prazo de entrega" : null,
+  ].filter(Boolean).join(", ");
+
+  await supabase.from("pedido_eventos").insert({
+    pedido_id: pedidoId,
+    tipo:      "edicao",
+    texto:     `Pedido editado${textoEvento ? `: ${textoEvento}` : ""}`,
+    autor_id:  user.id,
+  });
 
   revalidatePath("/pedidos");
   return { ok: true };

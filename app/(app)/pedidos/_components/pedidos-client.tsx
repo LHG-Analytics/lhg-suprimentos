@@ -13,13 +13,14 @@ import {
   Search, Package, CheckCircle2, XCircle, Mail, Truck, Clock,
   AlertCircle, Loader2, Send, X, ShoppingCart,
   Star, ReceiptText, Sparkles, RefreshCw, Plus,
-  ChevronLeft, ChevronRight, Calendar, Download,
+  ChevronLeft, ChevronRight, Calendar, Download, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { aprovarPedido, marcarRecebido, pushPedidoOmie, excluirPedidoLocal } from "../actions";
 import { ModalEmail } from "./modal-email";
 import { ModalRejeitar } from "./modal-rejeitar";
+import { ModalEditarPedido } from "./modal-editar-pedido";
 import { useDebounce } from "@/hooks/use-debounce";
 import { downloadCsv } from "@/lib/csv";
 
@@ -44,11 +45,18 @@ interface PedidoEvento {
   autor: { nome: string; avatar_url: string | null } | null;
 }
 
+interface FornecedorLite {
+  id: string;
+  razao_social: string;
+  nome_fantasia: string | null;
+}
+
 interface Pedido {
   id: string;
   numero: string;
   status: PedStatus;
   valor_total: number;
+  fornecedor_id: string | null;
   condicao_pgto: string | null;
   entrega_prev: string | null;
   created_at: string;
@@ -90,6 +98,7 @@ interface Props {
   pedidos: Pedido[];
   omie_pedidos: OmiePedido[];
   filtroAtivo: "pendentes";
+  fornecedores: FornecedorLite[];
 }
 
 // ── Configurações de status ───────────────────────────────────────────────────
@@ -112,6 +121,7 @@ const EVENTO_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = 
   email_enviado: { color: "bg-sky-500/20",       icon: <Mail size={11} className="text-sky-400" /> },
   recebimento:   { color: "bg-violet-500/20",    icon: <Truck size={11} className="text-violet-400" /> },
   omie:          { color: "bg-amber-500/20",     icon: <Sparkles size={11} className="text-amber-400" /> },
+  edicao:        { color: "bg-violet-500/20",    icon: <Pencil size={11} className="text-violet-400" /> },
 };
 
 // ── Tentar novamente (inline na lista) ────────────────────────────────────────
@@ -358,9 +368,10 @@ function ModalOmiePedido({ pedido, onClose, onSync }: { pedido: OmiePedido; onCl
 
 // ── Detalhe Pedido LHG (conteúdo) ────────────────────────────────────────────
 
-function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedido; onAtualizado: () => void; onClose: () => void }) {
+function PedidoDetalheConteudo({ pedido, fornecedores, onAtualizado, onClose }: { pedido: Pedido; fornecedores: FornecedorLite[]; onAtualizado: () => void; onClose: () => void }) {
   const [pending, start]          = useTransition();
   const [emailOpen, setEmailOpen] = useState(false);
+  const [editarOpen, setEditarOpen] = useState(false);
   const [rejeitarOpen, setRejeitarOpen] = useState(false);
   const [confirmarExcluir, setConfirmarExcluir] = useState(false);
 
@@ -476,6 +487,12 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
                 : "border-sky-700/60 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20")}>
             <Mail size={12} />{pedido.email_enviado_em ? "Reenviar e-mail" : "Enviar ao fornecedor"}
           </button>
+          {!["recebido", "finalizado"].includes(pedido.status) && (
+            <button onClick={() => setEditarOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/60 bg-violet-500/10 px-3 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-500/20 transition-colors">
+              <Pencil size={12} />Editar
+            </button>
+          )}
           {pedido.omie_status === "sincronizado" && pedido.omie_codigo ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 ml-auto">
               <Sparkles size={9} />Omie #{pedido.omie_codigo}
@@ -615,20 +632,21 @@ function PedidoDetalheConteudo({ pedido, onAtualizado, onClose }: { pedido: Pedi
         )}
       </div>
 
-      {emailOpen && <ModalEmail pedido={pedido} onClose={() => setEmailOpen(false)} onEnviado={onAtualizado} />}
+      {emailOpen   && <ModalEmail pedido={pedido} onClose={() => setEmailOpen(false)} onEnviado={onAtualizado} />}
       {rejeitarOpen && <ModalRejeitar pedidoId={pedido.id} onClose={() => setRejeitarOpen(false)} onRejeitado={onAtualizado} />}
+      {editarOpen  && <ModalEditarPedido pedido={pedido} fornecedores={fornecedores} onClose={() => setEditarOpen(false)} onEditado={onAtualizado} />}
     </div>
   );
 }
 
 // ── Modal Detalhe LHG ─────────────────────────────────────────────────────────
 
-function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onClose: () => void; onAtualizado: () => void }) {
+function ModalLhgPedido({ pedido, fornecedores, onClose, onAtualizado }: { pedido: Pedido; fornecedores: FornecedorLite[]; onClose: () => void; onAtualizado: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[4vh] px-4 pb-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-[760px] rounded-xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        <PedidoDetalheConteudo pedido={pedido} onAtualizado={onAtualizado} onClose={onClose} />
+        <PedidoDetalheConteudo pedido={pedido} fornecedores={fornecedores} onAtualizado={onAtualizado} onClose={onClose} />
       </div>
     </div>
   );
@@ -636,7 +654,7 @@ function ModalLhgPedido({ pedido, onClose, onAtualizado }: { pedido: Pedido; onC
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props) {
+export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos, fornecedores }: Props) {
   const router = useRouter();
 
   const [busca,        setBusca]        = useState("");
@@ -998,6 +1016,7 @@ export function PedidosClient({ pedidos: pedidosIniciais, omie_pedidos }: Props)
         <ModalLhgPedido
           key={selectedLhg.id}
           pedido={selectedLhg}
+          fornecedores={fornecedores}
           onClose={() => setSelectedLhg(null)}
           onAtualizado={handleAtualizado}
         />

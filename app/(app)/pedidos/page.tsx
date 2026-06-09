@@ -93,13 +93,13 @@ export default async function PedidosPage() {
   omieQuery = omieQuery.eq("filtro_omie", filtroAtivo);
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
-  const [{ data: pedidos }, omieResult] = await Promise.all([
+  const [{ data: pedidos }, omieResult, { data: fornecedores }] = await Promise.all([
     (() => {
       let q = supabase
         .from("pedidos")
         .select(`
           id, numero, status, valor_total, condicao_pgto, entrega_prev,
-          created_at, email_enviado_em, omie_status, omie_codigo,
+          fornecedor_id, created_at, email_enviado_em, omie_status, omie_codigo,
           comprador:user_profiles!comprador_id(nome, avatar_url),
           aprovador:user_profiles!aprovador_id(nome),
           fornecedores(id, razao_social, nome_fantasia, email, rating, pontualidade_pct),
@@ -124,6 +124,12 @@ export default async function PedidosPage() {
     })(),
 
     omieQuery,
+
+    supabase
+      .from("fornecedores")
+      .select("id, razao_social, nome_fantasia")
+      .eq("ativo", true)
+      .order("razao_social"),
   ]);
 
   // ── Enriquecer fornecedor_nome ────────────────────────────────────────────────
@@ -163,6 +169,7 @@ export default async function PedidosPage() {
       pedidos={pedidos ?? []}
       omie_pedidos={omie_pedidos}
       filtroAtivo={filtroAtivo}
+      fornecedores={fornecedores ?? []}
     />
   );
 }

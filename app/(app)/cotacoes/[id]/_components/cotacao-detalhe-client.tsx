@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
@@ -101,6 +101,21 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   const [addFornModalOpen, setAddFornModalOpen] = useState(false);
   const [emailModalOpen,   setEmailModalOpen]   = useState(false);
   const [emailMensagem,    setEmailMensagem]    = useState("");
+  const [removingFornId,   setRemovingFornId]   = useState<string | null>(null);
+
+  async function handleRemoverFornecedor(fornecedorId: string, nome: string) {
+    if (!confirm(`Remover "${nome}" desta cotação?`)) return;
+    setRemovingFornId(fornecedorId);
+    try {
+      await removerFornecedorCotacao(cotacao.id, fornecedorId);
+      toast.success("Fornecedor removido");
+      router.refresh();
+    } catch {
+      toast.error("Erro ao remover fornecedor");
+    } finally {
+      setRemovingFornId(null);
+    }
+  }
 
   const fornecedores = cotacao.cotacao_fornecedores
     .map(cf => cf.fornecedores)
@@ -442,7 +457,20 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                     <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">Item</span>
                   </th>
                   {fornecedores.map((f, idx) => (
-                    <th key={f.id} className="px-3 py-3 text-center border-l border-border/60">
+                    <th key={f.id} className="px-3 py-3 text-center border-l border-border/60 relative">
+                      {cotacao.status !== "aprovada" && cotacao.status !== "fechada" && (
+                        <button
+                          onClick={() => handleRemoverFornecedor(f.id, getFornecedorNome(f))}
+                          disabled={removingFornId === f.id}
+                          title="Remover fornecedor"
+                          className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center bg-muted/60 hover:bg-destructive/20 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-50"
+                        >
+                          {removingFornId === f.id
+                            ? <Loader2 size={9} className="animate-spin" />
+                            : <X size={9} />
+                          }
+                        </button>
+                      )}
                       <div className="flex flex-col items-center gap-1.5">
                         <div className={cn(
                           "w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold",
