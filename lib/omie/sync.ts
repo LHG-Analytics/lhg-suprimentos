@@ -894,14 +894,6 @@ export async function syncRequisicoes(
               : 0;
             const numero = `REQ-${year}-${String(lastNum + 1).padStart(4, "0")}`;
 
-            // Busca qualquer usuário admin/comprador da unidade para usar como solicitante
-            const { data: anyUser } = await supabase
-              .from("user_profiles")
-              .select("id")
-              .in("role", ["admin", "comprador"])
-              .limit(1)
-              .maybeSingle();
-
             const { data: req, error: reqErr } = await supabase
               .from("requisicoes")
               .insert({
@@ -913,8 +905,8 @@ export async function syncRequisicoes(
                 omie_codigo:          item.codReqCompra,
                 omie_unidade_id:      unidadeId,
                 omie_sincronizado_em: new Date().toISOString(),
-                // solicitante_id pode ser null se não houver usuário disponível (ALTER COLUMN DROP NOT NULL)
-                ...(anyUser ? { solicitante_id: anyUser.id } : {}),
+                // Requisições importadas do Omie não têm solicitante interno
+                solicitante_id:       null,
               } as Parameters<typeof supabase.from>[0] extends "requisicoes" ? never : never)
               .select("id")
               .single();

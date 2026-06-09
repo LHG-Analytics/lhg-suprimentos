@@ -10,7 +10,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { incluirProduto, alterarProduto, isOmieRedundantError, listFamiliasProduto, omiePost } from "@/lib/omie/client";
-import { incluirReq, upsertReq, consultarReq, toOmieId } from "@/lib/omie/requisicao";
+import { consultarReq, toOmieId } from "@/lib/omie/requisicao";
 import type { OmieCredentials } from "@/lib/omie/client";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -179,30 +179,7 @@ export async function aprovarRequisicao(requisicaoId: string) {
 
   if (!req) throw new Error("Requisição não encontrada");
 
-  // Enviar ao Omie se ainda não foi
-  if (!req.omie_codigo) {
-    try {
-      const unidades = req.requisicao_unidades as Array<{ unidade_id: string }>;
-      const unidadeCreds = await getCredsUnidade(unidades[0]?.unidade_id ?? "");
-      if (unidadeCreds?.codCateg) {
-        const { creds, codCateg } = unidadeCreds;
-        const { data: itensReq } = await supabase
-          .from("requisicao_itens")
-          .select("id, produto_id, quantidade, produtos(omie_codigo)")
-          .eq("requisicao_id", requisicaoId);
-
-        const omieItens = (itensReq ?? []).map((i) => {
-          const prod = i.produtos as { omie_codigo: string | null } | null;
-          return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
-        });
-
-        await upsertReq(creds, { codCateg, codIntReqCompra: toOmieId(requisicaoId), obsReqCompra: req.titulo as string, ItensReqCompra: omieItens });
-      }
-    } catch (err) {
-      console.error("[aprovarRequisicao] Omie:", (err as Error).message);
-    }
-  }
-
+  // Requisições são 100% internas — não são enviadas ao Omie
   await supabase.from("requisicoes").update({ status: "aguardando_cotacao" }).eq("id", requisicaoId);
 
   revalidatePath("/requisicoes");
@@ -250,63 +227,12 @@ export async function vincularProdutoItem(requisicaoItemId: string, produtoId: s
     .eq("produto_novo", true);
 
   if ((pendentes ?? 0) === 0) {
-    // Todos os itens vinculados — muda status e envia ao Omie automaticamente
+    // Todos os itens vinculados — apenas muda o status; requisições são 100% internas
     await supabase
       .from("requisicoes")
       .update({ status: "aguardando_cotacao" })
       .eq("id", item.requisicao_id)
       .eq("status", "pendente_produto");
-
-    // Busca dados da requisição para enviar ao Omie
-    try {
-      const { data: reqData } = await supabase
-        .from("requisicoes")
-        .select("id, titulo, omie_codigo, requisicao_unidades(unidade_id)")
-        .eq("id", item.requisicao_id)
-        .single();
-
-      if (reqData && !reqData.omie_codigo) {
-        const unidades = reqData.requisicao_unidades as Array<{ unidade_id: string }>;
-        const unidadeCreds = await getCredsUnidade(unidades[0]?.unidade_id ?? "");
-
-        if (unidadeCreds?.codCateg) {
-          const { creds, codCateg } = unidadeCreds;
-
-          const { data: itensReq } = await supabase
-            .from("requisicao_itens")
-            .select("id, produto_id, quantidade, produtos(omie_codigo)")
-            .eq("requisicao_id", item.requisicao_id);
-
-          const dtSugestao = (() => {
-            const d = new Date();
-            d.setDate(d.getDate() + 7);
-            return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-          })();
-
-          const omieItens = (itensReq ?? []).map((i) => {
-            const prod = i.produtos as { omie_codigo: string | null } | null;
-            return { codIntItem: toOmieId(i.id), codProd: prod?.omie_codigo ? Number(prod.omie_codigo) : undefined, qtde: i.quantidade, precoUnit: 0 };
-          });
-
-          const omieCode = await incluirReq(creds, {
-            codCateg,
-            codIntReqCompra: toOmieId(item.requisicao_id),
-            dtSugestao,
-            obsReqCompra:    reqData.titulo as string,
-            ItensReqCompra:  omieItens,
-          });
-
-          if (omieCode > 0) {
-            await supabase.from("requisicoes").update({
-              omie_codigo:          omieCode,
-              omie_sincronizado_em: new Date().toISOString(),
-            }).eq("id", item.requisicao_id);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("[vincularProdutoItem] Omie sync:", (err as Error).message);
-    }
   }
 
   revalidatePath(`/requisicoes/${item.requisicao_id}`);
