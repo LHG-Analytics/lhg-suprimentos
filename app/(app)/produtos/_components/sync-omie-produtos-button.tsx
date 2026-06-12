@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Download, Search, X } from "lucide-react";
+import { RefreshCw, Download, Search, X, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { importarProdutoOmie } from "../actions";
@@ -88,8 +88,28 @@ function ImportarPorCodigoButton() {
   const [aberto, setAberto] = useState(false);
   const [codigo, setCodigo] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  // Refs para o auto-retry: evita problemas de closure com estado React
+  const handleImportarRef = useRef<(() => Promise<void>) | null>(null);
+  const isAutoRetryRef = useRef(false);
+
+  // Countdown decrescente: quando chega a 0, dispara auto-retry
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      setCountdown(null);
+      isAutoRetryRef.current = true; // sinaliza ao handleImportar para ignorar o guard de countdown
+      handleImportarRef.current?.();
+      return;
+    }
+    const timer = setTimeout(
+      () => setCountdown(c => (c !== null ? c - 1 : null)),
+      1_000,
+    );
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   function abrir() {
     setAberto(true);
@@ -97,18 +117,28 @@ function ImportarPorCodigoButton() {
   }
 
   function fechar() {
+    setCountdown(null);
     setAberto(false);
     setCodigo("");
   }
 
   async function handleImportar() {
-    if (!codigo.trim() || carregando) return;
+    // Bloqueia durante loading ou countdown — exceto quando auto-retry aciona (isAutoRetryRef)
+    if (!codigo.trim() || carregando || (countdown !== null && !isAutoRetryRef.current)) return;
+    isAutoRetryRef.current = false;
     setCarregando(true);
 
     try {
       const result = await importarProdutoOmie(codigo.trim());
 
-      if ("erro" in result) {
+      if ("redundante" in result) {
+        // Omie bloqueou: inicia countdown e tenta de novo automaticamente
+        setCountdown(result.aguardarSegundos);
+        toast.info("Omie ocupado — tentando novamente", {
+          description: `Aguardando ${result.aguardarSegundos}s…`,
+          duration: result.aguardarSegundos * 1_000,
+        });
+      } else if ("erro" in result) {
         toast.error(result.erro);
       } else {
         toast.success("Produto importado", {
@@ -121,6 +151,11 @@ function ImportarPorCodigoButton() {
       setCarregando(false);
     }
   }
+
+  // Mantém sempre a versão mais recente do handler (com o código atual no closure)
+  handleImportarRef.current = handleImportar;
+
+  const travado = carregando || countdown !== null;
 
   if (!aberto) {
     return (
@@ -147,24 +182,33 @@ function ImportarPorCodigoButton() {
         value={codigo}
         onChange={(e) => setCodigo(e.target.value.toUpperCase())}
         onKeyDown={(e) => {
-          if (e.key === "Enter") handleImportar();
+          if (e.key === "Enter" && !travado) handleImportar();
           if (e.key === "Escape") fechar();
         }}
         placeholder="Ex: INS00123"
         className="w-32 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-        disabled={carregando}
+        disabled={travado}
       />
       <button
         onClick={handleImportar}
-        disabled={!codigo.trim() || carregando}
+        disabled={!codigo.trim() || travado}
+        title={countdown !== null ? `Aguardando Omie — tentando novamente em ${countdown}s` : undefined}
         className={cn(
           "rounded px-2 py-0.5 text-xs font-medium transition-colors",
           "bg-primary text-primary-foreground hover:bg-primary/90",
           "disabled:opacity-50 disabled:cursor-not-allowed",
+          countdown !== null && "bg-amber-600 hover:bg-amber-600",
         )}
       >
-        {carregando ? "…" : "Importar"}
+        {carregando
+          ? "…"
+          : countdown !== null
+          ? `${countdown}s`
+          : "Importar"}
       </button>
+      {countdown !== null && (
+        <Clock size={11} className="shrink-0 text-amber-500 animate-pulse" />
+      )}
       <button
         onClick={fechar}
         disabled={carregando}

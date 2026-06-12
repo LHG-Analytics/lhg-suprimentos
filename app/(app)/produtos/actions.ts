@@ -9,7 +9,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { alterarProduto, incluirProduto, listFamiliasProduto, buscarProdutoPorCodigo } from "@/lib/omie/client";
+import {
+  alterarProduto,
+  incluirProduto,
+  listFamiliasProduto,
+  buscarProdutoPorCodigo,
+  isOmieRedundantError,
+  OmieError,
+} from "@/lib/omie/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 
 export interface EditarProdutoInput {
@@ -134,7 +141,11 @@ export async function listarFamiliasOmieParaProduto(
  */
 export async function importarProdutoOmie(
   codigoProduto: string,
-): Promise<{ produto: { id: string; nome: string; codigo: string } } | { erro: string }> {
+): Promise<
+  | { produto: { id: string; nome: string; codigo: string } }
+  | { erro: string }
+  | { redundante: true; aguardarSegundos: number }
+> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -167,6 +178,12 @@ export async function importarProdutoOmie(
   try {
     item = await buscarProdutoPorCodigo(creds, codigoProduto.trim().toUpperCase());
   } catch (err) {
+    if (isOmieRedundantError(err)) {
+      // Extrai segundos restantes da mensagem do Omie: "Aguarde X segundos para tentar novamente"
+      const match = err instanceof Error ? err.message.match(/Aguarde (\d+) segundo/) : null;
+      const segundos = match ? parseInt(match[1], 10) + 2 : 62;
+      return { redundante: true, aguardarSegundos: segundos };
+    }
     return { erro: `Erro ao buscar no Omie: ${err instanceof Error ? err.message : "Erro desconhecido"}` };
   }
 
