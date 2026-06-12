@@ -89,11 +89,13 @@ function ImportarPorCodigoButton() {
   const [codigo, setCodigo] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [autoRetries, setAutoRetries] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   // Refs para o auto-retry: evita problemas de closure com estado React
   const handleImportarRef = useRef<(() => Promise<void>) | null>(null);
   const isAutoRetryRef = useRef(false);
+  const MAX_AUTO_RETRIES = 1;
 
   // Countdown decrescente: quando chega a 0, dispara auto-retry
   useEffect(() => {
@@ -118,6 +120,7 @@ function ImportarPorCodigoButton() {
 
   function fechar() {
     setCountdown(null);
+    setAutoRetries(0);
     setAberto(false);
     setCodigo("");
   }
@@ -125,6 +128,7 @@ function ImportarPorCodigoButton() {
   async function handleImportar() {
     // Bloqueia durante loading ou countdown — exceto quando auto-retry aciona (isAutoRetryRef)
     if (!codigo.trim() || carregando || (countdown !== null && !isAutoRetryRef.current)) return;
+    const isAutoRetry = isAutoRetryRef.current;
     isAutoRetryRef.current = false;
     setCarregando(true);
 
@@ -132,9 +136,17 @@ function ImportarPorCodigoButton() {
       const result = await importarProdutoOmie(codigo.trim());
 
       if ("redundante" in result) {
-        // Omie bloqueou: inicia countdown e tenta de novo automaticamente
+        // Só faz 1 auto-retry; se continuar bloqueado, exibe erro e para.
+        const retries = isAutoRetry ? autoRetries + 1 : 1;
+        if (retries > MAX_AUTO_RETRIES) {
+          toast.error("Omie continua ocupado", {
+            description: "Aguarde alguns minutos antes de tentar novamente.",
+          });
+          return;
+        }
+        setAutoRetries(retries);
         setCountdown(result.aguardarSegundos);
-        toast.info("Omie ocupado — tentando novamente", {
+        toast.info("Omie ocupado — tentando em breve", {
           description: `Aguardando ${result.aguardarSegundos}s…`,
           duration: result.aguardarSegundos * 1_000,
         });

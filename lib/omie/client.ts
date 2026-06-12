@@ -459,22 +459,32 @@ export async function listProdutosPage(
 }
 
 /**
- * Busca um produto específico no Omie pelo código interno (ex: "INS00123").
- * Usa produtosFiltro.codigo para filtrar — muito mais rápido que listar tudo.
- * Retorna null se não encontrado.
+ * Busca um produto específico no Omie pelo código interno (ex: "CONS00662").
+ *
+ * Estratégia: produtosFiltro.codigo faz match parcial (prefixo) no Omie.
+ * Paginamos todas as páginas do resultado filtrado procurando o código exato.
+ * Limite de 5 páginas (100 produtos) para evitar sobrecarga.
  */
 export async function buscarProdutoPorCodigo(
   creds: OmieCredentials,
   codigo: string,
 ): Promise<OmieProdutoItem | null> {
+  // Registros por página diferente do sync (50) para evitar REDUNDANT do Omie
+  const POR_PAGINA = 20;
+  const MAX_PAGINAS = 5;
+
   try {
-    // Usa 20/pág (≠ 50 do sync) para evitar colisão no REDUNDANT check do Omie.
-    // O REDUNDANT é ativado quando call+pagina+registros_por_pagina são idênticos
-    // dentro de 60s — diferenciar o tamanho da página evita o bloqueio.
-    const res = await listProdutosPage(creds, 1, 20, { codigo });
-    const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
-    // Omie pode fazer match parcial — confirma o código exato
-    return items.find(p => p.codigo === codigo) ?? items[0] ?? null;
+    for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+      const res = await listProdutosPage(creds, pagina, POR_PAGINA, { codigo });
+      const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
+
+      const match = items.find(p => p.codigo === codigo);
+      if (match) return match;
+
+      // Se não havia mais páginas, encerra cedo
+      if (pagina >= res.total_de_paginas) break;
+    }
+    return null;
   } catch (err) {
     if (isOmieEmptyError(err)) return null;
     throw err;
