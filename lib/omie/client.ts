@@ -461,32 +461,36 @@ export async function listProdutosPage(
 /**
  * Busca um produto específico no Omie pelo código interno (ex: "CONS00662").
  *
- * Estratégia: produtosFiltro.codigo faz match parcial (prefixo) no Omie.
- * Paginamos todas as páginas do resultado filtrado procurando o código exato.
- * Limite de 5 páginas (100 produtos) para evitar sobrecarga.
+ * Usa ConsultarProduto com produto_servico_cadastro_chave — consulta direta
+ * por código, sem paginação e sem colidir com o REDUNDANT do ListarProdutos
+ * usado pelo sync. Retorna o cadastro completo do produto.
+ * Doc: https://app.omie.com.br/api/v1/geral/produtos/ → ConsultarProduto
  */
 export async function buscarProdutoPorCodigo(
   creds: OmieCredentials,
   codigo: string,
 ): Promise<OmieProdutoItem | null> {
-  // Registros por página diferente do sync (50) para evitar REDUNDANT do Omie
-  const POR_PAGINA = 20;
-  const MAX_PAGINAS = 5;
-
   try {
-    for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
-      const res = await listProdutosPage(creds, pagina, POR_PAGINA, { codigo });
-      const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
-
-      const match = items.find(p => p.codigo === codigo);
-      if (match) return match;
-
-      // Se não havia mais páginas, encerra cedo
-      if (pagina >= res.total_de_paginas) break;
-    }
-    return null;
+    // maxRetries=1: "não cadastrado" vem com faultcode SOAP-ENV (retryável
+    // pelo omiePost) — sem isso, um código inexistente seria retentado 3x.
+    return await omiePost<{ codigo: string }, OmieProdutoItem>(
+      "/geral/produtos/",
+      "ConsultarProduto",
+      creds,
+      { codigo },
+      1,
+    );
   } catch (err) {
-    if (isOmieEmptyError(err)) return null;
+    if (err instanceof OmieError) {
+      const msg = err.message.toLowerCase();
+      const naoEncontrado =
+        msg.includes("não cadastrado") ||
+        msg.includes("nao cadastrado") ||
+        msg.includes("não encontrado") ||
+        msg.includes("nao encontrado") ||
+        isOmieEmptyError(err);
+      if (naoEncontrado) return null;
+    }
     throw err;
   }
 }

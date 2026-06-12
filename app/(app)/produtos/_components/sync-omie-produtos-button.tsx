@@ -50,35 +50,19 @@ function SyncButton() {
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => handleSync(false)}
-        disabled={syncing}
-        title="Sync inteligente: verifica alterações antes de baixar tudo"
-        className={cn(
-          "inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors",
-          "border-border bg-muted/60 text-foreground hover:bg-muted hover:border-border",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-        )}
-      >
-        <RefreshCw size={14} className={cn("shrink-0", syncing && "animate-spin")} />
-        {syncing ? "Iniciando…" : "Sincronizar Omie"}
-      </button>
-
-      {/* Forçar sync completo — botão ícone discreto */}
-      <button
-        onClick={() => handleSync(true)}
-        disabled={syncing}
-        title="Forçar sync completo (ignora verificação de alterações)"
-        className={cn(
-          "inline-flex items-center rounded-lg border px-2 py-2 text-xs transition-colors",
-          "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-        )}
-      >
-        <RefreshCw size={11} className="shrink-0" />
-      </button>
-    </div>
+    <button
+      onClick={() => handleSync(false)}
+      disabled={syncing}
+      title="Sync inteligente: verifica alterações antes de baixar tudo"
+      className={cn(
+        "inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors",
+        "border-border bg-muted/60 text-foreground hover:bg-muted hover:border-border",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+      )}
+    >
+      <RefreshCw size={14} className={cn("shrink-0", syncing && "animate-spin")} />
+      {syncing ? "Iniciando…" : "Sincronizar Omie"}
+    </button>
   );
 }
 
