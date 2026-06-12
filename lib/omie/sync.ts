@@ -167,7 +167,9 @@ async function checkProdutosOutOfSync(
   unidadeId: string,
 ): Promise<boolean> {
   try {
-    const res = await listProdutosPage(creds, 1, 1);
+    // Usa 3/pág — valor incomum que não colide com sync (50) nem busca (20),
+    // minimizando risco de REDUNDANT quando todas as funções rodam próximas.
+    const res = await listProdutosPage(creds, 1, 3);
     const omieTotal = res.total_de_registros;
     const { count: dbCount } = await supabase
       .from("produtos")

@@ -468,7 +468,10 @@ export async function buscarProdutoPorCodigo(
   codigo: string,
 ): Promise<OmieProdutoItem | null> {
   try {
-    const res = await listProdutosPage(creds, 1, 50, { codigo });
+    // Usa 20/pág (≠ 50 do sync) para evitar colisão no REDUNDANT check do Omie.
+    // O REDUNDANT é ativado quando call+pagina+registros_por_pagina são idênticos
+    // dentro de 60s — diferenciar o tamanho da página evita o bloqueio.
+    const res = await listProdutosPage(creds, 1, 20, { codigo });
     const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
     // Omie pode fazer match parcial — confirma o código exato
     return items.find(p => p.codigo === codigo) ?? items[0] ?? null;
