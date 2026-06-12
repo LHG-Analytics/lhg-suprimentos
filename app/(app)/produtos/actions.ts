@@ -178,11 +178,24 @@ export async function importarProdutoOmie(
   try {
     item = await buscarProdutoPorCodigo(creds, codigoProduto.trim().toUpperCase());
   } catch (err) {
-    if (isOmieRedundantError(err)) {
-      // Extrai segundos restantes da mensagem do Omie: "Aguarde X segundos para tentar novamente"
-      const match = err instanceof Error ? err.message.match(/Aguarde (\d+) segundo/) : null;
-      const segundos = match ? parseInt(match[1], 10) + 2 : 62;
-      return { redundante: true, aguardarSegundos: segundos };
+    // Detecta REDUNDANT ("Consumo redundante") OU bloqueio por excesso de chamadas ("consumo indevido")
+    const isRateLimit =
+      isOmieRedundantError(err) ||
+      (err instanceof OmieError && /consumo indevido|api bloqueada/i.test(err.message));
+
+    if (isRateLimit) {
+      // Ambas as mensagens incluem o número: "Aguarde X segundos" ou "em X segundos"
+      const match = err instanceof Error ? err.message.match(/(\d+)\s*segundo/i) : null;
+      const segundos = match ? parseInt(match[1], 10) : 65;
+      // Esperas curtas (≤ 2 min): exibe countdown + auto-retry na UI
+      if (segundos <= 120) {
+        return { redundante: true, aguardarSegundos: segundos + 2 };
+      }
+      // Esperas longas: mensagem amigável sem travar a UI por minutos
+      const minutos = Math.ceil(segundos / 60);
+      return {
+        erro: `API Omie bloqueada temporariamente — aguarde ~${minutos} min e tente novamente.`,
+      };
     }
     return { erro: `Erro ao buscar no Omie: ${err instanceof Error ? err.message : "Erro desconhecido"}` };
   }
