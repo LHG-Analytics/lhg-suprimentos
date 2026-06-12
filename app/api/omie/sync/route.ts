@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
 
   // Parse do body (opcional)
   let entidade: "fornecedores" | "produtos" | "cmc" | "pedidos" | "requisicoes" | "todos" = "todos";
+  let incremental = false;
   try {
     const body = await req.json().catch(() => ({}));
     if (
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
     ) {
       entidade = body.entidade;
     }
+    if (body?.incremental === true) incremental = true;
   } catch {
     // body inválido — usa padrão "todos"
   }
@@ -201,7 +203,8 @@ export async function POST(req: NextRequest) {
         produtosSincronizados = true;
       } else if (entidade === "produtos" && !produtosSincronizados) {
         // Passo 1: Sync do catálogo (rápido — ~15s, resposta imediata)
-        const rCatalogo = await syncProdutos(supabase, creds, unidade.id);
+        // incremental=true: verifica count Omie vs DB antes de baixar tudo
+        const rCatalogo = await syncProdutos(supabase, creds, unidade.id, incremental ? "inteligente" : "full");
         results.push(rCatalogo);
 
         // Passo 2: CMC em background via after() — evita timeout de 300s.

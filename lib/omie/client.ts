@@ -442,6 +442,7 @@ export async function listProdutosPage(
   creds: OmieCredentials,
   pagina: number,
   registrosPorPagina = 50,
+  produtosFiltro?: { inativo?: "S" | "N"; codigo?: string; descricao?: string },
 ): Promise<OmieListaProdutosResponse> {
   return omiePost<OmieProdutoParam, OmieListaProdutosResponse>(
     "/geral/produtos/",
@@ -452,8 +453,29 @@ export async function listProdutosPage(
       registros_por_pagina: registrosPorPagina,
       apenas_importado_api: "N",    // inclui produtos cadastrados manualmente
       filtrar_apenas_omiepdv: "N",  // inclui produtos não-PDV
+      ...(produtosFiltro ? { produtosFiltro } : {}),
     },
   );
+}
+
+/**
+ * Busca um produto específico no Omie pelo código interno (ex: "INS00123").
+ * Usa produtosFiltro.codigo para filtrar — muito mais rápido que listar tudo.
+ * Retorna null se não encontrado.
+ */
+export async function buscarProdutoPorCodigo(
+  creds: OmieCredentials,
+  codigo: string,
+): Promise<OmieProdutoItem | null> {
+  try {
+    const res = await listProdutosPage(creds, 1, 50, { codigo });
+    const items = res.produto_servico_cadastro ?? res.cadastros ?? [];
+    // Omie pode fazer match parcial — confirma o código exato
+    return items.find(p => p.codigo === codigo) ?? items[0] ?? null;
+  } catch (err) {
+    if (isOmieEmptyError(err)) return null;
+    throw err;
+  }
 }
 
 /**

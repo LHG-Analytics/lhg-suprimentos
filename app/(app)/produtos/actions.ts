@@ -7,8 +7,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { alterarProduto, incluirProduto, listFamiliasProduto } from "@/lib/omie/client";
+import { alterarProduto, incluirProduto, listFamiliasProduto, buscarProdutoPorCodigo } from "@/lib/omie/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
 
 export interface EditarProdutoInput {
@@ -122,6 +123,87 @@ export async function listarFamiliasOmieParaProduto(
   } catch (err) {
     return { erro: `Falhou no Omie: ${(err as Error).message}` };
   }
+}
+
+// ── importarProdutoOmie ────────────────────────────────────────────────────────
+
+/**
+ * Importa um único produto do Omie pelo código interno (ex: "INS00123").
+ * Usa a unidade ativa do cookie lhg-unidade-slug.
+ * Muito mais rápido que um sync completo — faz 1 chamada à API Omie.
+ */
+export async function importarProdutoOmie(
+  codigoProduto: string,
+): Promise<{ produto: { id: string; nome: string; codigo: string } } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  if (!codigoProduto?.trim()) return { erro: "Código do produto é obrigatório" };
+
+  const cookieStore = await cookies();
+  const unidadeSlug = cookieStore.get("lhg-unidade-slug")?.value;
+  if (!unidadeSlug || unidadeSlug === "todas") {
+    return { erro: "Selecione uma unidade específica antes de importar" };
+  }
+
+  const { data: unidade } = await supabase
+    .from("unidades")
+    .select("id, omie_app_key, omie_app_secret")
+    .eq("slug", unidadeSlug)
+    .single();
+
+  if (!unidade) return { erro: "Unidade não encontrada" };
+  if (!unidade.omie_app_key || !unidade.omie_app_secret) {
+    return { erro: "Unidade sem credenciais Omie configuradas" };
+  }
+
+  const creds = {
+    appKey:    unidade.omie_app_key.replace(/^﻿/, ""),
+    appSecret: unidade.omie_app_secret.replace(/^﻿/, ""),
+  };
+
+  let item;
+  try {
+    item = await buscarProdutoPorCodigo(creds, codigoProduto.trim().toUpperCase());
+  } catch (err) {
+    return { erro: `Erro ao buscar no Omie: ${err instanceof Error ? err.message : "Erro desconhecido"}` };
+  }
+
+  if (!item) {
+    return { erro: `Produto "${codigoProduto.trim()}" não encontrado no Omie` };
+  }
+
+  const familiaOmie: string | null =
+    (typeof item.descricao_familia === "string" && item.descricao_familia.trim())
+      ? item.descricao_familia.trim().toUpperCase()
+      : null;
+
+  const payload = {
+    nome:                 item.descricao,
+    codigo:               item.codigo ?? `OMIE-${item.codigo_produto}`,
+    unidade_med:          item.unidade ?? "un",
+    categoria:            FAMILIA_TO_CATEGORIA[familiaOmie ?? ""] ?? "Outros",
+    familia_omie:         familiaOmie,
+    omie_codigo:          String(item.codigo_produto),
+    omie_unidade_id:      unidade.id,
+    omie_descricao:       (item.descr_detalhada ?? item.descricao_detalhada) ?? null,
+    ncm:                  item.ncm ?? null,
+    ean:                  item.ean ?? null,
+    omie_sincronizado_em: new Date().toISOString(),
+    ativo:                item.inativo !== "S",
+  };
+
+  const { data: produto, error } = await supabase
+    .from("produtos")
+    .upsert(payload, { onConflict: "omie_codigo,omie_unidade_id", ignoreDuplicates: false })
+    .select("id, nome, codigo")
+    .single();
+
+  if (error) return { erro: `Erro ao salvar: ${error.message}` };
+
+  revalidatePath("/produtos");
+  return { produto: { id: produto.id, nome: produto.nome, codigo: produto.codigo ?? "" } };
 }
 
 // ── criarProduto ───────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   listAllFornecedores,
   listAllProdutos,
+  listProdutosPage,
   listAllPedidosCompra,
   buildClienteNomeMap,
   consultarCliente,
@@ -146,11 +147,41 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
  * pelo syncCMCProdutos que roda logo após em after().
  * Para produtos EXISTENTES (UPDATE): preco_custo preservado — o Supabase
  * não atualiza colunas ausentes do payload no ON CONFLICT DO UPDATE.
+ *
+ * Exportado para uso em importarProdutoOmie (server action).
  */
-function mapProdutoUpsert(item: OmieProdutoItem, unidadeId: string) {
+export function mapProdutoUpsert(item: OmieProdutoItem, unidadeId: string) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { preco_custo: _, ...rest } = mapProduto(item, unidadeId);
   return rest;
+}
+
+/**
+ * Verifica se o catálogo Omie está desatualizado comparando total de registros
+ * com o count do banco. Usa apenas 1 chamada à API (página 1, 1 item).
+ * Retorna true se há divergência (sync necessário).
+ */
+async function checkProdutosOutOfSync(
+  supabase: SupabaseClient,
+  creds: OmieCredentials,
+  unidadeId: string,
+): Promise<boolean> {
+  try {
+    const res = await listProdutosPage(creds, 1, 1);
+    const omieTotal = res.total_de_registros;
+    const { count: dbCount } = await supabase
+      .from("produtos")
+      .select("*", { count: "exact", head: true })
+      .eq("omie_unidade_id", unidadeId);
+    const desatualizado = omieTotal !== (dbCount ?? 0);
+    console.log(
+      `[omie/sync] checkProdutosOutOfSync: omie=${omieTotal} db=${dbCount ?? 0}` +
+      ` → ${desatualizado ? "desatualizado" : "em dia"}`,
+    );
+    return desatualizado;
+  } catch {
+    return true; // erro → assume desatualizado e roda sync completo
+  }
 }
 
 // ── Sync: Fornecedores ─────────────────────────────────────────────────────────
@@ -281,11 +312,29 @@ export async function syncProdutos(
   supabase: SupabaseClient,
   creds: OmieCredentials,
   unidadeId: string,
+  modo: "full" | "inteligente" = "full",
 ): Promise<SyncResult> {
   const inicio = Date.now();
   let total = 0;
   let novos = 0;
   let erros = 0;
+
+  // Modo inteligente: compara count Omie vs DB antes de baixar tudo.
+  // 1 chamada API (vs N páginas) — skip se catálogo já está em dia.
+  if (modo === "inteligente") {
+    const desatualizado = await checkProdutosOutOfSync(supabase, creds, unidadeId);
+    if (!desatualizado) {
+      return {
+        entidade: "produtos",
+        status: "ok",
+        total: 0,
+        novos: 0,
+        erros: 0,
+        duracaoMs: Date.now() - inicio,
+        detalhe: { info: "Catálogo já atualizado — nenhuma alteração detectada no Omie" },
+      };
+    }
+  }
 
   try {
     const items = await listAllProdutos(creds, (page, totalPages) => {
