@@ -877,7 +877,7 @@ export async function syncRequisicoes(
   unidadeId: string,
 ): Promise<SyncResult> {
   const start = Date.now();
-  let total = 0, novos = 0, erros = 0;
+  let total = 0, novos = 0, erros = 0, removidas = 0;
 
   try {
     const itens = await listAllRequisicoes(creds);
@@ -1030,6 +1030,58 @@ export async function syncRequisicoes(
         erros++;
       }
     }
+
+    // 3. Limpeza de órfãs: requisições origem='omie' desta unidade que não
+    //    existem mais no Omie (excluídas lá). Guarda-chuvas:
+    //    - só roda se o Omie retornou ao menos 1 requisição (evita apagar tudo
+    //      por uma resposta vazia transitória da API);
+    //    - preserva requisições em cotação/aprovadas ou com cotação vinculada.
+    if (itens.length > 0) {
+      const codigosOmie = new Set(itens.map((i) => i.codReqCompra).filter(Boolean));
+
+      const { data: locais } = await supabase
+        .from("requisicoes")
+        .select("id, numero, status, omie_codigo")
+        .eq("origem", "omie")
+        .eq("omie_unidade_id", unidadeId)
+        .not("omie_codigo", "is", null);
+
+      for (const r of locais ?? []) {
+        if (codigosOmie.has(Number(r.omie_codigo))) continue;
+        if (r.status === "cotacao" || r.status === "aprovado") continue;
+
+        const { count: cotacoesVinculadas } = await supabase
+          .from("cotacoes")
+          .select("*", { count: "exact", head: true })
+          .eq("requisicao_id", r.id);
+        if ((cotacoesVinculadas ?? 0) > 0) continue;
+
+        await supabase.from("omie_requisicoes").delete().eq("requisicao_id", r.id);
+        await supabase.from("requisicao_itens").delete().eq("requisicao_id", r.id);
+        await supabase.from("requisicao_unidades").delete().eq("requisicao_id", r.id);
+        const { error: delErr } = await supabase.from("requisicoes").delete().eq("id", r.id);
+
+        if (delErr) {
+          console.error(`[sync/req] remover órfã ${r.numero}:`, delErr.message);
+          erros++;
+        } else {
+          removidas++;
+          console.info(`[sync/req] requisição ${r.numero} removida — não existe mais no Omie (#${r.omie_codigo})`);
+        }
+      }
+
+      // Espelhos órfãos sem requisição local vinculada
+      const { data: espelhos } = await supabase
+        .from("omie_requisicoes")
+        .select("id, omie_codigo")
+        .eq("unidade_id", unidadeId)
+        .is("requisicao_id", null);
+
+      for (const e of espelhos ?? []) {
+        if (codigosOmie.has(Number(e.omie_codigo))) continue;
+        await supabase.from("omie_requisicoes").delete().eq("id", e.id);
+      }
+    }
   } catch (err) {
     const msg = (err as Error).message;
     const result: SyncResult = {
@@ -1052,6 +1104,7 @@ export async function syncRequisicoes(
     novos,
     erros,
     duracaoMs: Date.now() - start,
+    ...(removidas > 0 ? { detalhe: { removidas } } : {}),
   };
 
   await registrarLog(supabase, unidadeId, { ...result, operacao: "sync" });
