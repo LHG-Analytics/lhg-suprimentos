@@ -139,11 +139,13 @@ export default async function PedidosPage() {
           .eq("ativo", true)
           .eq("omie_unidade_id", unidadeId)
           .order("nome")
+          .range(0, 9999) // PostgREST corta em 1000 por padrão — catálogo tem 1240+
       : supabase
           .from("produtos")
           .select("id, nome, codigo, unidade_med, categoria")
           .eq("ativo", true)
-          .order("nome"),
+          .order("nome")
+          .range(0, 9999),
   ]);
 
   // ── Enriquecer fornecedor_nome ────────────────────────────────────────────────

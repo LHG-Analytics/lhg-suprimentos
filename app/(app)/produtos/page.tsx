@@ -45,6 +45,8 @@ export default async function ProdutosPage() {
     .not("omie_app_key", "is", null)
     .order("nome");
 
+  // .range(0, 9999): o PostgREST corta em 1000 linhas por padrão — com 1240+
+  // produtos, o final da lista (ordenada por categoria) sumia da tela e da busca.
   const [{ data: produtos }, { data: lastLog }] = await Promise.all([
     unidadeId
       ? supabase
@@ -53,11 +55,13 @@ export default async function ProdutosPage() {
           .eq("omie_unidade_id", unidadeId)
           .order("categoria")
           .order("nome")
+          .range(0, 9999)
       : supabase
           .from("produtos")
           .select(selectFields)
           .order("categoria")
-          .order("nome"),
+          .order("nome")
+          .range(0, 9999),
 
     (() => {
       let q = supabase
