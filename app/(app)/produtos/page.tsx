@@ -9,6 +9,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { ProdutosClient } from "./_components/produtos-client";
 
 export const metadata = { title: "Produtos & Catálogo" };
@@ -45,23 +46,28 @@ export default async function ProdutosPage() {
     .not("omie_app_key", "is", null)
     .order("nome");
 
-  // .range(0, 9999): o PostgREST corta em 1000 linhas por padrão — com 1240+
-  // produtos, o final da lista (ordenada por categoria) sumia da tela e da busca.
-  const [{ data: produtos }, { data: lastLog }] = await Promise.all([
-    unidadeId
-      ? supabase
-          .from("produtos")
-          .select(selectFields)
-          .eq("omie_unidade_id", unidadeId)
-          .order("categoria")
-          .order("nome")
-          .range(0, 9999)
-      : supabase
-          .from("produtos")
-          .select(selectFields)
-          .order("categoria")
-          .order("nome")
-          .range(0, 9999),
+  // fetchAllRows: o PostgREST trava a resposta em 1000 linhas (max-rows),
+  // mesmo com .range() maior — com 1240+ produtos, o final da lista
+  // (ordenada por categoria) sumia da tela e da busca. Paginamos em blocos.
+  const [produtos, { data: lastLog }] = await Promise.all([
+    fetchAllRows((from, to) =>
+      unidadeId
+        ? supabase
+            .from("produtos")
+            .select(selectFields)
+            .eq("omie_unidade_id", unidadeId)
+            .order("categoria")
+            .order("nome")
+            .order("id")
+            .range(from, to)
+        : supabase
+            .from("produtos")
+            .select(selectFields)
+            .order("categoria")
+            .order("nome")
+            .order("id")
+            .range(from, to),
+    ),
 
     (() => {
       let q = supabase

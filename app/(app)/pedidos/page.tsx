@@ -15,6 +15,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PedidosClient } from "./_components/pedidos-client";
 
 // Sempre exibe apenas pedidos aguardando entrega (filtro_omie = 'pendentes')
@@ -93,7 +94,7 @@ export default async function PedidosPage() {
   omieQuery = omieQuery.eq("filtro_omie", filtroAtivo);
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
-  const [{ data: pedidos }, omieResult, { data: fornecedores }, { data: produtos }] = await Promise.all([
+  const [{ data: pedidos }, omieResult, { data: fornecedores }, produtos] = await Promise.all([
     (() => {
       let q = supabase
         .from("pedidos")
@@ -131,21 +132,26 @@ export default async function PedidosPage() {
       .eq("ativo", true)
       .order("razao_social"),
 
-    // Catálogo de produtos para "Adicionar item" no modal de edição
-    unidadeId
-      ? supabase
-          .from("produtos")
-          .select("id, nome, codigo, unidade_med, categoria")
-          .eq("ativo", true)
-          .eq("omie_unidade_id", unidadeId)
-          .order("nome")
-          .range(0, 9999) // PostgREST corta em 1000 por padrão — catálogo tem 1240+
-      : supabase
-          .from("produtos")
-          .select("id, nome, codigo, unidade_med, categoria")
-          .eq("ativo", true)
-          .order("nome")
-          .range(0, 9999),
+    // Catálogo de produtos para "Adicionar item" no modal de edição.
+    // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — catálogo tem 1240+
+    fetchAllRows((from, to) =>
+      unidadeId
+        ? supabase
+            .from("produtos")
+            .select("id, nome, codigo, unidade_med, categoria")
+            .eq("ativo", true)
+            .eq("omie_unidade_id", unidadeId)
+            .order("nome")
+            .order("id")
+            .range(from, to)
+        : supabase
+            .from("produtos")
+            .select("id, nome, codigo, unidade_med, categoria")
+            .eq("ativo", true)
+            .order("nome")
+            .order("id")
+            .range(from, to),
+    ),
   ]);
 
   // ── Enriquecer fornecedor_nome ────────────────────────────────────────────────

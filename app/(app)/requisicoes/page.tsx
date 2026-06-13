@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { RequisicoesClient } from "./_components/requisicoes-client";
 
 export const metadata = { title: "Requisições" };
@@ -52,7 +53,7 @@ export default async function RequisicoesPage() {
   const [
     { data: requisicoes },
     { data: unidades },
-    { data: produtos },
+    produtos,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -89,20 +90,25 @@ export default async function RequisicoesPage() {
     // para que o modal filtre pela unidade selecionada no formulário.
     // Quando unidade específica ativa: pré-filtra no servidor (mais eficiente).
     // Quando "todas": busca todos; o modal filtra client-side pela unidade do form.
-    unidadeId
-      ? supabase
-          .from("produtos")
-          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
-          .eq("ativo", true)
-          .eq("omie_unidade_id", unidadeId)
-          .order("nome")
-          .range(0, 9999) // PostgREST corta em 1000 por padrão — catálogo tem 1240+
-      : supabase
-          .from("produtos")
-          .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
-          .eq("ativo", true)
-          .order("nome")
-          .range(0, 9999),
+    // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — catálogo tem 1240+
+    fetchAllRows((from, to) =>
+      unidadeId
+        ? supabase
+            .from("produtos")
+            .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
+            .eq("ativo", true)
+            .eq("omie_unidade_id", unidadeId)
+            .order("nome")
+            .order("id")
+            .range(from, to)
+        : supabase
+            .from("produtos")
+            .select("id, codigo, nome, unidade_med, categoria, familia_omie, preco_custo, omie_unidade_id")
+            .eq("ativo", true)
+            .order("nome")
+            .order("id")
+            .range(from, to),
+    ),
   ]);
 
   return (
