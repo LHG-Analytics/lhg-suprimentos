@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock, Scale } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock, Scale, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { aprovarRequisicao } from "../../actions";
+import { aprovarRequisicao, excluirItemRequisicao } from "../../actions";
 import { ProdutoOmieModal } from "./produto-omie-modal";
 
 interface Item {
@@ -42,12 +42,18 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [modalItem, setModalItem] = useState<Item | null>(null);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
+  const [excluindoItem, setExcluindoItem] = useState<string | null>(null);
 
   const itensPendentes = req.requisicao_itens.filter(i => i.produto_novo);
   const podAprovar = itensPendentes.length === 0
     && req.status !== "aguardando_cotacao"
     && req.status !== "aprovado"
     && req.status !== "cotacao";
+
+  // Itens só podem ser removidos enquanto a requisição não foi aprovada/cotada
+  const podeExcluirItens =
+    req.status !== "aprovado" && req.status !== "cotacao" && req.requisicao_itens.length > 1;
 
   function handleAprovar() {
     startTransition(async () => {
@@ -59,6 +65,29 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
         toast.error((err as Error).message);
       }
     });
+  }
+
+  async function handleExcluirItem(itemId: string) {
+    // Primeiro clique pede confirmação; segundo clique exclui
+    if (confirmandoExclusao !== itemId) {
+      setConfirmandoExclusao(itemId);
+      setTimeout(() => setConfirmandoExclusao(c => (c === itemId ? null : c)), 3_000);
+      return;
+    }
+    setConfirmandoExclusao(null);
+    setExcluindoItem(itemId);
+
+    try {
+      const result = await excluirItemRequisicao(itemId);
+      if ("erro" in result) {
+        toast.error(result.erro);
+      } else {
+        toast.success("Item removido da requisição");
+        router.refresh();
+      }
+    } finally {
+      setExcluindoItem(null);
+    }
   }
 
   return (
@@ -157,6 +186,22 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
                   className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-medium transition-colors shrink-0">
                   <PackagePlus size={12} />
                   Cadastrar no Omie
+                </button>
+              )}
+              {podeExcluirItens && (
+                <button
+                  onClick={() => handleExcluirItem(item.id)}
+                  disabled={excluindoItem === item.id}
+                  title={confirmandoExclusao === item.id ? "Clique de novo para confirmar" : "Remover item"}
+                  className={cn(
+                    "flex items-center gap-1.5 h-7 rounded-md border text-xs font-medium transition-all shrink-0",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    confirmandoExclusao === item.id
+                      ? "px-3 bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300"
+                      : "px-2 bg-muted/40 hover:bg-red-500/15 border-border/60 hover:border-red-500/30 text-muted-foreground hover:text-red-400",
+                  )}>
+                  <Trash2 size={12} />
+                  {confirmandoExclusao === item.id && "Confirmar?"}
                 </button>
               )}
             </div>

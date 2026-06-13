@@ -440,6 +440,80 @@ export async function atualizarProdutoOmie(produtoId: string, data: Partial<Prod
 // Retorna { erro } em vez de throw para que o cliente mostre a mensagem correta
 // em produção (Server Actions que lançam throw mostram mensagem genérica no Next.js).
 
+// ── excluirItemRequisicao ─────────────────────────────────────────────────────
+// Remove um item de uma requisição já lançada.
+// Regras: não permite em requisições aprovadas/em cotação; não permite remover
+// o último item (use deletarRequisicao); solicitante só mexe nas próprias.
+
+export async function excluirItemRequisicao(
+  requisicaoItemId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const { data: item } = await supabase
+    .from("requisicao_itens")
+    .select("id, requisicao_id, requisicoes(solicitante_id, status)")
+    .eq("id", requisicaoItemId)
+    .single();
+
+  if (!item) return { erro: "Item não encontrado" };
+
+  const req = item.requisicoes as { solicitante_id: string; status: string } | null;
+
+  if (req?.status === "aprovado" || req?.status === "cotacao") {
+    return { erro: "Requisição já aprovada/em cotação — itens não podem mais ser removidos" };
+  }
+
+  // Solicitantes só podem mexer nas próprias requisições
+  if (profile?.role === "solicitante" && req?.solicitante_id !== user.id) {
+    return { erro: "Sem permissão para modificar esta requisição" };
+  }
+
+  // Não deixa a requisição sem itens
+  const { count: totalItens } = await supabase
+    .from("requisicao_itens")
+    .select("*", { count: "exact", head: true })
+    .eq("requisicao_id", item.requisicao_id);
+
+  if ((totalItens ?? 0) <= 1) {
+    return { erro: "A requisição precisa de pelo menos 1 item — para remover tudo, exclua a requisição" };
+  }
+
+  const { error } = await supabase
+    .from("requisicao_itens")
+    .delete()
+    .eq("id", requisicaoItemId);
+
+  if (error) return { erro: error.message };
+
+  // Se o item removido era o último pendente, destrava o status (mesma regra do vincular)
+  const { count: pendentes } = await supabase
+    .from("requisicao_itens")
+    .select("*", { count: "exact", head: true })
+    .eq("requisicao_id", item.requisicao_id)
+    .eq("produto_novo", true);
+
+  if ((pendentes ?? 0) === 0) {
+    await supabase
+      .from("requisicoes")
+      .update({ status: "aguardando_cotacao" })
+      .eq("id", item.requisicao_id)
+      .eq("status", "pendente_produto");
+  }
+
+  revalidatePath(`/requisicoes/${item.requisicao_id}`);
+  revalidatePath("/requisicoes");
+  return { ok: true };
+}
+
 export async function deletarRequisicao(
   id: string,
 ): Promise<{ numero: string } | { erro: string }> {
