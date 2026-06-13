@@ -777,7 +777,7 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <input type="number" min={1} value={item.quantidade} onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })} className="w-16 h-8 rounded-md border border-border bg-transparent px-2 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                          <input type="number" min={1} value={item.quantidade === 0 ? "" : item.quantidade} onChange={(e) => updateItem(item._key, { quantidade: e.target.value === "" ? 0 : Math.max(0, Math.floor(Number(e.target.value))) })} onBlur={() => { if (item.quantidade < 1) updateItem(item._key, { quantidade: 1 }); }} className="w-16 h-8 rounded-md border border-border bg-transparent px-2 text-[12px] text-foreground font-mono text-center focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
                           {item.tipo === "livre" ? (
                             <select value={item.produto_unidade_med} onChange={(e) => updateItem(item._key, { produto_unidade_med: e.target.value })} className="w-20 h-8 px-2 rounded-md bg-background border border-amber-500/30 text-foreground text-[11px] focus:outline-none">
                               {["UN","KG","LT","CX","PC","MT","GL","SC","FR","PR"].map(u => <option key={u} value={u}>{u}</option>)}
@@ -837,12 +837,14 @@ export function NovaRequisicaoModal({ open, onClose, unidades, produtos, activeU
                         )}
 
                         {/* Col 3 — QTD */}
+                        {/* value=""/0: deixa o campo esvaziar durante a edição; onBlur restaura 1 */}
                         <input
                           type="number"
                           min={1}
                           step={1}
-                          value={item.quantidade}
-                          onChange={(e) => updateItem(item._key, { quantidade: Math.max(1, Number(e.target.value)) })}
+                          value={item.quantidade === 0 ? "" : item.quantidade}
+                          onChange={(e) => updateItem(item._key, { quantidade: e.target.value === "" ? 0 : Math.max(0, Math.floor(Number(e.target.value))) })}
+                          onBlur={() => { if (item.quantidade < 1) updateItem(item._key, { quantidade: 1 }); }}
                           className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-[12px] text-foreground font-mono text-center focus:outline-none focus:border-border hover:border-border transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                         />
 
