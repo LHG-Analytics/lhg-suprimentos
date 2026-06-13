@@ -94,7 +94,7 @@ export default async function PedidosPage() {
   omieQuery = omieQuery.eq("filtro_omie", filtroAtivo);
   if (unidadeId) omieQuery = omieQuery.eq("unidade_id", unidadeId);
 
-  const [{ data: pedidos }, omieResult, { data: fornecedores }, produtos] = await Promise.all([
+  const [{ data: pedidos }, omieResult, fornecedores, produtos] = await Promise.all([
     (() => {
       let q = supabase
         .from("pedidos")
@@ -126,11 +126,16 @@ export default async function PedidosPage() {
 
     omieQuery,
 
-    supabase
-      .from("fornecedores")
-      .select("id, razao_social, nome_fantasia")
-      .eq("ativo", true)
-      .order("razao_social"),
+    // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — garante a lista completa
+    fetchAllRows((from, to) =>
+      supabase
+        .from("fornecedores")
+        .select("id, razao_social, nome_fantasia")
+        .eq("ativo", true)
+        .order("razao_social")
+        .order("id")
+        .range(from, to),
+    ),
 
     // Catálogo de produtos para "Adicionar item" no modal de edição.
     // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — catálogo tem 1240+
@@ -191,7 +196,7 @@ export default async function PedidosPage() {
       pedidos={pedidos ?? []}
       omie_pedidos={omie_pedidos}
       filtroAtivo={filtroAtivo}
-      fornecedores={fornecedores ?? []}
+      fornecedores={fornecedores}
       produtos={produtos ?? []}
     />
   );

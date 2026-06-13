@@ -9,6 +9,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { FornecedoresClient } from "./_components/fornecedores-client";
 
 export const metadata = { title: "Fornecedores" };
@@ -45,17 +46,24 @@ export default async function FornecedoresPage() {
     .not("omie_app_key", "is", null)
     .order("nome");
 
-  const [{ data: fornecedores }, { data: lastLog }] = await Promise.all([
-    unidadeId
-      ? supabase
-          .from("fornecedores")
-          .select(selectFields)
-          .eq("omie_unidade_id", unidadeId)
-          .order("razao_social")
-      : supabase
-          .from("fornecedores")
-          .select(selectFields)
-          .order("razao_social"),
+  // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — garante a lista completa
+  const [fornecedores, { data: lastLog }] = await Promise.all([
+    fetchAllRows((from, to) =>
+      unidadeId
+        ? supabase
+            .from("fornecedores")
+            .select(selectFields)
+            .eq("omie_unidade_id", unidadeId)
+            .order("razao_social")
+            .order("id")
+            .range(from, to)
+        : supabase
+            .from("fornecedores")
+            .select(selectFields)
+            .order("razao_social")
+            .order("id")
+            .range(from, to),
+    ),
 
     (() => {
       let q = supabase
@@ -71,7 +79,7 @@ export default async function FornecedoresPage() {
 
   return (
     <FornecedoresClient
-      fornecedores={fornecedores ?? []}
+      fornecedores={fornecedores}
       lastLog={lastLog ?? null}
       unidades={unidades ?? []}
     />

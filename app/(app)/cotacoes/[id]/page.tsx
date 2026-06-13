@@ -5,6 +5,7 @@
  */
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { CotacaoDetalheClient } from "./_components/cotacao-detalhe-client";
 
 interface Props {
@@ -20,7 +21,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
 
   const [
     { data: cotacao },
-    { data: fornecedores },
+    fornecedores,
   ] = await Promise.all([
     supabase
       .from("cotacoes")
@@ -39,11 +40,16 @@ export default async function CotacaoDetalhePage({ params }: Props) {
       .eq("id", id)
       .single(),
 
-    supabase
-      .from("fornecedores")
-      .select("id, razao_social, nome_fantasia, rating, pontualidade_pct, categoria")
-      .eq("ativo", true)
-      .order("razao_social"),
+    // fetchAllRows: PostgREST trava em 1000 linhas (max-rows) — garante a lista completa
+    fetchAllRows((from, to) =>
+      supabase
+        .from("fornecedores")
+        .select("id, razao_social, nome_fantasia, rating, pontualidade_pct, categoria")
+        .eq("ativo", true)
+        .order("razao_social")
+        .order("id")
+        .range(from, to),
+    ),
   ]);
 
   if (!cotacao) notFound();
@@ -51,7 +57,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
   return (
     <CotacaoDetalheClient
       cotacao={cotacao as any}
-      todosFornecedores={fornecedores ?? []}
+      todosFornecedores={fornecedores}
     />
   );
 }
