@@ -1072,7 +1072,7 @@ function FreteInput({ valor, editavel, onSave }: { valor: number; editavel: bool
         onBlur={() => onSave(texto)}
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
         placeholder="0,00"
-        className="w-24 h-7 rounded border border-transparent hover:border-border focus:border-sky-500/60 bg-transparent focus:bg-background pl-6 pr-2 text-[12px] font-mono text-center text-foreground/80 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
+        className="w-24 h-7 rounded border border-border/70 hover:border-sky-500/50 focus:border-sky-500/70 bg-background/60 focus:bg-background pl-6 pr-2 text-[12px] font-mono text-center text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
       />
     </div>
   );
@@ -1094,8 +1094,8 @@ function GarantiaInput({ valor, editavel, onSave }: { valor: string; editavel: b
       onChange={(e) => setTexto(e.target.value)}
       onBlur={() => onSave(texto)}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      placeholder="—"
-      className="w-32 h-7 rounded border border-transparent hover:border-border focus:border-sky-500/60 bg-transparent focus:bg-background px-2 text-[12px] text-center text-foreground/80 placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
+      placeholder="ex: 12 meses"
+      className="w-32 h-7 rounded border border-border/70 hover:border-sky-500/50 focus:border-sky-500/70 bg-background/60 focus:bg-background px-2 text-[12px] text-center text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
     />
   );
 }

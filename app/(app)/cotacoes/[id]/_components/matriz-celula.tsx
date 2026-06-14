@@ -5,6 +5,10 @@ import { Pencil, Check, Loader2, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { upsertMatrizCell } from "../../actions";
 import { toast } from "sonner";
+import {
+  FORMAS_PAGAMENTO, PRAZOS_BOLETO, PARCELAS_CARTAO,
+  comporPagamento, parsePagamento, type FormaPagamento,
+} from "@/lib/cotacao/formas-pagamento";
 
 export interface MatrizCellData {
   cotacao_item_id: string;
@@ -41,7 +45,8 @@ export function MatrizCelula({
 
   const [formPreco, setFormPreco] = useState("");
   const [formPrazo, setFormPrazo] = useState("");
-  const [formPagamento, setFormPagamento] = useState("");
+  const [formForma, setFormForma] = useState<FormaPagamento | "">("");
+  const [formDetalhe, setFormDetalhe] = useState("");
   const [formObs, setFormObs] = useState("");
 
   const temDados = cell?.preco_unitario != null && cell.preco_unitario > 0;
@@ -51,7 +56,9 @@ export function MatrizCelula({
     e.stopPropagation();
     setFormPreco(cell?.preco_unitario?.toString().replace(".", ",") ?? "");
     setFormPrazo(cell?.prazo_entrega_dias?.toString() ?? "");
-    setFormPagamento(cell?.condicao_pagamento ?? "");
+    const pag = parsePagamento(cell?.condicao_pagamento);
+    setFormForma(pag.forma);
+    setFormDetalhe(pag.detalhe);
     setFormObs(cell?.observacao ?? "");
     setEditando(true);
   }
@@ -75,7 +82,7 @@ export function MatrizCelula({
       fornecedor_id: fornecedorId,
       preco_unitario: preco,
       prazo_entrega_dias: formPrazo ? parseInt(formPrazo) : null,
-      condicao_pagamento: formPagamento.trim() || null,
+      condicao_pagamento: comporPagamento({ forma: formForma, detalhe: formDetalhe }) || null,
       observacao: formObs.trim() || null,
     };
 
@@ -140,15 +147,40 @@ export function MatrizCelula({
 
         <div>
           <label className="text-[9px] uppercase tracking-wider text-muted-foreground/60 block mb-0.5">
-            Prazo de pagamento
+            Forma de pagamento
           </label>
-          <input
-            type="text"
-            value={formPagamento}
-            onChange={e => setFormPagamento(e.target.value)}
-            placeholder="Ex: à vista, 30 dias, 10/30/60…"
-            className="w-full h-7 rounded border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
-          />
+          <div className="grid grid-cols-2 gap-1.5">
+            <select
+              value={formForma}
+              onChange={e => { setFormForma(e.target.value as FormaPagamento | ""); setFormDetalhe(""); }}
+              className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
+            >
+              <option value="">—</option>
+              {FORMAS_PAGAMENTO.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+
+            {/* Detalhe condicional: prazo (boleto) ou parcelas (cartão) */}
+            {formForma === "Boleto" && (
+              <select
+                value={formDetalhe}
+                onChange={e => setFormDetalhe(e.target.value)}
+                className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
+              >
+                <option value="">prazo…</option>
+                {PRAZOS_BOLETO.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+            {formForma === "Cartão de crédito" && (
+              <select
+                value={formDetalhe}
+                onChange={e => setFormDetalhe(e.target.value)}
+                className="h-7 rounded border border-border bg-background px-1.5 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
+              >
+                <option value="">parcelas…</option>
+                {PARCELAS_CARTAO.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+          </div>
         </div>
 
         <div>
