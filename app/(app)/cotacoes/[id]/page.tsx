@@ -30,7 +30,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
          prazo, created_at, ai_resumo, ai_analisada_em,
          comprador:user_profiles!comprador_id(nome, avatar_url),
          cotacao_unidades(unidade_id, unidades(nome, slug)),
-         cotacao_fornecedores(fornecedor_id, fornecedores(id, razao_social, nome_fantasia, rating, pontualidade_pct, omie_codigo, email)),
+         cotacao_fornecedores(fornecedor_id, frete, garantia, fornecedores(id, razao_social, nome_fantasia, rating, pontualidade_pct, omie_codigo, email, telefone, contato)),
          cotacao_itens(
            id, quantidade, melhor_forn, selecionado_forn,
            produtos(id, codigo, nome, unidade_med, categoria),

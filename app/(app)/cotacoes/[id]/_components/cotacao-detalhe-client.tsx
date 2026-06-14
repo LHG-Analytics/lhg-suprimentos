@@ -2,18 +2,20 @@
 
 /**
  * cotacao-detalhe-client.tsx — LHG-211/212
- * Tela de detalhe da cotação: header + banner IA + matriz comparativa.
- * Redesign: células expandidas com todos os campos (preço, entrega, pagamento, obs).
+ * Mapa de cotação no estilo do quadro comparativo do setor de compras:
+ *   cabeçalho documento → tabela (empresa/contato/telefone × itens) → rodapé
+ *   (valor total · frete · total geral · cond. pgto · prazo · garantia).
+ * Preserva seleção por item, sugestão IA, e geração de pedidos.
  */
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, X, Plus,
-  Loader2, AlertTriangle, Calendar, Users, Check, Mail, Send, Info,
+  Loader2, AlertTriangle, Calendar, Users, Check, Mail, Send, Info, Truck, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, upsertFreteGarantia } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
@@ -23,8 +25,8 @@ import { MatrizCelula, type MatrizCellData } from "./matriz-celula";
 
 interface Produto        { id: string; codigo: string; nome: string; unidade_med: string; categoria: string }
 interface CotacaoItem    { id: string; quantidade: number; melhor_forn: string | null; selecionado_forn: string | null; produtos: Produto | null; cotacao_matriz: MatrizCellData[] }
-interface FornecedorBase { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null }
-interface CotacaoForn    { fornecedor_id: string; fornecedores: (FornecedorBase & { email?: string | null }) | null }
+interface FornecedorBase { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null; email?: string | null; telefone?: string | null; contato?: string | null }
+interface CotacaoForn    { fornecedor_id: string; frete: number | null; garantia: string | null; fornecedores: FornecedorBase | null }
 
 interface Cotacao {
   id: string; numero: string; titulo: string; status: string; urgente: boolean | null;
@@ -44,7 +46,7 @@ interface Props {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatBRL(v: number | null | undefined) {
-  if (v == null || v === 0) return null;
+  if (v == null) return null;
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 
@@ -59,6 +61,11 @@ function getInitials(nome: string) {
 function formatDate(iso: string) {
   const str = iso.includes("T") ? iso : `${iso}T12:00:00`;
   return new Date(str).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function formatDataCompleta(iso: string) {
+  const str = iso.includes("T") ? iso : `${iso}T12:00:00`;
+  return new Date(str).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function renderStars(rating: number | null) {
@@ -96,12 +103,18 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   // Overrides locais para células editadas sem aguardar revalidação
   const [matrizOverrides, setMatrizOverrides] = useState<Record<string, Record<string, Partial<MatrizCellData>>>>({});
 
+  // Frete/garantia por fornecedor (otimista)
+  const [freteOverrides, setFreteOverrides]       = useState<Record<string, number>>({});
+  const [garantiaOverrides, setGarantiaOverrides] = useState<Record<string, string>>({});
+
   const [iaBannerOpen,     setIaBannerOpen]    = useState(true);
   const [wizardOpen,       setWizardOpen]       = useState(false);
   const [addFornModalOpen, setAddFornModalOpen] = useState(false);
   const [emailModalOpen,   setEmailModalOpen]   = useState(false);
   const [emailMensagem,    setEmailMensagem]    = useState("");
   const [removingFornId,   setRemovingFornId]   = useState<string | null>(null);
+
+  const editavel = cotacao.status !== "aprovado" && cotacao.status !== "aprovada" && cotacao.status !== "fechada";
 
   async function handleRemoverFornecedor(fornecedorId: string, nome: string) {
     if (!confirm(`Remover "${nome}" desta cotação?`)) return;
@@ -121,6 +134,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     .map(cf => cf.fornecedores)
     .filter(Boolean) as FornecedorBase[];
 
+  // Mapa fornecedor_id → linha cotacao_fornecedores (para frete/garantia/contato)
+  const fornRowMap = useMemo(() => {
+    const m: Record<string, CotacaoForn> = {};
+    for (const cf of cotacao.cotacao_fornecedores) m[cf.fornecedor_id] = cf;
+    return m;
+  }, [cotacao.cotacao_fornecedores]);
+
+  const getFrete    = (fornId: string) => freteOverrides[fornId] ?? (fornRowMap[fornId]?.frete ?? 0);
+  const getGarantia = (fornId: string) => garantiaOverrides[fornId] ?? (fornRowMap[fornId]?.garantia ?? "");
+
   // Mapa item → fornecedor → célula (mesclado com overrides locais)
   const matrizMap = useMemo(() => {
     const m: Record<string, Record<string, MatrizCellData>> = {};
@@ -130,7 +153,6 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         const override = matrizOverrides[item.id]?.[cell.fornecedor_id] ?? {};
         m[item.id][cell.fornecedor_id] = { ...cell, ...override };
       }
-      // Overrides para células ainda sem entrada no servidor
       for (const [fornId, override] of Object.entries(matrizOverrides[item.id] ?? {})) {
         if (!m[item.id][fornId]) {
           m[item.id][fornId] = {
@@ -160,41 +182,76 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     return m;
   }, [matrizMap, cotacao.cotacao_itens]);
 
-  // Totais
+  // Soma dos itens por fornecedor (sem frete)
+  function subtotalItensForn(fornId: string): { total: number; atendeAll: boolean } {
+    let total = 0;
+    let atendeAll = true;
+    for (const item of cotacao.cotacao_itens) {
+      const cell = matrizMap[item.id]?.[fornId];
+      if (!cell?.preco_unitario) { atendeAll = false; continue; }
+      total += cell.preco_unitario * item.quantidade;
+    }
+    return { total, atendeAll };
+  }
+
+  // Prazo de entrega agregado (maior prazo entre itens cotados) e condição predominante
+  function prazoForn(fornId: string): number | null {
+    const prazos = cotacao.cotacao_itens
+      .map(i => matrizMap[i.id]?.[fornId]?.prazo_entrega_dias)
+      .filter((p): p is number => p != null);
+    return prazos.length > 0 ? Math.max(...prazos) : null;
+  }
+  function pagamentoForn(fornId: string): string | null {
+    const cond = cotacao.cotacao_itens
+      .map(i => matrizMap[i.id]?.[fornId]?.condicao_pagamento)
+      .find(c => c && c.trim());
+    return cond ?? null;
+  }
+
+  // Totais de seleção (mix): soma itens selecionados + frete dos fornecedores usados
   const totalSelecao = useMemo(() => {
     let total = 0;
+    const fornsUsados = new Set<string>();
     for (const item of cotacao.cotacao_itens) {
       const fornId = selecoes[item.id];
       if (!fornId) continue;
       const cell = matrizMap[item.id]?.[fornId];
-      if (cell?.preco_unitario) total += cell.preco_unitario * item.quantidade;
+      if (cell?.preco_unitario) {
+        total += cell.preco_unitario * item.quantidade;
+        fornsUsados.add(fornId);
+      }
     }
+    for (const fornId of fornsUsados) total += getFrete(fornId);
     return total;
-  }, [selecoes, matrizMap, cotacao.cotacao_itens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selecoes, matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
 
   const totalIA = useMemo(() => {
     let total = 0;
+    const fornsUsados = new Set<string>();
     for (const item of cotacao.cotacao_itens) {
       const fornId = item.melhor_forn;
       if (!fornId) continue;
       const cell = matrizMap[item.id]?.[fornId];
-      if (cell?.preco_unitario) total += cell.preco_unitario * item.quantidade;
+      if (cell?.preco_unitario) {
+        total += cell.preco_unitario * item.quantidade;
+        fornsUsados.add(fornId);
+      }
     }
+    for (const fornId of fornsUsados) total += getFrete(fornId);
     return total;
-  }, [matrizMap, cotacao.cotacao_itens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
 
+  // Total por fornecedor (itens + frete) e o menor entre fornecedores que atendem tudo
   const totalSemOtimizacao = useMemo(() => {
     const totais = fornecedores.map(f => {
-      let t = 0;
-      for (const item of cotacao.cotacao_itens) {
-        const cell = matrizMap[item.id]?.[f.id];
-        if (!cell?.preco_unitario) return Infinity;
-        t += cell.preco_unitario * item.quantidade;
-      }
-      return t;
+      const { total, atendeAll } = subtotalItensForn(f.id);
+      return atendeAll ? total + getFrete(f.id) : Infinity;
     }).filter(t => t !== Infinity);
     return totais.length > 0 ? Math.min(...totais) : 0;
-  }, [fornecedores, matrizMap, cotacao.cotacao_itens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedores, matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
 
   const economia = totalSemOtimizacao > 0 && totalSelecao > 0
     ? totalSemOtimizacao - totalSelecao : 0;
@@ -221,6 +278,34 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       ...prev,
       [itemId]: { ...(prev[itemId] ?? {}), [fornId]: { ...(prev[itemId]?.[fornId] ?? {}), ...data } },
     }));
+  }
+
+  function salvarFrete(fornId: string, valorStr: string) {
+    const limpo = valorStr.replace(/\./g, "").replace(",", ".").trim();
+    const valor = limpo === "" ? 0 : parseFloat(limpo);
+    if (isNaN(valor) || valor < 0) { toast.error("Frete inválido"); return; }
+    if (valor === (fornRowMap[fornId]?.frete ?? 0) && freteOverrides[fornId] === undefined) return;
+    setFreteOverrides(prev => ({ ...prev, [fornId]: valor }));
+    startTransition(async () => {
+      try {
+        await upsertFreteGarantia({ cotacao_id: cotacao.id, fornecedor_id: fornId, frete: valor });
+      } catch {
+        toast.error("Erro ao salvar frete");
+      }
+    });
+  }
+
+  function salvarGarantia(fornId: string, texto: string) {
+    const t = texto.trim();
+    if (t === (fornRowMap[fornId]?.garantia ?? "") && garantiaOverrides[fornId] === undefined) return;
+    setGarantiaOverrides(prev => ({ ...prev, [fornId]: t }));
+    startTransition(async () => {
+      try {
+        await upsertFreteGarantia({ cotacao_id: cotacao.id, fornecedor_id: fornId, garantia: t || null });
+      } catch {
+        toast.error("Erro ao salvar garantia");
+      }
+    });
   }
 
   function aplicarSugestaoIA() {
@@ -262,15 +347,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
   const temSugestaoIA = cotacao.cotacao_itens.some(i => i.melhor_forn);
   const nomeUnidades  = cotacao.cotacao_unidades.map(cu => cu.unidades?.nome).filter(Boolean).join(", ");
-  const fornComEmail  = fornecedores.filter(f => {
-    const row = cotacao.cotacao_fornecedores.find(cf => cf.fornecedor_id === f.id);
-    return (row?.fornecedores as { email?: string | null } | null)?.email;
-  });
+  const fornComEmail  = fornecedores.filter(f => f.email);
+
+  // Larguras de coluna
+  const colItem = "w-[320px] min-w-[320px]";
+  const colForn = "w-[200px] min-w-[200px]";
 
   return (
     <div className="max-w-[1600px] mx-auto pb-24 space-y-4">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* ── Navegação + ações ───────────────────────────────────────────────── */}
       <div className="space-y-3">
         <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
           <button
@@ -399,7 +485,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         </div>
       )}
 
-      {/* ── Matriz comparativa ──────────────────────────────────────────────── */}
+      {/* ── Mapa de cotação (documento) ─────────────────────────────────────── */}
       {cotacao.cotacao_itens.length === 0 ? (
         <div className="rounded-xl border border-border/80 bg-muted/40 flex flex-col items-center justify-center py-16 gap-2">
           <Sparkles size={28} className="text-muted-foreground/40" />
@@ -418,10 +504,39 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
           </button>
         </div>
       ) : (
-        <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
+        <div className="rounded-xl border border-border/80 bg-card overflow-hidden shadow-sm">
+
+          {/* Faixa de cabeçalho do documento */}
+          <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-border/70 bg-gradient-to-r from-muted/70 to-muted/30">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-foreground/[0.06] ring-1 ring-border/60 flex items-center justify-center">
+                <Scale className="text-foreground/70" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70 font-semibold">Mapa de Cotação</div>
+                <div className="text-sm font-semibold text-foreground leading-tight">{cotacao.titulo}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-6 text-right">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60">Data</div>
+                <div className="text-[12px] font-mono text-foreground/80">{formatDataCompleta(cotacao.created_at)}</div>
+              </div>
+              {cotacao.comprador && (
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60">Comprador</div>
+                  <div className="text-[12px] text-foreground/80">{cotacao.comprador.nome}</div>
+                </div>
+              )}
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60">Fornecedores</div>
+                <div className="text-[12px] font-mono text-foreground/80">{fornecedores.length}</div>
+              </div>
+            </div>
+          </div>
 
           {/* Legenda */}
-          <div className="flex items-center gap-5 px-5 py-2.5 border-b border-border/60 bg-muted/60">
+          <div className="flex items-center gap-5 px-5 py-2 border-b border-border/50 bg-muted/30">
             <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium">Legenda:</span>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
               <div className="w-3 h-3 rounded-sm bg-emerald-500/[0.07] ring-1 ring-emerald-500/40" />
@@ -429,61 +544,63 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
               <div className="w-3 h-3 rounded-sm bg-emerald-500/20 ring-1 ring-emerald-500/60" />
-              Fornecedor escolhido (clique para selecionar)
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-              <div className="w-3 h-3 rounded-sm border border-dashed border-border" />
-              Sem cotação informada
+              Escolhido (clique para selecionar)
             </div>
             <div className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/40">
               <Info size={10} />
-              Clique no lápis para preencher dados do fornecedor
+              Lápis = preço/prazo · rodapé = frete e garantia
             </div>
           </div>
 
-          {/* Scroll horizontal */}
+          {/* Tabela */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-max">
+            <table className="w-full min-w-max border-separate border-spacing-0">
               <colgroup>
-                <col className="w-56 min-w-56" />
-                {fornecedores.map(f => <col key={f.id} className="w-52 min-w-52" />)}
-                {temSugestaoIA && <col className="w-48 min-w-48" />}
+                <col className={colItem} />
+                {fornecedores.map(f => <col key={f.id} className={colForn} />)}
+                {temSugestaoIA && <col className="w-[190px] min-w-[190px]" />}
               </colgroup>
 
-              {/* Header: fornecedores */}
+              {/* Header: blocos de fornecedor (empresa / contato / telefone) */}
               <thead>
-                <tr className="border-b border-border/60">
-                  <th className="px-5 py-3 text-left">
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-medium">Item</span>
+                <tr>
+                  <th className="sticky left-0 z-10 bg-card px-5 py-3 text-left align-bottom border-b-2 border-border/70">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Descrição dos produtos</div>
                   </th>
                   {fornecedores.map((f, idx) => (
-                    <th key={f.id} className="px-3 py-3 text-center border-l border-border/60 relative">
-                      {cotacao.status !== "aprovada" && cotacao.status !== "fechada" && (
+                    <th key={f.id} className="px-3 py-3 text-center align-top border-l border-b-2 border-border/70 relative">
+                      {editavel && (
                         <button
                           onClick={() => handleRemoverFornecedor(f.id, getFornecedorNome(f))}
                           disabled={removingFornId === f.id}
                           title="Remover fornecedor"
                           className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center bg-muted/60 hover:bg-destructive/20 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-50"
                         >
-                          {removingFornId === f.id
-                            ? <Loader2 size={9} className="animate-spin" />
-                            : <X size={9} />
-                          }
+                          {removingFornId === f.id ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
                         </button>
                       )}
                       <div className="flex flex-col items-center gap-1.5">
                         <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold",
+                          "w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-bold",
                           AVATAR_COLORS[idx % AVATAR_COLORS.length],
                         )}>
                           {getInitials(getFornecedorNome(f))}
                         </div>
-                        <div className="text-[12px] font-medium text-foreground/80 text-center leading-tight max-w-[160px]">
+                        <div className="text-[12px] font-semibold text-foreground text-center leading-tight max-w-[170px] break-words">
                           {getFornecedorNome(f)}
                         </div>
-                        {/* Rating e pontualidade */}
+                        {/* Contato / telefone */}
+                        <div className="text-[10px] text-muted-foreground/70 leading-snug text-center space-y-0.5">
+                          <div className="truncate max-w-[170px]" title={f.contato ?? undefined}>
+                            {f.contato || <span className="text-muted-foreground/30">contato —</span>}
+                          </div>
+                          <div className="font-mono" title={f.telefone ?? undefined}>
+                            {f.telefone || <span className="text-muted-foreground/30">tel —</span>}
+                          </div>
+                        </div>
+                        {/* Rating */}
                         {(f.rating != null || f.pontualidade_pct != null) && (
-                          <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex flex-col items-center gap-0.5 pt-0.5">
                             {f.rating != null && (
                               <div className="flex items-center gap-1 text-[10px]" title={`Avaliação histórica: ${f.rating.toFixed(1)} de 5`}>
                                 {renderStars(f.rating)}
@@ -491,10 +608,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                               </div>
                             )}
                             {f.pontualidade_pct != null && (
-                              <div
-                                className="text-[10px] text-muted-foreground/50"
-                                title="Porcentagem de entregas realizadas no prazo combinado"
-                              >
+                              <div className="text-[10px] text-muted-foreground/50" title="Entregas no prazo combinado">
                                 {f.pontualidade_pct}% no prazo
                               </div>
                             )}
@@ -504,36 +618,45 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                     </th>
                   ))}
                   {temSugestaoIA && (
-                    <th className="px-3 py-3 text-center border-l-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/[0.04] to-transparent">
+                    <th className="px-3 py-3 text-center align-top border-l-2 border-b-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/[0.05] to-transparent">
                       <div className="flex flex-col items-center gap-1.5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
-                          <Sparkles size={13} className="text-white" />
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
+                          <Sparkles size={14} className="text-white" />
                         </div>
-                        <div className="text-[12px] font-medium text-emerald-400">Sugestão IA</div>
-                        <div className="text-[10px] text-emerald-600">melhor combinação por item</div>
+                        <div className="text-[12px] font-semibold text-emerald-400">Sugestão IA</div>
+                        <div className="text-[10px] text-emerald-600 max-w-[150px] leading-snug">melhor combinação por item</div>
                       </div>
                     </th>
                   )}
                 </tr>
               </thead>
 
-              {/* Body: itens */}
+              {/* Body: itens numerados */}
               <tbody>
-                {cotacao.cotacao_itens.map((item) => {
+                {cotacao.cotacao_itens.map((item, idx) => {
                   const prod = item.produtos;
                   return (
-                    <tr key={item.id} className="border-b border-border/40">
-                      {/* Nome do item */}
-                      <td className="px-5 py-3 align-top">
-                        <div className="text-sm font-medium text-foreground truncate max-w-[200px]">
-                          {prod?.nome ?? "—"}
+                    <tr key={item.id} className="group/row hover:bg-muted/20 transition-colors">
+                      {/* Item */}
+                      <td className="sticky left-0 z-10 bg-card px-5 py-3 align-top border-b border-border/40">
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded bg-muted text-[10px] font-mono font-semibold text-muted-foreground/80 shrink-0 tabular-nums">
+                            {idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground leading-snug">
+                              {prod?.nome ?? "—"}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="inline-flex items-center rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80 tabular-nums">
+                                {item.quantidade} {prod?.unidade_med}
+                              </span>
+                              {prod?.codigo && (
+                                <span className="text-[10px] text-muted-foreground/40 font-mono">{prod.codigo}</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                          {item.quantidade} {prod?.unidade_med}
-                        </div>
-                        {prod?.categoria && (
-                          <div className="text-[10px] text-muted-foreground/50 mt-0.5">{prod.categoria}</div>
-                        )}
                       </td>
 
                       {/* Células de fornecedor */}
@@ -542,9 +665,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                         const temPreco = cell?.preco_unitario != null && cell.preco_unitario > 0;
                         const ehMelhor = temPreco && melhorPreco[item.id] === cell?.preco_unitario;
                         const ehSel = selecoes[item.id] === f.id;
-
                         return (
-                          <td key={f.id} className="px-3 py-2.5 align-top border-l border-border/60">
+                          <td key={f.id} className="px-2.5 py-2.5 align-top border-l border-b border-border/40">
                             <MatrizCelula
                               itemId={item.id}
                               fornecedorId={f.id}
@@ -561,7 +683,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
 
                       {/* Coluna IA */}
                       {temSugestaoIA && (
-                        <td className="px-3 py-2.5 align-top text-center border-l-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/[0.03] to-transparent">
+                        <td className="px-3 py-2.5 align-top text-center border-l-2 border-b border-emerald-500/30 bg-gradient-to-b from-emerald-500/[0.03] to-transparent">
                           {item.melhor_forn ? (() => {
                             const forn = fornecedores.find(f => f.id === item.melhor_forn);
                             const cell = matrizMap[item.id]?.[item.melhor_forn];
@@ -569,9 +691,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                             return (
                               <div className="rounded-lg px-2 py-2">
                                 {forn && (
-                                  <div className="text-[10px] text-emerald-600 mb-0.5 truncate">
-                                    {getFornecedorNome(forn)}
-                                  </div>
+                                  <div className="text-[10px] text-emerald-600 mb-0.5 truncate">{getFornecedorNome(forn)}</div>
                                 )}
                                 <div className="font-mono text-sm font-semibold text-emerald-400">
                                   {formatBRL(cell?.preco_unitario) ?? "—"}
@@ -591,54 +711,113 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                 })}
               </tbody>
 
-              {/* Footer: totais por fornecedor */}
-              <tfoot>
-                <tr className="border-t border-border/60 bg-muted/60">
-                  <td className="px-5 py-3 text-[11px] uppercase tracking-wider text-muted-foreground/70 font-medium">
-                    Total se 100%
-                  </td>
-                  {fornecedores.map((f) => {
-                    let totalForn = 0;
-                    let atendeAll = true;
-                    for (const item of cotacao.cotacao_itens) {
-                      const cell = matrizMap[item.id]?.[f.id];
-                      if (!cell?.preco_unitario) { atendeAll = false; continue; }
-                      totalForn += cell.preco_unitario * item.quantidade;
-                    }
-                    const ehMelhorForn = atendeAll && totalForn === totalSemOtimizacao && totalSemOtimizacao > 0;
-                    return (
-                      <td key={f.id} className="px-3 py-3 text-center border-l border-border/60">
-                        {totalForn > 0 ? (
-                          <div>
-                            <div className={cn(
-                              "font-mono text-sm font-semibold",
-                              ehMelhorForn ? "text-emerald-400" : "text-foreground/80",
-                            )}>
-                              {formatBRL(totalForn)}
-                            </div>
-                            {!atendeAll && (
-                              <div className="text-[10px] text-muted-foreground/60">parcial</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[12px] text-muted-foreground/40">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  {temSugestaoIA && (
-                    <td className="px-3 py-3 text-center border-l-2 border-emerald-500/40">
-                      {totalIA > 0 ? (
-                        <div>
-                          <div className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium mb-0.5">melhor combinação</div>
-                          <div className="font-mono text-sm font-semibold text-emerald-400">{formatBRL(totalIA)}</div>
-                        </div>
-                      ) : (
-                        <span className="text-[12px] text-muted-foreground/60">—</span>
-                      )}
-                    </td>
+              {/* Footer: subtotal · frete · total · pagamento · prazo · garantia */}
+              <tfoot className="text-[12px]">
+                {/* Subtotal itens */}
+                <RodapeLinha
+                  label="Subtotal itens"
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => {
+                    const { total, atendeAll } = subtotalItensForn(f.id);
+                    return total > 0 ? (
+                      <div className="font-mono text-foreground/70">
+                        {formatBRL(total)}
+                        {!atendeAll && <span className="block text-[9px] text-muted-foreground/50">parcial</span>}
+                      </div>
+                    ) : <span className="text-muted-foreground/30">—</span>;
+                  }}
+                  temIA={temSugestaoIA}
+                  iaContent={<span className="text-muted-foreground/40">—</span>}
+                  topBorder
+                />
+
+                {/* Frete (editável) */}
+                <RodapeLinha
+                  label="Frete"
+                  icon={<Truck size={11} className="text-muted-foreground/50" />}
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => (
+                    <FreteInput
+                      valor={getFrete(f.id)}
+                      editavel={editavel}
+                      onSave={(v) => salvarFrete(f.id, v)}
+                    />
                   )}
-                </tr>
+                  temIA={temSugestaoIA}
+                  iaContent={<span className="text-muted-foreground/40">—</span>}
+                />
+
+                {/* Total geral (itens + frete) */}
+                <RodapeLinha
+                  label="Valor total"
+                  strong
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => {
+                    const { total, atendeAll } = subtotalItensForn(f.id);
+                    const totalGeral = total + getFrete(f.id);
+                    const ehMelhor = atendeAll && totalGeral === totalSemOtimizacao && totalSemOtimizacao > 0;
+                    return total > 0 ? (
+                      <div className={cn(
+                        "font-mono text-sm font-bold",
+                        ehMelhor ? "text-emerald-400" : "text-foreground",
+                      )}>
+                        {formatBRL(totalGeral)}
+                        {ehMelhor && <span className="block text-[9px] font-medium text-emerald-600 uppercase tracking-wider">menor</span>}
+                      </div>
+                    ) : <span className="text-muted-foreground/30">—</span>;
+                  }}
+                  temIA={temSugestaoIA}
+                  iaContent={totalIA > 0
+                    ? <div className="font-mono text-sm font-bold text-emerald-400">{formatBRL(totalIA)}</div>
+                    : <span className="text-muted-foreground/40">—</span>}
+                />
+
+                {/* Condição de pagamento */}
+                <RodapeLinha
+                  label="Cond. pgto"
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => {
+                    const p = pagamentoForn(f.id);
+                    return p ? <span className="text-foreground/70">{p}</span> : <span className="text-muted-foreground/30">—</span>;
+                  }}
+                  temIA={temSugestaoIA}
+                  iaContent={null}
+                />
+
+                {/* Prazo de entrega */}
+                <RodapeLinha
+                  label="Prazo entrega"
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => {
+                    const p = prazoForn(f.id);
+                    return p != null ? <span className="font-mono text-foreground/70">{p} dias</span> : <span className="text-muted-foreground/30">—</span>;
+                  }}
+                  temIA={temSugestaoIA}
+                  iaContent={null}
+                />
+
+                {/* Garantia (editável) */}
+                <RodapeLinha
+                  label="Garantia"
+                  icon={<ShieldCheck size={11} className="text-muted-foreground/50" />}
+                  colItemClass={colItem}
+                  fornecedores={fornecedores}
+                  render={(f) => (
+                    <GarantiaInput
+                      valor={getGarantia(f.id)}
+                      editavel={editavel}
+                      onSave={(v) => salvarGarantia(f.id, v)}
+                    />
+                  )}
+                  temIA={temSugestaoIA}
+                  iaContent={null}
+                  last
+                />
               </tfoot>
             </table>
           </div>
@@ -650,7 +829,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur-md px-6 py-3.5">
           <div className="max-w-[1600px] mx-auto flex items-center gap-6">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Seleção atual</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Seleção atual (c/ frete)</div>
               <div className="font-mono text-sm font-semibold text-foreground">
                 {formatBRL(totalSelecao) ?? "—"}
                 <span className="text-muted-foreground/70 text-[11px] ml-1.5">
@@ -800,4 +979,127 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       )}
     </div>
   );
+}
+
+// ── Subcomponentes do rodapé ────────────────────────────────────────────────────
+
+function Scale({ className }: { className?: string }) {
+  // Ícone simples de balança (mapa de cotação) sem nova dependência
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 3v18M6 21h12M3 7l3-4 3 4M15 7l3-4 3 4" />
+      <path d="M3 7a3 3 0 0 0 6 0M15 7a3 3 0 0 0 6 0" />
+    </svg>
+  );
+}
+
+interface RodapeLinhaProps {
+  label: string;
+  icon?: React.ReactNode;
+  colItemClass: string;
+  fornecedores: FornecedorBase[];
+  render: (f: FornecedorBase) => React.ReactNode;
+  temIA: boolean;
+  iaContent: React.ReactNode;
+  topBorder?: boolean;
+  last?: boolean;
+  strong?: boolean;
+}
+
+function RodapeLinha({ label, icon, fornecedores, render, temIA, iaContent, topBorder, last, strong }: RodapeLinhaProps) {
+  const bg = strong ? "bg-muted" : "bg-muted/70";
+  return (
+    <tr className={cn(bg, topBorder && "border-t-2")}>
+      <td className={cn(
+        "sticky left-0 z-10 px-5 py-2.5 align-middle border-border/50 bg-muted",
+        topBorder && "border-t-2 border-t-border/70",
+        !last && "border-b",
+      )}>
+        <div className="flex items-center gap-1.5">
+          {icon}
+          <span className={cn(
+            "uppercase tracking-wider font-semibold",
+            strong ? "text-[11px] text-foreground/80" : "text-[10px] text-muted-foreground/70",
+          )}>
+            {label}
+          </span>
+        </div>
+      </td>
+      {fornecedores.map((f) => (
+        <td key={f.id} className={cn(
+          "px-2.5 py-2.5 text-center align-middle border-l border-border/50",
+          topBorder && "border-t-2 border-t-border/70",
+          !last && "border-b",
+        )}>
+          {render(f)}
+        </td>
+      ))}
+      {temIA && (
+        <td className={cn(
+          "px-3 py-2.5 text-center align-middle border-l-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/[0.04] to-transparent",
+          topBorder && "border-t-2 border-t-emerald-500/40",
+          !last && "border-b border-b-emerald-500/20",
+        )}>
+          {iaContent}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function FreteInput({ valor, editavel, onSave }: { valor: number; editavel: boolean; onSave: (v: string) => void }) {
+  const fmt = (v: number) => v > 0
+    ? new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+    : "";
+  const [texto, setTexto] = useState(fmt(valor));
+
+  if (!editavel) {
+    return valor > 0
+      ? <span className="font-mono text-foreground/70">{formatBRLInline(valor)}</span>
+      : <span className="text-muted-foreground/30">—</span>;
+  }
+
+  return (
+    <div className="relative inline-flex items-center">
+      <span className="absolute left-2 text-[10px] text-muted-foreground/50 pointer-events-none">R$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        onBlur={() => onSave(texto)}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        placeholder="0,00"
+        className="w-24 h-7 rounded border border-transparent hover:border-border focus:border-sky-500/60 bg-transparent focus:bg-background pl-6 pr-2 text-[12px] font-mono text-center text-foreground/80 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
+      />
+    </div>
+  );
+}
+
+function GarantiaInput({ valor, editavel, onSave }: { valor: string; editavel: boolean; onSave: (v: string) => void }) {
+  const [texto, setTexto] = useState(valor);
+
+  if (!editavel) {
+    return valor
+      ? <span className="text-foreground/70">{valor}</span>
+      : <span className="text-muted-foreground/30">—</span>;
+  }
+
+  return (
+    <input
+      type="text"
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => onSave(texto)}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+      placeholder="—"
+      className="w-32 h-7 rounded border border-transparent hover:border-border focus:border-sky-500/60 bg-transparent focus:bg-background px-2 text-[12px] text-center text-foreground/80 placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
+    />
+  );
+}
+
+function formatBRLInline(v: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
