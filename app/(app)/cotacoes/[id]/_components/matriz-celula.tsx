@@ -17,6 +17,8 @@ export interface MatrizCellData {
   prazo_entrega_dias: number | null;
   condicao_pagamento: string | null;
   observacao: string | null;
+  frete: number | null;
+  garantia: string | null;
 }
 
 interface Props {
@@ -47,6 +49,8 @@ export function MatrizCelula({
   const [formPrazo, setFormPrazo] = useState("");
   const [formForma, setFormForma] = useState<FormaPagamento | "">("");
   const [formDetalhe, setFormDetalhe] = useState("");
+  const [formFrete, setFormFrete] = useState("");
+  const [formGarantia, setFormGarantia] = useState("");
   const [formObs, setFormObs] = useState("");
 
   const temDados = cell?.preco_unitario != null && cell.preco_unitario > 0;
@@ -59,6 +63,8 @@ export function MatrizCelula({
     const pag = parsePagamento(cell?.condicao_pagamento);
     setFormForma(pag.forma);
     setFormDetalhe(pag.detalhe);
+    setFormFrete(cell?.frete ? cell.frete.toString().replace(".", ",") : "");
+    setFormGarantia(cell?.garantia ?? "");
     setFormObs(cell?.observacao ?? "");
     setEditando(true);
   }
@@ -77,6 +83,13 @@ export function MatrizCelula({
       return;
     }
 
+    const freteStr = formFrete.replace(/\./g, "").replace(",", ".").trim();
+    const freteNum = freteStr === "" ? 0 : parseFloat(freteStr);
+    if (isNaN(freteNum) || freteNum < 0) {
+      toast.error("Frete inválido");
+      return;
+    }
+
     const dados: MatrizCellData = {
       cotacao_item_id: itemId,
       fornecedor_id: fornecedorId,
@@ -84,6 +97,8 @@ export function MatrizCelula({
       prazo_entrega_dias: formPrazo ? parseInt(formPrazo) : null,
       condicao_pagamento: comporPagamento({ forma: formForma, detalhe: formDetalhe }) || null,
       observacao: formObs.trim() || null,
+      frete: freteNum,
+      garantia: formGarantia.trim() || null,
     };
 
     startTransition(async () => {
@@ -183,6 +198,37 @@ export function MatrizCelula({
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-1.5">
+          <div>
+            <label className="text-[9px] uppercase tracking-wider text-muted-foreground/60 block mb-0.5">
+              Frete
+            </label>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/50">R$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formFrete}
+                onChange={e => setFormFrete(e.target.value)}
+                placeholder="0,00"
+                className="w-full h-7 rounded border border-border bg-background pl-6 pr-2 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] uppercase tracking-wider text-muted-foreground/60 block mb-0.5">
+              Garantia
+            </label>
+            <input
+              type="text"
+              value={formGarantia}
+              onChange={e => setFormGarantia(e.target.value)}
+              placeholder="ex: 12 meses"
+              className="w-full h-7 rounded border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="text-[9px] uppercase tracking-wider text-muted-foreground/60 block mb-0.5">
             Observação
@@ -191,7 +237,7 @@ export function MatrizCelula({
             type="text"
             value={formObs}
             onChange={e => setFormObs(e.target.value)}
-            placeholder="Frete incluso, validade, condições especiais…"
+            placeholder="Condições especiais, validade da proposta…"
             className="w-full h-7 rounded border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/20"
           />
         </div>
@@ -291,15 +337,27 @@ export function MatrizCelula({
       {/* Linha 3+: detalhes */}
       <div className="mt-2 space-y-0.5 border-t border-border/30 pt-1.5">
         <div className="flex items-center gap-1">
-          <span className="text-[9px] text-muted-foreground/40 w-14 shrink-0">Entrega</span>
+          <span className="text-[9px] text-muted-foreground/40 w-16 shrink-0">Entrega</span>
           <span className="text-[10px] text-muted-foreground/70">
             {cell?.prazo_entrega_dias != null ? `${cell.prazo_entrega_dias} dias` : <em className="text-muted-foreground/30">—</em>}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[9px] text-muted-foreground/40 w-14 shrink-0">Pagamento</span>
+          <span className="text-[9px] text-muted-foreground/40 w-16 shrink-0">Pagamento</span>
           <span className="text-[10px] text-muted-foreground/70 truncate">
             {cell?.condicao_pagamento || <em className="text-muted-foreground/30">—</em>}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] text-muted-foreground/40 w-16 shrink-0">Frete</span>
+          <span className="text-[10px] text-muted-foreground/70 font-mono">
+            {cell?.frete && cell.frete > 0 ? formatBRL(cell.frete) : <em className="text-muted-foreground/30">grátis</em>}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] text-muted-foreground/40 w-16 shrink-0">Garantia</span>
+          <span className="text-[10px] text-muted-foreground/70 truncate">
+            {cell?.garantia || <em className="text-muted-foreground/30">—</em>}
           </span>
         </div>
         {cell?.observacao && (

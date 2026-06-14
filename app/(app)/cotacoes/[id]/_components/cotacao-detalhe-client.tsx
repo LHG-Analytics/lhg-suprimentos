@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, upsertFreteGarantia } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
@@ -26,7 +26,7 @@ import { MatrizCelula, type MatrizCellData } from "./matriz-celula";
 interface Produto        { id: string; codigo: string; nome: string; unidade_med: string; categoria: string }
 interface CotacaoItem    { id: string; quantidade: number; melhor_forn: string | null; selecionado_forn: string | null; produtos: Produto | null; cotacao_matriz: MatrizCellData[] }
 interface FornecedorBase { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null; email?: string | null; telefone?: string | null; contato?: string | null }
-interface CotacaoForn    { fornecedor_id: string; frete: number | null; garantia: string | null; fornecedores: FornecedorBase | null }
+interface CotacaoForn    { fornecedor_id: string; fornecedores: FornecedorBase | null }
 
 interface Cotacao {
   id: string; numero: string; titulo: string; status: string; urgente: boolean | null;
@@ -103,10 +103,6 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   // Overrides locais para células editadas sem aguardar revalidação
   const [matrizOverrides, setMatrizOverrides] = useState<Record<string, Record<string, Partial<MatrizCellData>>>>({});
 
-  // Frete/garantia por fornecedor (otimista)
-  const [freteOverrides, setFreteOverrides]       = useState<Record<string, number>>({});
-  const [garantiaOverrides, setGarantiaOverrides] = useState<Record<string, string>>({});
-
   const [iaBannerOpen,     setIaBannerOpen]    = useState(true);
   const [wizardOpen,       setWizardOpen]       = useState(false);
   const [addFornModalOpen, setAddFornModalOpen] = useState(false);
@@ -134,16 +130,6 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     .map(cf => cf.fornecedores)
     .filter(Boolean) as FornecedorBase[];
 
-  // Mapa fornecedor_id → linha cotacao_fornecedores (para frete/garantia/contato)
-  const fornRowMap = useMemo(() => {
-    const m: Record<string, CotacaoForn> = {};
-    for (const cf of cotacao.cotacao_fornecedores) m[cf.fornecedor_id] = cf;
-    return m;
-  }, [cotacao.cotacao_fornecedores]);
-
-  const getFrete    = (fornId: string) => freteOverrides[fornId] ?? (fornRowMap[fornId]?.frete ?? 0);
-  const getGarantia = (fornId: string) => garantiaOverrides[fornId] ?? (fornRowMap[fornId]?.garantia ?? "");
-
   // Mapa item → fornecedor → célula (mesclado com overrides locais)
   const matrizMap = useMemo(() => {
     const m: Record<string, Record<string, MatrizCellData>> = {};
@@ -162,6 +148,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             prazo_entrega_dias: null,
             condicao_pagamento: null,
             observacao: null,
+            frete: null,
+            garantia: null,
             ...override,
           } as MatrizCellData;
         }
@@ -182,7 +170,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     return m;
   }, [matrizMap, cotacao.cotacao_itens]);
 
-  // Soma dos itens por fornecedor (sem frete)
+  // Soma dos itens por fornecedor (sem frete) + soma de frete das células
   function subtotalItensForn(fornId: string): { total: number; atendeAll: boolean } {
     let total = 0;
     let atendeAll = true;
@@ -192,6 +180,24 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       total += cell.preco_unitario * item.quantidade;
     }
     return { total, atendeAll };
+  }
+  // Frete total do fornecedor = soma do frete das células cotadas
+  function freteForn(fornId: string): number {
+    let frete = 0;
+    for (const item of cotacao.cotacao_itens) {
+      const cell = matrizMap[item.id]?.[fornId];
+      if (cell?.preco_unitario && cell.frete) frete += cell.frete;
+    }
+    return frete;
+  }
+  // Garantias distintas informadas pelo fornecedor (consolidado para o rodapé)
+  function garantiaForn(fornId: string): string | null {
+    const set = new Set<string>();
+    for (const item of cotacao.cotacao_itens) {
+      const g = matrizMap[item.id]?.[fornId]?.garantia?.trim();
+      if (g) set.add(g);
+    }
+    return set.size > 0 ? Array.from(set).join(" · ") : null;
   }
 
   // Prazo de entrega agregado (maior prazo entre itens cotados) e condição predominante
@@ -208,50 +214,38 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     return cond ?? null;
   }
 
-  // Totais de seleção (mix): soma itens selecionados + frete dos fornecedores usados
+  // Totais de seleção (mix): soma itens selecionados + frete da célula selecionada
   const totalSelecao = useMemo(() => {
     let total = 0;
-    const fornsUsados = new Set<string>();
     for (const item of cotacao.cotacao_itens) {
       const fornId = selecoes[item.id];
       if (!fornId) continue;
       const cell = matrizMap[item.id]?.[fornId];
-      if (cell?.preco_unitario) {
-        total += cell.preco_unitario * item.quantidade;
-        fornsUsados.add(fornId);
-      }
+      if (cell?.preco_unitario) total += cell.preco_unitario * item.quantidade + (cell.frete ?? 0);
     }
-    for (const fornId of fornsUsados) total += getFrete(fornId);
     return total;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selecoes, matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
+  }, [selecoes, matrizMap, cotacao.cotacao_itens]);
 
   const totalIA = useMemo(() => {
     let total = 0;
-    const fornsUsados = new Set<string>();
     for (const item of cotacao.cotacao_itens) {
       const fornId = item.melhor_forn;
       if (!fornId) continue;
       const cell = matrizMap[item.id]?.[fornId];
-      if (cell?.preco_unitario) {
-        total += cell.preco_unitario * item.quantidade;
-        fornsUsados.add(fornId);
-      }
+      if (cell?.preco_unitario) total += cell.preco_unitario * item.quantidade + (cell.frete ?? 0);
     }
-    for (const fornId of fornsUsados) total += getFrete(fornId);
     return total;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
+  }, [matrizMap, cotacao.cotacao_itens]);
 
   // Total por fornecedor (itens + frete) e o menor entre fornecedores que atendem tudo
   const totalSemOtimizacao = useMemo(() => {
     const totais = fornecedores.map(f => {
       const { total, atendeAll } = subtotalItensForn(f.id);
-      return atendeAll ? total + getFrete(f.id) : Infinity;
+      return atendeAll ? total + freteForn(f.id) : Infinity;
     }).filter(t => t !== Infinity);
     return totais.length > 0 ? Math.min(...totais) : 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fornecedores, matrizMap, cotacao.cotacao_itens, freteOverrides, fornRowMap]);
+  }, [fornecedores, matrizMap, cotacao.cotacao_itens]);
 
   const economia = totalSemOtimizacao > 0 && totalSelecao > 0
     ? totalSemOtimizacao - totalSelecao : 0;
@@ -278,34 +272,6 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       ...prev,
       [itemId]: { ...(prev[itemId] ?? {}), [fornId]: { ...(prev[itemId]?.[fornId] ?? {}), ...data } },
     }));
-  }
-
-  function salvarFrete(fornId: string, valorStr: string) {
-    const limpo = valorStr.replace(/\./g, "").replace(",", ".").trim();
-    const valor = limpo === "" ? 0 : parseFloat(limpo);
-    if (isNaN(valor) || valor < 0) { toast.error("Frete inválido"); return; }
-    if (valor === (fornRowMap[fornId]?.frete ?? 0) && freteOverrides[fornId] === undefined) return;
-    setFreteOverrides(prev => ({ ...prev, [fornId]: valor }));
-    startTransition(async () => {
-      try {
-        await upsertFreteGarantia({ cotacao_id: cotacao.id, fornecedor_id: fornId, frete: valor });
-      } catch {
-        toast.error("Erro ao salvar frete");
-      }
-    });
-  }
-
-  function salvarGarantia(fornId: string, texto: string) {
-    const t = texto.trim();
-    if (t === (fornRowMap[fornId]?.garantia ?? "") && garantiaOverrides[fornId] === undefined) return;
-    setGarantiaOverrides(prev => ({ ...prev, [fornId]: t }));
-    startTransition(async () => {
-      try {
-        await upsertFreteGarantia({ cotacao_id: cotacao.id, fornecedor_id: fornId, garantia: t || null });
-      } catch {
-        toast.error("Erro ao salvar garantia");
-      }
-    });
   }
 
   function aplicarSugestaoIA() {
@@ -732,19 +698,21 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                   topBorder
                 />
 
-                {/* Frete (editável) */}
+                {/* Frete (consolidado das células) */}
                 <RodapeLinha
                   label="Frete"
                   icon={<Truck size={11} className="text-muted-foreground/50" />}
                   colItemClass={colItem}
                   fornecedores={fornecedores}
-                  render={(f) => (
-                    <FreteInput
-                      valor={getFrete(f.id)}
-                      editavel={editavel}
-                      onSave={(v) => salvarFrete(f.id, v)}
-                    />
-                  )}
+                  render={(f) => {
+                    const { atendeAll } = subtotalItensForn(f.id);
+                    const frete = freteForn(f.id);
+                    const temCotacao = atendeAll || subtotalItensForn(f.id).total > 0;
+                    if (!temCotacao) return <span className="text-muted-foreground/30">—</span>;
+                    return frete > 0
+                      ? <span className="font-mono text-foreground/70">{formatBRL(frete)}</span>
+                      : <span className="text-[11px] text-emerald-500/70">grátis</span>;
+                  }}
                   temIA={temSugestaoIA}
                   iaContent={<span className="text-muted-foreground/40">—</span>}
                 />
@@ -757,7 +725,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                   fornecedores={fornecedores}
                   render={(f) => {
                     const { total, atendeAll } = subtotalItensForn(f.id);
-                    const totalGeral = total + getFrete(f.id);
+                    const totalGeral = total + freteForn(f.id);
                     const ehMelhor = atendeAll && totalGeral === totalSemOtimizacao && totalSemOtimizacao > 0;
                     return total > 0 ? (
                       <div className={cn(
@@ -801,19 +769,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                   iaContent={null}
                 />
 
-                {/* Garantia (editável) */}
+                {/* Garantia (consolidada das células) */}
                 <RodapeLinha
                   label="Garantia"
                   icon={<ShieldCheck size={11} className="text-muted-foreground/50" />}
                   colItemClass={colItem}
                   fornecedores={fornecedores}
-                  render={(f) => (
-                    <GarantiaInput
-                      valor={getGarantia(f.id)}
-                      editavel={editavel}
-                      onSave={(v) => salvarGarantia(f.id, v)}
-                    />
-                  )}
+                  render={(f) => {
+                    const g = garantiaForn(f.id);
+                    return g ? <span className="text-foreground/70">{g}</span> : <span className="text-muted-foreground/30">—</span>;
+                  }}
                   temIA={temSugestaoIA}
                   iaContent={null}
                   last
@@ -1046,60 +1011,4 @@ function RodapeLinha({ label, icon, fornecedores, render, temIA, iaContent, topB
       )}
     </tr>
   );
-}
-
-function FreteInput({ valor, editavel, onSave }: { valor: number; editavel: boolean; onSave: (v: string) => void }) {
-  const fmt = (v: number) => v > 0
-    ? new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
-    : "";
-  const [texto, setTexto] = useState(fmt(valor));
-
-  if (!editavel) {
-    return valor > 0
-      ? <span className="font-mono text-foreground/70">{formatBRLInline(valor)}</span>
-      : <span className="text-muted-foreground/30">—</span>;
-  }
-
-  return (
-    <div className="relative inline-flex items-center">
-      <span className="absolute left-2 text-[10px] text-muted-foreground/50 pointer-events-none">R$</span>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={texto}
-        onChange={(e) => setTexto(e.target.value)}
-        onFocus={(e) => e.target.select()}
-        onBlur={() => onSave(texto)}
-        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        placeholder="0,00"
-        className="w-24 h-7 rounded border border-border/70 hover:border-sky-500/50 focus:border-sky-500/70 bg-background/60 focus:bg-background pl-6 pr-2 text-[12px] font-mono text-center text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
-      />
-    </div>
-  );
-}
-
-function GarantiaInput({ valor, editavel, onSave }: { valor: string; editavel: boolean; onSave: (v: string) => void }) {
-  const [texto, setTexto] = useState(valor);
-
-  if (!editavel) {
-    return valor
-      ? <span className="text-foreground/70">{valor}</span>
-      : <span className="text-muted-foreground/30">—</span>;
-  }
-
-  return (
-    <input
-      type="text"
-      value={texto}
-      onChange={(e) => setTexto(e.target.value)}
-      onBlur={() => onSave(texto)}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      placeholder="ex: 12 meses"
-      className="w-32 h-7 rounded border border-border/70 hover:border-sky-500/50 focus:border-sky-500/70 bg-background/60 focus:bg-background px-2 text-[12px] text-center text-foreground/90 placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-sky-500/20 transition-colors"
-    />
-  );
-}
-
-function formatBRLInline(v: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }

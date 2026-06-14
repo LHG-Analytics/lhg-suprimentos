@@ -172,6 +172,8 @@ const MatrizCellSchema = z.object({
   prazo_entrega_dias: z.number().int().min(0).nullable().optional(),
   condicao_pagamento: z.string().nullable().optional(),
   observacao:         z.string().nullable().optional(),
+  frete:              z.number().min(0).nullable().optional(),
+  garantia:           z.string().nullable().optional(),
 });
 
 export async function upsertMatrizCell(input: z.infer<typeof MatrizCellSchema>) {
@@ -182,48 +184,16 @@ export async function upsertMatrizCell(input: z.infer<typeof MatrizCellSchema>) 
   const parsed = MatrizCellSchema.safeParse(input);
   if (!parsed.success) throw new Error("Dados inválidos");
 
+  // Cast: as colunas frete/garantia foram adicionadas via migration 0021 e ainda
+  // não constam nos tipos gerados do Supabase. O cast contorna até regenerá-los.
+  const payload = { ...parsed.data, cotado_em: new Date().toISOString() };
   const { error } = await supabase
     .from("cotacao_matriz")
-    .upsert({
-      ...parsed.data,
-      cotado_em: new Date().toISOString(),
-    }, { onConflict: "cotacao_item_id,fornecedor_id" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .upsert(payload as any, { onConflict: "cotacao_item_id,fornecedor_id" });
 
   if (error) throw new Error(error.message);
   revalidatePath("/cotacoes");
-}
-
-// ── upsertFreteGarantia ───────────────────────────────────────────────────────
-// Frete (numérico) e garantia (texto) são por fornecedor da cotação — entram no
-// rodapé do mapa. O frete soma ao total do fornecedor.
-
-const FreteGarantiaSchema = z.object({
-  cotacao_id:    z.string().uuid(),
-  fornecedor_id: z.string().uuid(),
-  frete:         z.number().min(0).nullable().optional(),
-  garantia:      z.string().nullable().optional(),
-});
-
-export async function upsertFreteGarantia(input: z.infer<typeof FreteGarantiaSchema>) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const parsed = FreteGarantiaSchema.safeParse(input);
-  if (!parsed.success) throw new Error("Dados inválidos");
-
-  const { cotacao_id, fornecedor_id, frete, garantia } = parsed.data;
-  const { error } = await supabase
-    .from("cotacao_fornecedores")
-    .update({
-      ...(frete !== undefined ? { frete: frete ?? 0 } : {}),
-      ...(garantia !== undefined ? { garantia: garantia?.trim() || null } : {}),
-    })
-    .eq("cotacao_id", cotacao_id)
-    .eq("fornecedor_id", fornecedor_id);
-
-  if (error) throw new Error(error.message);
-  revalidatePath(`/cotacoes/${cotacao_id}`);
 }
 
 // ── adicionarFornecedorCotacao ────────────────────────────────────────────────
