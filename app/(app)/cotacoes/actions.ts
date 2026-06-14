@@ -288,11 +288,17 @@ export async function gerarPedidosDeCotacao(
       .eq("cotacao_id", cotacaoId);
     const unidadeIds = (cotacaoUnidades ?? []).map(cu => cu.unidade_id);
 
-    // Buscar itens com células da matriz
-    const { data: itens, error: itensErr } = await supabase
+    // Buscar itens com células da matriz (frete adicionado na migration 0021).
+    // Client casteado: a coluna frete ainda não consta nos tipos gerados e, na
+    // string do select, quebraria a inferência de todo o resultado.
+    interface CellRaw { fornecedor_id: string; preco_unitario: number | null; condicao_pagamento: string | null; prazo_entrega_dias: number | null; frete: number | null }
+    interface ItemRaw { id: string; quantidade: number; produto_id: string; cotacao_matriz: CellRaw[] }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: itensData, error: itensErr } = await (supabase as any)
       .from("cotacao_itens")
-      .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)")
+      .select("id, quantidade, produto_id, cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias, frete)")
       .eq("cotacao_id", cotacaoId);
+    const itens = itensData as ItemRaw[] | null;
 
     if (itensErr || !itens) {
       console.error("[gerarPedidos] itens error:", itensErr);
@@ -302,7 +308,7 @@ export async function gerarPedidosDeCotacao(
     // Agrupar por fornecedor
     const grupos = new Map<string, {
       preco_unitario: number; quantidade: number; produto_id: string;
-      condicao_pgto: string | null; prazo_entrega_dias: number | null;
+      condicao_pgto: string | null; prazo_entrega_dias: number | null; frete: number;
     }[]>();
 
     for (const item of itens) {
@@ -317,6 +323,7 @@ export async function gerarPedidosDeCotacao(
         produto_id:         item.produto_id,
         condicao_pgto:      cell.condicao_pagamento,
         prazo_entrega_dias: cell.prazo_entrega_dias ?? null,
+        frete:              Number(cell.frete ?? 0),
       });
     }
 
@@ -337,9 +344,11 @@ export async function gerarPedidosDeCotacao(
 
     for (const [fornId, linhas] of grupos) {
       lastNum++;
-      const numero      = `PED-${year}-${String(lastNum).padStart(4, "0")}`;
-      const valor_total = linhas.reduce((acc, l) => acc + l.preco_unitario * l.quantidade, 0);
-      const condicao    = linhas[0]?.condicao_pgto ?? null;
+      const numero        = `PED-${year}-${String(lastNum).padStart(4, "0")}`;
+      const totalItens    = linhas.reduce((acc, l) => acc + l.preco_unitario * l.quantidade, 0);
+      const freteGrupo    = linhas.reduce((acc, l) => acc + l.frete, 0);
+      const valor_total   = totalItens + freteGrupo;
+      const condicao      = linhas[0]?.condicao_pgto ?? null;
 
       const maxPrazo = linhas.reduce<number | null>((max, l) => {
         if (l.prazo_entrega_dias == null) return max;
@@ -352,6 +361,7 @@ export async function gerarPedidosDeCotacao(
 
       const { data: pedido, error: pedErr } = await supabase
         .from("pedidos")
+        // frete: coluna nova (migration 0022); cast pois ainda não está nos tipos gerados
         .insert({
           numero,
           cotacao_id:    cotacaoId,
@@ -361,7 +371,9 @@ export async function gerarPedidosDeCotacao(
           valor_total,
           condicao_pgto: condicao,
           entrega_prev,
-        })
+          frete:         freteGrupo,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any)
         .select("id")
         .single();
 

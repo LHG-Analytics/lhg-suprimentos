@@ -313,6 +313,15 @@ export async function pushPedidoOmie(
     ? `${pedido.condicao_pgto} — LHG Suprimentos ${pedido.numero}`
     : `LHG Suprimentos ${pedido.numero}`;
 
+  // Frete do pedido (coluna nova migration 0022; lida à parte com client casteado
+  // porque ainda não consta nos tipos gerados — incluí-la no select acima
+  // quebraria a inferência de todo o resultado).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: freteRow } = await (supabase as any)
+    .from("pedidos").select("frete").eq("id", pedidoId).single();
+  // cTpFrete "0" = CIF (frete por conta do remetente/fornecedor); "9" = sem frete.
+  const valFrete = Number(freteRow?.frete ?? 0);
+
   const payload: import("@/lib/omie/pedidos").OmiePedParamIncluir = {
     cabecalho_incluir: {
       cCodIntPed,
@@ -327,7 +336,9 @@ export async function pushPedidoOmie(
       cObs:        `${obsTexto} [${cCodIntPed.slice(-4)}]`, // sufixo único quebra hash REDUNDANT
       cObsInt:     "Pedido gerado pelo sistema LHG Suprimentos",
     },
-    frete_incluir: { cTpFrete: "9" },
+    frete_incluir: valFrete > 0
+      ? { cTpFrete: "0", nValFrete: valFrete }
+      : { cTpFrete: "9" },
     // No retry, cCodIntItem também muda (pode ser chave de deduplicação do Omie)
     produtos_incluir: foiRedundant
       ? produtosIncluir.map((p, i) => ({ ...p, cCodIntItem: `R${retryTs}${i + 1}` }))
