@@ -427,27 +427,23 @@ export function AiChip() {
 
   return (
     <>
-      {/* ── Botão flutuante ─────────────────────────────────────────── */}
+      {/* ── Botão flutuante (bolinha translúcida) ───────────────────── */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
+          title="Assistente IA (Ctrl + /)"
           className={cn(
             "fixed bottom-5 right-5 z-40 group",
-            "flex items-center gap-2 h-11 pl-3 pr-3.5 rounded-full",
-            "bg-card border border-border/70",
-            "hover:border-lhg-500/50",
-            "shadow-[0_8px_30px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.04)]",
-            "transition-colors",
+            "w-11 h-11 rounded-full flex items-center justify-center",
+            "bg-card/40 backdrop-blur-md border border-border/40",
+            "opacity-60 hover:opacity-100 hover:border-lhg-500/50 hover:scale-105",
+            "shadow-[0_4px_20px_rgba(0,0,0,.35)]",
+            "transition-all duration-200",
           )}
           aria-label="Abrir assistente IA"
         >
-          <span className="w-6 h-6 rounded-full bg-gradient-to-br from-lhg-400 to-lhg-600 flex items-center justify-center text-zinc-950">
-            <Sparkles size={13} strokeWidth={2.25} />
-          </span>
-          <span className="text-sm font-medium text-foreground">Assistente IA</span>
-          <span className="ml-1 flex items-center gap-0.5">
-            <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1.5 font-mono text-[9px] text-muted-foreground">Ctrl</kbd>
-            <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">/</kbd>
+          <span className="w-7 h-7 rounded-full bg-gradient-to-br from-lhg-400 to-lhg-600 flex items-center justify-center text-zinc-950 shadow-sm">
+            <Sparkles size={15} strokeWidth={2.25} />
           </span>
         </button>
       )}
