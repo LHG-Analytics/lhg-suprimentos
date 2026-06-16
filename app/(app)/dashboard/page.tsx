@@ -134,7 +134,9 @@ async function fetchKpis(supabase: SupabaseClient) {
 
   const valor     = (valorRows     ?? []).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
   const valorPrev = (valorPrevRows ?? []).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
-  const economia  = (economiaRows  ?? []).reduce((s, r) => s + (r.economia ?? 0), 0);
+  // Economias negativas (compra acima da média dos concorrentes) não subtraem
+  // do total — a "Economia do mês" mostra apenas os ganhos reais.
+  const economia  = (economiaRows  ?? []).reduce((s, r) => s + Math.max(0, r.economia ?? 0), 0);
 
   return {
     abertas:       abertas       ?? 0,
