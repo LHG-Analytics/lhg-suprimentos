@@ -501,8 +501,6 @@ export default async function DashboardPage({
           value={kpis.abertas.toString()}
           delta={kpis.deltaAbertas ?? undefined}
           prev={kpis.abertasPrev.toString()}
-          meta="10"
-          metaLabel="META"
           mono
         />
         <KpiCard
