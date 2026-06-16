@@ -409,13 +409,50 @@ export async function gerarPedidosDeCotacao(
       }
     }
 
+    // Economia vs concorrência (mesma lógica de aprovarCotacao): compara o preço
+    // do vencedor de cada item com a média dos concorrentes que cotaram o item.
+    // Sem isso, cotações aprovadas pelo wizard não somavam economia no dashboard.
+    let valorAprovadoTotal = 0;
+    let mediaRejeitadosTotal = 0;
+    let itensComConcorrencia = 0;
+
+    for (const item of itens) {
+      const fornVencedor = selecoes[item.id];
+      if (!fornVencedor) continue;
+      const cellV = item.cotacao_matriz.find(c => c.fornecedor_id === fornVencedor);
+      if (!cellV?.preco_unitario) continue;
+
+      valorAprovadoTotal += item.quantidade * cellV.preco_unitario;
+
+      const concorrentes = item.cotacao_matriz
+        .filter(c => c.fornecedor_id !== fornVencedor && c.preco_unitario != null && c.preco_unitario > 0)
+        .map(c => c.preco_unitario as number);
+
+      if (concorrentes.length > 0) {
+        const media = concorrentes.reduce((a, b) => a + b, 0) / concorrentes.length;
+        mediaRejeitadosTotal += item.quantidade * media;
+        itensComConcorrencia++;
+      }
+    }
+
+    const economiaCalc    = itensComConcorrencia > 0 ? mediaRejeitadosTotal - valorAprovadoTotal : null;
+    const economiaPctCalc = itensComConcorrencia > 0 && mediaRejeitadosTotal > 0
+      ? (economiaCalc! / mediaRejeitadosTotal) * 100
+      : null;
+
     await supabase
       .from("cotacoes")
-      .update({ status: "aprovado" })
+      .update({
+        status:         "aprovado",
+        ...(valorAprovadoTotal > 0 ? { valor_estimado: valorAprovadoTotal } : {}),
+        ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
+        ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),
+      })
       .eq("id", cotacaoId);
 
     revalidatePath("/cotacoes");
     revalidatePath("/pedidos");
+    revalidatePath("/dashboard");
     return { ok: true, numeroPedidos: grupos.size, pedidoIds };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro inesperado ao gerar pedidos";
@@ -939,6 +976,7 @@ export async function aprovarCotacao(
   revalidatePath(`/cotacoes/${cotacaoId}`);
   revalidatePath("/cotacoes");
   revalidatePath("/pedidos");
+  revalidatePath("/dashboard");
 
   return { pedidos: pedidosCriados };
 }
