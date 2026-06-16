@@ -757,10 +757,11 @@ export async function aprovarCotacao(
     cotacao_matriz: MatrizRaw[];
   };
 
-  const itens = cotacao.cotacao_itens as ItemRaw[];
-  const semVencedor = itens.filter(i => !i.selecionado_forn);
-  if (semVencedor.length > 0) {
-    return { erro: `${semVencedor.length} item(ns) sem fornecedor vencedor atribuído` };
+  // Processa apenas os itens com fornecedor vencedor; os sem atribuição
+  // (ex: nenhum fornecedor cotou o produto) ficam de fora do pedido.
+  const itens = (cotacao.cotacao_itens as ItemRaw[]).filter(i => i.selecionado_forn);
+  if (itens.length === 0) {
+    return { erro: "Nenhum item tem fornecedor vencedor atribuído" };
   }
 
   // 3. Agrupar itens por fornecedor vencedor

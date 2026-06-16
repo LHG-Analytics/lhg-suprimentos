@@ -49,9 +49,11 @@ export function AprovarCompraPanel({ cotacaoId, cotacaoStatus, itens, fornecedor
   const [pendingAtrib,  startAtrib]       = useTransition();
   const [pendingAprov,  startAprov]       = useTransition();
 
-  const aprovado         = cotacaoStatus === "aprovado";
+  const aprovado          = cotacaoStatus === "aprovado";
   const todosSelecionados = selecionados.size === itens.length && itens.length > 0;
-  const todosTemVencedor  = itens.every(i => i.selecionado_forn);
+  const comVencedor       = itens.filter(i => i.selecionado_forn).length;
+  const todosTemVencedor  = comVencedor === itens.length && itens.length > 0;
+  const podeAprovar       = comVencedor > 0; // itens sem vencedor ficam de fora
 
   const fornById = new Map(fornecedores.map(f => [f.id, f]));
   const corForn  = new Map(fornecedores.map((f, idx) => [f.id, CORES[idx % CORES.length]]));
@@ -205,16 +207,23 @@ export function AprovarCompraPanel({ cotacaoId, cotacaoStatus, itens, fornecedor
       {/* Botão Aprovar */}
       <div className="flex items-center justify-between pt-1">
         <span className="text-xs text-muted-foreground">
-          {itens.filter(i => i.selecionado_forn).length}/{itens.length} itens com vencedor
-          {todosTemVencedor && <CheckCircle2 size={11} className="inline ml-1 text-emerald-400" />}
+          {comVencedor}/{itens.length} itens com vencedor
+          {todosTemVencedor
+            ? <CheckCircle2 size={11} className="inline ml-1 text-emerald-400" />
+            : comVencedor > 0 && (
+                <span className="ml-1.5 text-amber-400/80">
+                  · {itens.length - comVencedor} sem cotação fica(m) de fora
+                </span>
+              )
+          }
         </span>
         <button
           onClick={handleAprovar}
-          disabled={!todosTemVencedor || pendingAprov}
-          title={!todosTemVencedor ? "Todos os itens precisam ter fornecedor vencedor" : undefined}
+          disabled={!podeAprovar || pendingAprov}
+          title={!podeAprovar ? "Atribua um fornecedor vencedor a pelo menos um item" : undefined}
           className={cn(
             "flex items-center gap-2 h-9 px-5 rounded-lg font-medium text-sm transition-colors",
-            todosTemVencedor && !pendingAprov
+            podeAprovar && !pendingAprov
               ? "bg-emerald-500 hover:bg-emerald-600 text-white"
               : "bg-muted text-muted-foreground cursor-not-allowed",
           )}

@@ -190,6 +190,21 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
     }
     return frete;
   }
+  // Total efetivamente SELECIONADO deste fornecedor (itens marcados como vencedor
+  // dele) + frete dessas células — é o valor do pedido que sairá. Usado para
+  // conferir pedido mínimo. { total, itens } com itens = nº de itens escolhidos.
+  function totalSelecionadoForn(fornId: string): { total: number; itens: number } {
+    let total = 0;
+    let qtdItens = 0;
+    for (const item of cotacao.cotacao_itens) {
+      if (selecoes[item.id] !== fornId) continue;
+      const cell = matrizMap[item.id]?.[fornId];
+      if (!cell?.preco_unitario) continue;
+      total += cell.preco_unitario * item.quantidade + (cell.frete ?? 0);
+      qtdItens++;
+    }
+    return { total, itens: qtdItens };
+  }
   // Garantias distintas informadas pelo fornecedor (consolidado para o rodapé)
   function garantiaForn(fornId: string): string | null {
     const set = new Set<string>();
@@ -717,23 +732,20 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                   iaContent={<span className="text-muted-foreground/40">—</span>}
                 />
 
-                {/* Total geral (itens + frete) */}
+                {/* Total selecionado por fornecedor (o que vai virar pedido) */}
                 <RodapeLinha
-                  label="Valor total"
+                  label="Total selecionado"
                   strong
                   colItemClass={colItem}
                   fornecedores={fornecedores}
                   render={(f) => {
-                    const { total, atendeAll } = subtotalItensForn(f.id);
-                    const totalGeral = total + freteForn(f.id);
-                    const ehMelhor = atendeAll && totalGeral === totalSemOtimizacao && totalSemOtimizacao > 0;
-                    return total > 0 ? (
-                      <div className={cn(
-                        "font-mono text-sm font-bold",
-                        ehMelhor ? "text-emerald-400" : "text-foreground",
-                      )}>
-                        {formatBRL(totalGeral)}
-                        {ehMelhor && <span className="block text-[9px] font-medium text-emerald-600 uppercase tracking-wider">menor</span>}
+                    const { total, itens } = totalSelecionadoForn(f.id);
+                    return itens > 0 ? (
+                      <div className="font-mono text-sm font-bold text-emerald-400">
+                        {formatBRL(total)}
+                        <span className="block text-[9px] font-medium text-emerald-600/80 uppercase tracking-wider">
+                          {itens} {itens === 1 ? "item" : "itens"}
+                        </span>
                       </div>
                     ) : <span className="text-muted-foreground/30">—</span>;
                   }}
