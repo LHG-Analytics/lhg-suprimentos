@@ -33,6 +33,7 @@ import { categoriaParaFamilia } from "./familia-map";
 import {
   listAllRequisicoes,
   type OmieRequisicaoItem,
+  type OmieRequisicaoItemDetalhe,
 } from "./requisicao";
 
 // ── Tipos internos ─────────────────────────────────────────────────────────────
@@ -865,6 +866,42 @@ export interface UnidadeComCreds {
 // ── syncRequisicoes ─────────────────────────────────────────────────────────────
 
 /**
+ * Mapeia os itens do Omie (ItensReqCompra) para linhas de requisicao_itens,
+ * resolvendo o produto local por omie_codigo. Itens sem produto cadastrado
+ * ficam como produto_novo (livre), exigindo cadastro antes da cotação.
+ */
+async function mapearItensReqCompra(
+  supabase: SupabaseClient,
+  itensReq: OmieRequisicaoItemDetalhe[],
+  reqId: string,
+  unidadeId: string,
+) {
+  return Promise.all(
+    itensReq.map(async (d) => {
+      let produtoId: string | null = null;
+      if (d.codProd) {
+        const { data: prod } = await supabase
+          .from("produtos")
+          .select("id")
+          .eq("omie_codigo", String(d.codProd))
+          .eq("omie_unidade_id", unidadeId)
+          .maybeSingle();
+        produtoId = prod?.id ?? null;
+      }
+      return {
+        requisicao_id:       reqId,
+        produto_id:          produtoId,
+        produto_nome_livre:  produtoId ? null : (d.obsItem ?? "Produto Omie"),
+        produto_unidade_med: null,
+        produto_novo:        !produtoId,
+        quantidade:          d.qtde,
+        observacao:          d.obsItem ?? null,
+      };
+    }),
+  );
+}
+
+/**
  * Pull bidirecional: busca Requisições de Compra abertas no Omie
  * e upserta em omie_requisicoes. Para cada requisição do Omie sem
  * correspondente local, cria um registro em requisicoes com origem='omie'.
@@ -976,32 +1013,9 @@ export async function syncRequisicoes(
               .insert({ requisicao_id: reqId, unidade_id: unidadeId })
               .throwOnError();
 
-            // Criar itens da requisição
+            // Criar itens da requisição (reqId já é não-nulo dentro deste bloco)
             if (item.ItensReqCompra?.length) {
-              const itensMapped = await Promise.all(
-                item.ItensReqCompra.map(async (d) => {
-                  let produtoId: string | null = null;
-                  if (d.codProd) {
-                    const { data: prod } = await supabase
-                      .from("produtos")
-                      .select("id")
-                      .eq("omie_codigo", String(d.codProd))
-                      .eq("omie_unidade_id", unidadeId)
-                      .maybeSingle();
-                    produtoId = prod?.id ?? null;
-                  }
-
-                  return {
-                    requisicao_id:       reqId,
-                    produto_id:          produtoId,
-                    produto_nome_livre:  produtoId ? null : (d.obsItem ?? "Produto Omie"),
-                    produto_unidade_med: null,
-                    produto_novo:        !produtoId,
-                    quantidade:          d.qtde,
-                    observacao:          d.obsItem ?? null,
-                  };
-                }),
-              );
+              const itensMapped = await mapearItensReqCompra(supabase, item.ItensReqCompra, reqId!, unidadeId);
 
               const { error: itensErr } = await supabase.from("requisicao_itens").insert(itensMapped);
               if (itensErr) {
@@ -1024,6 +1038,45 @@ export async function syncRequisicoes(
             .from("omie_requisicoes")
             .update({ requisicao_id: reqId })
             .eq("id", espelho!.id);
+        } else {
+          // 3. Requisição já existe localmente: re-sincronizar os itens com o Omie.
+          //    Só mexe enquanto a requisição não entrou em cotação/aprovação —
+          //    aí os itens já viraram trabalho e não devem ser sobrescritos.
+          const reqId = espelho.requisicao_id;
+          if (!reqId) continue; // garante string (no else já é truthy)
+          const { data: reqLocal } = await supabase
+            .from("requisicoes")
+            .select("status, origem")
+            .eq("id", reqId)
+            .maybeSingle();
+
+          const podeResync =
+            reqLocal?.origem === "omie" &&
+            (reqLocal?.status === "aguardando_cotacao" ||
+              reqLocal?.status === "pendente_produto" ||
+              reqLocal?.status === "rascunho");
+
+          if (podeResync) {
+            const itensReq = item.ItensReqCompra ?? [];
+            const itensMapped = await mapearItensReqCompra(supabase, itensReq, reqId, unidadeId);
+
+            // Substitui os itens: remove os antigos e recria a partir do Omie
+            await supabase.from("requisicao_itens").delete().eq("requisicao_id", reqId);
+            if (itensMapped.length > 0) {
+              const { error: itensErr } = await supabase.from("requisicao_itens").insert(itensMapped);
+              if (itensErr) console.error("[sync/req] atualizar itens:", itensErr.message);
+            }
+
+            // Ajusta o status conforme produtos pendentes de cadastro
+            const temProdutoNovo = itensMapped.some((i) => i.produto_novo);
+            await supabase
+              .from("requisicoes")
+              .update({
+                status: temProdutoNovo ? "pendente_produto" : "aguardando_cotacao",
+                omie_sincronizado_em: new Date().toISOString(),
+              })
+              .eq("id", reqId);
+          }
         }
       } catch (err) {
         console.error("[sync/req] item:", (err as Error).message);
