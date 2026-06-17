@@ -8,6 +8,7 @@
  * Preserva seleção por item, sugestão IA, e geração de pedidos.
  */
 import { useState, useMemo, useTransition, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, X, Plus,
@@ -114,8 +115,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   const [removingFornId,   setRemovingFornId]   = useState<string | null>(null);
   const [cadastroItem,     setCadastroItem]     = useState<{ id: string; nome: string } | null>(null);
   const [printOpen,        setPrintOpen]        = useState(false);
+  const [mounted,          setMounted]          = useState(false);
 
   const unidadeIdCotacao = cotacao.cotacao_unidades[0]?.unidade_id ?? "";
+
+  useEffect(() => setMounted(true), []);
 
   // Liga o modo de impressão escopado (CSS em globals.css) enquanto o overlay
   // de PDF está aberto — assim window.print() imprime só o documento.
@@ -934,9 +938,9 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         jaAdicionados={fornecedores.map(f => f.id)}
       />
 
-      {/* ── Overlay de exportação PDF (pré-visualização + imprimir) ──────────── */}
-      {printOpen && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-zinc-200/95 backdrop-blur-sm">
+      {/* ── Overlay de exportação PDF (portal no body p/ impressão limpa) ────── */}
+      {mounted && printOpen && createPortal(
+        <div data-cotacao-print className="fixed inset-0 z-[200] flex flex-col bg-zinc-200/95 backdrop-blur-sm">
           {/* Barra de ações — não vai para o PDF */}
           <div className="no-print flex items-center justify-between gap-3 bg-zinc-900 px-4 sm:px-6 py-3 text-white shadow-lg">
             <span className="text-sm font-medium flex items-center gap-2">
@@ -961,9 +965,9 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </div>
           </div>
 
-          {/* Área de papel — rolável */}
-          <div className="flex-1 overflow-auto p-4 sm:p-8">
-            <div className="mx-auto w-full max-w-[1100px] rounded-sm bg-white shadow-2xl">
+          {/* Área de papel — rolável na tela, fluxo normal no print */}
+          <div className="print-scroll flex-1 overflow-auto p-4 sm:p-8">
+            <div className="print-paper mx-auto w-full max-w-[1100px] rounded-sm bg-white shadow-2xl">
               <CotacaoPrintDoc
                 numero={cotacao.numero}
                 titulo={cotacao.titulo}
@@ -981,7 +985,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ── Modal Cadastrar Produto no Omie (item livre da cotação) ──────────── */}

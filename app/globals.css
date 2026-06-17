@@ -247,21 +247,37 @@
    telas: só o #cotacao-print-doc é impresso.
    ============================================================ */
 @media print {
-  body.cotacao-print-mode * { visibility: hidden !important; }
-  body.cotacao-print-mode #cotacao-print-doc,
-  body.cotacao-print-mode #cotacao-print-doc * { visibility: visible !important; }
-  body.cotacao-print-mode #cotacao-print-doc {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    margin: 0;
-    box-shadow: none !important;
+  /* O documento é renderizado via portal como filho direto do <body> com
+     [data-cotacao-print]. Escondemos todo o resto do app e deixamos o doc
+     FLUIR no fluxo normal (sem position fixed/absolute) — assim ele pagina
+     naturalmente, sem repetir cabeçalho nem produtos entre páginas. */
+  body.cotacao-print-mode > *:not([data-cotacao-print]) { display: none !important; }
+
+  body.cotacao-print-mode [data-cotacao-print] {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    background: #fff !important;
+    backdrop-filter: none !important;
   }
-  body.cotacao-print-mode .no-print { display: none !important; }
+  body.cotacao-print-mode [data-cotacao-print] .no-print { display: none !important; }
+  body.cotacao-print-mode [data-cotacao-print] .print-scroll {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  body.cotacao-print-mode [data-cotacao-print] .print-paper {
+    max-width: 100% !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
 
-  @page { size: A4 landscape; margin: 10mm; }
+  @page { size: A4 landscape; margin: 8mm; }
 
-  /* Evita cortar linhas/blocos entre páginas */
+  /* Evita cortar linhas/blocos no meio entre páginas */
   #cotacao-print-doc tr,
   #cotacao-print-doc .avoid-break { break-inside: avoid; }
   #cotacao-print-doc thead { display: table-header-group; }
