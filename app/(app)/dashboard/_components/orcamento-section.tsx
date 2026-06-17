@@ -15,11 +15,13 @@ import { OrcamentoWidget } from "./orcamento-widget";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ── Gastos reais por período (duplicado do page.tsx para uso neste SC) ─────────
+// pedIds: filtra pela unidade do orçamento (null = todas).
 async function fetchGastosPorPeriodo(
   supabase: SupabaseClient,
   startIso: string,
+  pedIds:   string[] | null,
 ): Promise<Record<string, number>> {
-  const { data } = await supabase
+  let q = supabase
     .from("pedido_itens")
     .select(`
       valor_total,
@@ -28,6 +30,9 @@ async function fetchGastosPorPeriodo(
     `)
     .in("pedidos.status", ["enviado", "em_transito", "recebido", "finalizado"] as const)
     .gte("pedidos.created_at", startIso);
+
+  if (pedIds) q = q.in("pedidos.id", pedIds);
+  const { data } = await q;
 
   const map: Record<string, number> = {};
   for (const item of data ?? []) {
@@ -49,11 +54,22 @@ export async function OrcamentoSection() {
     const now        = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    // Filtra o realizado pela MESMA unidade do orçamento (sheetConfig.unidadeSlug),
+    // para orçado e realizado ficarem no mesmo escopo.
+    let pedIds: string[] | null = null;
+    if (sheetConfig && sheetConfig.unidadeSlug && sheetConfig.unidadeSlug !== "todas") {
+      const { data: u } = await supabase.from("unidades").select("id").eq("slug", sheetConfig.unidadeSlug).single();
+      if (u?.id) {
+        const { data: pu } = await supabase.from("pedido_unidades").select("pedido_id").eq("unidade_id", u.id);
+        pedIds = (pu ?? []).map(r => r.pedido_id);
+      }
+    }
+
     const [orcamento, gastosCat] = await Promise.all([
       sheetConfig
         ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
         : Promise.resolve(null),
-      fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
+      fetchGastosPorPeriodo(supabase, monthStart.toISOString(), pedIds),
     ]);
 
     return (

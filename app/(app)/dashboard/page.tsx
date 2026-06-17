@@ -8,6 +8,7 @@
  */
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/utils";
 import { KpiCard } from "./_components/kpi-card";
@@ -105,14 +106,39 @@ function currentMonthRange() {
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
+// ── Filtro por unidade (M2M) ────────────────────────────────────────────────
+// Resolve os IDs de cotações/pedidos da unidade ativa. Retorna null quando a
+// unidade é "todas" (sem filtro) — mesmo padrão de requisicoes/page.tsx.
+async function idsDaUnidade(
+  supabase: SupabaseClient,
+  unidadeId: string | null,
+): Promise<{ cotIds: string[] | null; pedIds: string[] | null }> {
+  if (!unidadeId) return { cotIds: null, pedIds: null };
+  const [{ data: cu }, { data: pu }] = await Promise.all([
+    supabase.from("cotacao_unidades").select("cotacao_id").eq("unidade_id", unidadeId),
+    supabase.from("pedido_unidades").select("pedido_id").eq("unidade_id", unidadeId),
+  ]);
+  // Lista vazia (não null) força "nenhum resultado" quando a unidade não tem registros
+  return {
+    cotIds: (cu ?? []).map(r => r.cotacao_id),
+    pedIds: (pu ?? []).map(r => r.pedido_id),
+  };
+}
+
 // ── KPIs ──────────────────────────────────────────────────────────────────────
-async function fetchKpis(supabase: SupabaseClient) {
+async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedIds: string[] | null) {
   const { start, startIso } = currentMonthRange();
   const prevStart = new Date(start.getFullYear(), start.getMonth() - 1, 1);
   const prevEnd   = new Date(start.getFullYear(), start.getMonth(), 0);
 
   const OPEN_STATUS   = ["rascunho", "cotacao", "pendente"] as const;
   const IN_PROGRESS   = ["cotacao", "pendente"] as const;
+
+  // Aplica o filtro de unidade (.in id) quando há lista; null = todas as unidades.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byCot = (q: any) => (cotIds ? q.in("id", cotIds) : q);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byPed = (q: any) => (pedIds ? q.in("id", pedIds) : q);
 
   const [
     { count: abertas },
@@ -123,20 +149,20 @@ async function fetchKpis(supabase: SupabaseClient) {
     { count: pendAprov },
     { count: pendAprovPrev },
   ] = await Promise.all([
-    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null),
-    supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null),
-    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).is("deleted_at", null),
-    supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).gte("created_at", prevStart.toISOString()).lte("created_at", prevEnd.toISOString()).is("deleted_at", null),
-    supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null),
-    supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao"),
-    supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso),
+    byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null)),
+    byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null)),
+    byCot(supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).is("deleted_at", null)),
+    byCot(supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).gte("created_at", prevStart.toISOString()).lte("created_at", prevEnd.toISOString()).is("deleted_at", null)),
+    byCot(supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null)),
+    byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao")),
+    byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso)),
   ]);
 
-  const valor     = (valorRows     ?? []).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
-  const valorPrev = (valorPrevRows ?? []).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
+  const valor     = ((valorRows     ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
+  const valorPrev = ((valorPrevRows ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
   // Economias negativas (compra acima da média dos concorrentes) não subtraem
   // do total — a "Economia do mês" mostra apenas os ganhos reais.
-  const economia  = (economiaRows  ?? []).reduce((s, r) => s + Math.max(0, r.economia ?? 0), 0);
+  const economia  = ((economiaRows  ?? []) as Array<{ economia: number | null }>).reduce((s, r) => s + Math.max(0, r.economia ?? 0), 0);
 
   return {
     abertas:       abertas       ?? 0,
@@ -157,6 +183,7 @@ async function fetchChartData(
   supabase: SupabaseClient,
   fromStr: string,
   toStr: string,
+  pedIds: string[] | null,
 ): Promise<{
   series: ChartSerie[];
   labels: string[];
@@ -167,7 +194,7 @@ async function fetchChartData(
   const fromIso = new Date(fromStr + "T00:00:00").toISOString();
   const toIso   = new Date(toStr   + "T23:59:59").toISOString();
 
-  const { data: pedidos } = await supabase
+  let pedidosQuery = supabase
     .from("pedidos")
     .select(`
       valor_total,
@@ -177,6 +204,9 @@ async function fetchChartData(
     .in("status", ["enviado", "em_transito", "recebido", "finalizado"] as const)
     .gte("created_at", fromIso)
     .lte("created_at", toIso);
+
+  if (pedIds) pedidosQuery = pedidosQuery.in("id", pedIds);
+  const { data: pedidos } = await pedidosQuery;
 
   const grouped: Record<string, Record<string, number>> = {};
   const slugCorOverride: Record<string, string> = {};
@@ -214,36 +244,41 @@ async function fetchChartData(
 }
 
 // ── Ações pendentes reais ─────────────────────────────────────────────────────
-async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
+async function fetchAcoes(supabase: SupabaseClient, cotIds: string[] | null, pedIds: string[] | null): Promise<AcaoItem[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byCot = (q: any) => (cotIds ? q.in("id", cotIds) : q);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byPed = (q: any) => (pedIds ? q.in("id", pedIds) : q);
+
   const [
     { data: cotsPendentes },
     { data: pedsPendentes },
     { data: pedErroOmie },
   ] = await Promise.all([
     // Cotações aguardando cotação de preços
-    supabase
+    byCot(supabase
       .from("cotacoes")
       .select("id, numero, titulo, valor_estimado, created_at")
       .eq("status", "cotacao")
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
-      .limit(4),
+      .limit(4)),
 
     // Pedidos aguardando aprovação
-    supabase
+    byPed(supabase
       .from("pedidos")
       .select("id, numero, valor_total, created_at, fornecedores(nome_fantasia, razao_social)")
       .eq("status", "aguardando_aprovacao")
       .order("created_at", { ascending: true })
-      .limit(4),
+      .limit(4)),
 
     // Pedidos com erro de sincronização Omie
-    supabase
+    byPed(supabase
       .from("pedidos")
       .select("id, numero, valor_total, created_at, omie_erro")
       .eq("omie_status", "erro")
       .order("created_at", { ascending: true })
-      .limit(2),
+      .limit(2)),
   ]);
 
   const acoes: AcaoItem[] = [];
@@ -296,8 +331,8 @@ async function fetchAcoes(supabase: SupabaseClient): Promise<AcaoItem[]> {
 }
 
 // ── Cotações para a tabela ────────────────────────────────────────────────────
-async function fetchCotacoes(supabase: SupabaseClient): Promise<{ rows: CotacaoRow[]; total: number }> {
-  const { data, count } = await supabase
+async function fetchCotacoes(supabase: SupabaseClient, cotIds: string[] | null): Promise<{ rows: CotacaoRow[]; total: number }> {
+  let q = supabase
     .from("cotacoes")
     .select(
       `id, numero, titulo, status, valor_estimado, economia, prazo, urgente,
@@ -310,6 +345,9 @@ async function fetchCotacoes(supabase: SupabaseClient): Promise<{ rows: CotacaoR
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(8);
+
+  if (cotIds) q = q.in("id", cotIds);
+  const { data, count } = await q;
 
   const rows: CotacaoRow[] = (data ?? []).map((c: Record<string, unknown>) => ({
     id:           c.id as string,
@@ -336,9 +374,10 @@ async function fetchCotacoes(supabase: SupabaseClient): Promise<{ rows: CotacaoR
 async function fetchGastosPorPeriodo(
   supabase:  SupabaseClient,
   startIso:  string,
-  endIso?:   string,
+  endIso:    string | undefined,
+  pedIds:    string[] | null,
 ): Promise<Record<string, number>> {
-  const baseQuery = supabase
+  let baseQuery = supabase
     .from("pedido_itens")
     .select(`
       valor_total,
@@ -348,9 +387,9 @@ async function fetchGastosPorPeriodo(
     .in("pedidos.status", ["enviado", "em_transito", "recebido", "finalizado"] as const)
     .gte("pedidos.created_at", startIso);
 
-  const { data } = endIso
-    ? await baseQuery.lte("pedidos.created_at", endIso)
-    : await baseQuery;
+  if (endIso)  baseQuery = baseQuery.lte("pedidos.created_at", endIso);
+  if (pedIds)  baseQuery = baseQuery.in("pedidos.id", pedIds);
+  const { data } = await baseQuery;
 
   const map: Record<string, number> = {};
   for (const item of data ?? []) {
@@ -453,6 +492,17 @@ export default async function DashboardPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Unidade ativa (cookie) — dashboard segue o seletor, como as demais telas.
+  // "todas" → unidadeId null → KPIs/gastos da rede inteira.
+  const cookieStore = await cookies();
+  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
+  let unidadeId: string | null = null;
+  if (slug && slug !== "todas") {
+    const { data: u } = await supabase.from("unidades").select("id").eq("slug", slug).single();
+    unidadeId = u?.id ?? null;
+  }
+  const { cotIds, pedIds } = await idsDaUnidade(supabase, unidadeId);
+
   // Período: mês corrente e mês anterior (para delta CMV)
   const now        = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -470,12 +520,12 @@ export default async function DashboardPage({
   // Busca dados do Supabase em paralelo (rápido ~300ms).
   // Promise.allSettled garante que uma falha isolada não derruba o dashboard inteiro.
   const results = await Promise.allSettled([
-    fetchKpis(supabase),
-    fetchChartData(supabase, periodoFrom, periodoTo),
-    fetchAcoes(supabase),
-    fetchCotacoes(supabase),
-    fetchGastosPorPeriodo(supabase, monthStart.toISOString()),
-    fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString()),
+    fetchKpis(supabase, cotIds, pedIds),
+    fetchChartData(supabase, periodoFrom, periodoTo, pedIds),
+    fetchAcoes(supabase, cotIds, pedIds),
+    fetchCotacoes(supabase, cotIds),
+    fetchGastosPorPeriodo(supabase, monthStart.toISOString(), undefined, pedIds),
+    fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString(), pedIds),
   ]);
 
   // Valores de fallback para cada seção
