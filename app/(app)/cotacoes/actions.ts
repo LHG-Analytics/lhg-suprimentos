@@ -829,11 +829,24 @@ export async function aprovarCotacao(
     return { erro: "Nenhum item tem fornecedor vencedor atribuído" };
   }
 
-  // Itens selecionados ainda sem cadastro no Omie (livre ou produto sem
-  // omie_codigo) bloqueiam — precisam ser cadastrados antes do pedido.
-  const semCadastroOmie = itens.filter(i => !i.produtos?.omie_codigo);
-  if (semCadastroOmie.length > 0) {
-    return { erro: `${semCadastroOmie.length} item(ns) selecionado(s) ainda sem cadastro no Omie. Use "Cadastrar no Omie" na cotação antes de aprovar.` };
+  // A unidade da cotação tem credenciais Omie? Só exigimos cadastro no Omie
+  // (omie_codigo) quando o pedido será enviado ao Omie. Unidades sem vínculo
+  // (ex: Altana) operam internamente — o pedido é criado mas não enviado.
+  type UnidadeCreds = { unidades: { omie_app_key: string | null; omie_app_secret: string | null } | null };
+  const unidadesCot = cotacao.cotacao_unidades as UnidadeCreds[];
+  const unidadeTemOmie = unidadesCot.some(u => u.unidades?.omie_app_key && u.unidades?.omie_app_secret);
+
+  // Itens precisam estar vinculados a um produto do catálogo (produto livre não
+  // vira pedido). Quando a unidade tem Omie, exigimos também o omie_codigo.
+  const semProduto = itens.filter(i => !i.produtos);
+  if (semProduto.length > 0) {
+    return { erro: `${semProduto.length} item(ns) selecionado(s) sem produto no catálogo. Cadastre o produto antes de aprovar.` };
+  }
+  if (unidadeTemOmie) {
+    const semCadastroOmie = itens.filter(i => !i.produtos?.omie_codigo);
+    if (semCadastroOmie.length > 0) {
+      return { erro: `${semCadastroOmie.length} item(ns) selecionado(s) ainda sem cadastro no Omie. Use "Cadastrar no Omie" na cotação antes de aprovar.` };
+    }
   }
 
   // 3. Agrupar itens por fornecedor vencedor

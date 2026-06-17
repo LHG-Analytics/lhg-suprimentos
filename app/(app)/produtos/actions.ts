@@ -272,27 +272,31 @@ export async function criarProduto(
     .single();
 
   if (unidErr || !unidade) return { erro: "Unidade não encontrada" };
-  if (!unidade.omie_app_key || !unidade.omie_app_secret) {
-    return { erro: "Unidade sem credenciais Omie" };
-  }
 
-  const creds = { appKey: unidade.omie_app_key, appSecret: unidade.omie_app_secret };
+  // Unidade sem credenciais Omie (ex: Altana) → cria o produto SÓ localmente.
+  // O produto fica sem omie_codigo; o envio ao Omie acontece quando a unidade
+  // tiver credenciais (ou via cadastro manual no Omie depois).
+  const temOmie = !!(unidade.omie_app_key && unidade.omie_app_secret);
+
   const newId = crypto.randomUUID();
   const codigoIntegracao = `LHG-${newId.slice(0, 8)}`;
 
-  let omieCodigoProd: number;
-  try {
-    omieCodigoProd = await incluirProduto(creds, {
-      nome:             dados.nome.trim(),
-      unidade:          dados.unidade.trim().toUpperCase(),
-      ncm:              ncmLimpo,
-      valor_unitario:   dados.valor_unitario,
-      familia_omie:     dados.familia_omie.trim(),
-      codigo_interno:   dados.codigo?.trim(),
-      codigo_integracao: codigoIntegracao,
-    });
-  } catch (err) {
-    return { erro: `Erro ao criar no Omie: ${err instanceof Error ? err.message : "Erro desconhecido"}` };
+  let omieCodigoProd: number | null = null;
+  if (temOmie) {
+    const creds = { appKey: unidade.omie_app_key!, appSecret: unidade.omie_app_secret! };
+    try {
+      omieCodigoProd = await incluirProduto(creds, {
+        nome:             dados.nome.trim(),
+        unidade:          dados.unidade.trim().toUpperCase(),
+        ncm:              ncmLimpo,
+        valor_unitario:   dados.valor_unitario,
+        familia_omie:     dados.familia_omie.trim(),
+        codigo_interno:   dados.codigo?.trim(),
+        codigo_integracao: codigoIntegracao,
+      });
+    } catch (err) {
+      return { erro: `Erro ao criar no Omie: ${err instanceof Error ? err.message : "Erro desconhecido"}` };
+    }
   }
 
   const categoria = FAMILIA_TO_CATEGORIA[dados.familia_omie.toUpperCase()] ?? "Outros";
@@ -308,16 +312,16 @@ export async function criarProduto(
       familia_omie:         dados.familia_omie.trim(),
       categoria,
       codigo:               dados.codigo?.trim() ?? codigoIntegracao,
-      omie_codigo:          String(omieCodigoProd),
+      omie_codigo:          omieCodigoProd != null ? String(omieCodigoProd) : null,
       omie_descricao:       dados.descricao?.trim() ?? null,
-      omie_sincronizado_em: new Date().toISOString(),
+      omie_sincronizado_em: omieCodigoProd != null ? new Date().toISOString() : null,
       omie_unidade_id:      dados.unidade_id,
     })
     .select("id")
     .single();
 
   if (insertErr || !novoProd) {
-    console.error(`[criarProduto] Supabase insert falhou após Omie (omie_codigo=${omieCodigoProd}):`, insertErr?.message);
+    console.error(`[criarProduto] Supabase insert falhou (omie_codigo=${omieCodigoProd ?? "local"}):`, insertErr?.message);
     return { erro: insertErr?.message ?? "Erro ao salvar no banco de dados" };
   }
 
