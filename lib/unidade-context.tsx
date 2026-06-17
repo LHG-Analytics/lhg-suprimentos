@@ -82,7 +82,8 @@ export const UNIDADES: Unidade[] = [
     logo:      "/unidades/altana.webp",
     shortName: "Altana",
     cor:       "#a78bfa",
-    disabled:  true,
+    // Liberada para uso interno (sem vínculo Omie). O envio ao Omie fica
+    // indisponível até credenciais serem cadastradas; o resto funciona.
   },
   {
     id:        "lhg-holding",

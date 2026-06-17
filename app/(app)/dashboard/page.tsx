@@ -35,9 +35,9 @@ const SLUG_META: Record<string, { nome: string; cor: string }> = {
   "lush-ipiranga-concavo": { nome: "Lush Ipiranga (CONCAVO)", cor: "#8b5cf6" },
   "lush-lapa":             { nome: "Lush Lapa",              cor: "#38bdf8" },
   "andar-de-cima":         { nome: "Andar de Cima",          cor: "#f59e0b" },
+  "altana":                { nome: "Altana",                 cor: "#a78bfa" },
 };
-// Altana excluída enquanto estiver disabled (ativa=false no banco)
-const SLUG_ORDER = ["lush-ipiranga", "lush-ipiranga-concavo", "lush-lapa", "andar-de-cima"];
+const SLUG_ORDER = ["lush-ipiranga", "lush-ipiranga-concavo", "lush-lapa", "andar-de-cima", "altana"];
 
 // ── Labels de meses ───────────────────────────────────────────────────────────
 const MONTH_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
