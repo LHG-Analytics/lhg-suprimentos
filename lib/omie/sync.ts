@@ -1085,11 +1085,12 @@ export async function syncRequisicoes(
     }
 
     // 3. Limpeza de órfãs: requisições origem='omie' desta unidade que não
-    //    existem mais no Omie (excluídas lá). Guarda-chuvas:
-    //    - só roda se o Omie retornou ao menos 1 requisição (evita apagar tudo
-    //      por uma resposta vazia transitória da API);
-    //    - preserva requisições em cotação/aprovadas ou com cotação vinculada.
-    if (itens.length > 0) {
+    //    existem mais no Omie (viraram pedido ou foram excluídas lá).
+    //    Roda mesmo com lista vazia: o listAllRequisicoes só retorna [] quando
+    //    o Omie confirma "não existem registros" — falhas reais (rede/auth/5xx)
+    //    lançam exceção e caem no catch abaixo, sem chegar aqui.
+    //    Preserva requisições em cotação/aprovadas ou com cotação vinculada.
+    {
       const codigosOmie = new Set(itens.map((i) => i.codReqCompra).filter(Boolean));
 
       const { data: locais } = await supabase
