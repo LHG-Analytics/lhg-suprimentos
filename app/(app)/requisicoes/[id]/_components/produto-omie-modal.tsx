@@ -20,6 +20,9 @@ interface Props {
   requisicaoItemId?: string;
   unidadeId:         string;
   nomeSugerido:      string;
+  /** Callback após criar no Omie — recebe o produtoId. Se fornecido, substitui
+   *  o vínculo padrão com requisicaoItemId (usado fora da tela de requisição). */
+  onCreated?:        (produtoId: string) => Promise<void> | void;
 }
 
 interface NcmItem { codigo: string; descricao: string; }
@@ -185,7 +188,7 @@ function NcmSearch({ value, onChange }: { value: string; onChange: (codigo: stri
   );
 }
 
-export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, nomeSugerido }: Props) {
+export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, nomeSugerido, onCreated }: Props) {
   const [nome,             setNome]             = useState(nomeSugerido);
   const [unidade,          setUnidade]          = useState("UN");
   const [ncmCodigo,        setNcmCodigo]        = useState("");
@@ -249,7 +252,10 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
       if ("erro" in result) { toast.error(result.erro); return; }
 
       const { produtoId } = result;
-      if (requisicaoItemId) {
+      if (onCreated) {
+        await onCreated(produtoId);
+        toast.success(`Produto "${nome}" criado no Omie e vinculado`);
+      } else if (requisicaoItemId) {
         await vincularProdutoItem(requisicaoItemId, produtoId);
         toast.success(`Produto "${nome}" criado no Omie e vinculado`);
       } else {

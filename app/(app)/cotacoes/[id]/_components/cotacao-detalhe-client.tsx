@@ -15,16 +15,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, vincularProdutoCotacaoItem } from "../../actions";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
 import { MatrizCelula, type MatrizCellData } from "./matriz-celula";
+import { ProdutoOmieModal } from "@/app/(app)/requisicoes/[id]/_components/produto-omie-modal";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-interface Produto        { id: string; codigo: string; nome: string; unidade_med: string; categoria: string }
-interface CotacaoItem    { id: string; quantidade: number; melhor_forn: string | null; selecionado_forn: string | null; produtos: Produto | null; cotacao_matriz: MatrizCellData[] }
+interface Produto        { id: string; codigo: string; nome: string; unidade_med: string; categoria: string; omie_codigo: string | null }
+interface CotacaoItem    { id: string; quantidade: number; melhor_forn: string | null; selecionado_forn: string | null; produtos: Produto | null; cotacao_matriz: MatrizCellData[]; produto_nome_livre: string | null; produto_unidade_med: string | null; produto_novo: boolean | null }
 interface FornecedorBase { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null; email?: string | null; telefone?: string | null; contato?: string | null }
 interface CotacaoForn    { fornecedor_id: string; fornecedores: FornecedorBase | null }
 
@@ -109,6 +110,9 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   const [emailModalOpen,   setEmailModalOpen]   = useState(false);
   const [emailMensagem,    setEmailMensagem]    = useState("");
   const [removingFornId,   setRemovingFornId]   = useState<string | null>(null);
+  const [cadastroItem,     setCadastroItem]     = useState<{ id: string; nome: string } | null>(null);
+
+  const unidadeIdCotacao = cotacao.cotacao_unidades[0]?.unidade_id ?? "";
 
   const editavel = cotacao.status !== "aprovado" && cotacao.status !== "aprovada" && cotacao.status !== "fechada";
 
@@ -616,6 +620,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
               <tbody>
                 {cotacao.cotacao_itens.map((item, idx) => {
                   const prod = item.produtos;
+                  // Precisa cadastro no Omie: item livre (produto_novo) ou produto
+                  // do catálogo ainda sem vínculo Omie (omie_codigo nulo).
+                  const precisaCadastroOmie = item.produto_novo === true || (!!prod && !prod.omie_codigo);
+                  const nomeItem = prod?.nome ?? item.produto_nome_livre ?? "—";
+                  const unidItem = prod?.unidade_med ?? item.produto_unidade_med ?? "";
                   return (
                     <tr key={item.id} className="group/row hover:bg-muted/20 transition-colors">
                       {/* Item */}
@@ -626,14 +635,34 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                           </span>
                           <div className="min-w-0">
                             <div className="text-sm font-medium text-foreground leading-snug">
-                              {prod?.nome ?? "—"}
+                              {nomeItem}
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="inline-flex items-center rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80 tabular-nums">
-                                {item.quantidade} {prod?.unidade_med}
+                                {item.quantidade} {unidItem}
                               </span>
                               {prod?.codigo && (
                                 <span className="text-[10px] text-muted-foreground/40 font-mono">{prod.codigo}</span>
+                              )}
+                              {precisaCadastroOmie && (
+                                item.produto_novo && editavel ? (
+                                  <button
+                                    onClick={() => setCadastroItem({ id: item.id, nome: nomeItem })}
+                                    title="Cadastrar este produto no Omie — necessário antes de gerar o pedido de compra"
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/12 text-amber-400 ring-1 ring-amber-500/25 hover:bg-amber-500/25 uppercase tracking-wide transition-colors"
+                                  >
+                                    <AlertTriangle size={9} />
+                                    cadastrar no Omie
+                                  </button>
+                                ) : (
+                                  <span
+                                    title="Este produto ainda não tem cadastro no Omie. Será necessário cadastrá-lo antes de gerar o pedido de compra."
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/12 text-amber-400 ring-1 ring-amber-500/25 uppercase tracking-wide"
+                                  >
+                                    <AlertTriangle size={9} />
+                                    sem vínculo Omie
+                                  </span>
+                                )
                               )}
                             </div>
                           </div>
@@ -884,6 +913,22 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         todosFornecedores={todosFornecedores}
         jaAdicionados={fornecedores.map(f => f.id)}
       />
+
+      {/* ── Modal Cadastrar Produto no Omie (item livre da cotação) ──────────── */}
+      {cadastroItem && unidadeIdCotacao && (
+        <ProdutoOmieModal
+          open={true}
+          onClose={() => setCadastroItem(null)}
+          unidadeId={unidadeIdCotacao}
+          nomeSugerido={cadastroItem.nome}
+          onCreated={async (produtoId) => {
+            const res = await vincularProdutoCotacaoItem(cadastroItem.id, produtoId);
+            if ("erro" in res) { toast.error(res.erro); return; }
+            setCadastroItem(null);
+            router.refresh();
+          }}
+        />
+      )}
 
       {/* ── Modal Email Solicitar Cotação ────────────────────────────────────── */}
       {emailModalOpen && (

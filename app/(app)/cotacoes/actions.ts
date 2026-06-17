@@ -106,7 +106,7 @@ export async function criarCotacao(input: z.infer<typeof NovaCotacaoSchema>) {
     const [{ data: reqItens }, { data: reqUnidades }] = await Promise.all([
       supabase
         .from("requisicao_itens")
-        .select("produto_id, quantidade, observacao")
+        .select("produto_id, quantidade, observacao, produto_nome_livre, produto_unidade_med, produto_novo")
         .eq("requisicao_id", requisicao_id),
       supabase
         .from("requisicao_unidades")
@@ -115,16 +115,20 @@ export async function criarCotacao(input: z.infer<typeof NovaCotacaoSchema>) {
     ]);
 
     if (reqItens?.length) {
-      const itensComProduto = reqItens.filter((i): i is typeof i & { produto_id: string } => i.produto_id != null);
-      if (itensComProduto.length) {
-        await supabase.from("cotacao_itens").insert(
-          itensComProduto.map(i => ({
-            cotacao_id: cot.id,
-            produto_id: i.produto_id,
-            quantidade: i.quantidade,
-          })),
-        );
-      }
+      // Copia TODOS os itens — inclusive os livres (sem produto_id), que ficam
+      // marcados como produto_novo (pendentes de cadastro no Omie). Cast: as
+      // colunas livres ainda não constam nos tipos gerados (migration 0023).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const itensPayload = (reqItens as any[]).map(i => ({
+        cotacao_id:          cot.id,
+        produto_id:          i.produto_id ?? null,
+        quantidade:          i.quantidade,
+        produto_nome_livre:  i.produto_id ? null : (i.produto_nome_livre ?? "Produto sem nome"),
+        produto_unidade_med: i.produto_id ? null : (i.produto_unidade_med ?? null),
+        produto_novo:        i.produto_id ? false : true,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await supabase.from("cotacao_itens").insert(itensPayload as any);
     }
 
     if (reqUnidades?.length) {
@@ -142,6 +146,37 @@ export async function criarCotacao(input: z.infer<typeof NovaCotacaoSchema>) {
 
   revalidatePath("/cotacoes");
   return { id: cot.id, numero: cot.numero };
+}
+
+// ── vincularProdutoCotacaoItem ────────────────────────────────────────────────
+// Vincula um produto (recém-cadastrado no Omie) a um item livre da cotação,
+// removendo a flag de pendência. Usado pelo botão "Cadastrar no Omie".
+
+export async function vincularProdutoCotacaoItem(
+  cotacaoItemId: string,
+  produtoId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: item } = await supabase
+    .from("cotacao_itens")
+    .select("id, cotacao_id")
+    .eq("id", cotacaoItemId)
+    .single();
+  if (!item) return { erro: "Item da cotação não encontrado" };
+
+  const { error } = await supabase
+    .from("cotacao_itens")
+    // produto_novo/produto_nome_livre: colunas da migration 0023, fora dos tipos gerados
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update({ produto_id: produtoId, produto_novo: false, produto_nome_livre: null } as any)
+    .eq("id", cotacaoItemId);
+
+  if (error) return { erro: error.message };
+  revalidatePath(`/cotacoes/${item.cotacao_id}`);
+  return { ok: true };
 }
 
 // ── selecionarFornecedorItem ──────────────────────────────────────────────────
@@ -292,7 +327,7 @@ export async function gerarPedidosDeCotacao(
     // Client casteado: a coluna frete ainda não consta nos tipos gerados e, na
     // string do select, quebraria a inferência de todo o resultado.
     interface CellRaw { fornecedor_id: string; preco_unitario: number | null; condicao_pagamento: string | null; prazo_entrega_dias: number | null; frete: number | null }
-    interface ItemRaw { id: string; quantidade: number; produto_id: string; cotacao_matriz: CellRaw[] }
+    interface ItemRaw { id: string; quantidade: number; produto_id: string | null; cotacao_matriz: CellRaw[] }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: itensData, error: itensErr } = await (supabase as any)
       .from("cotacao_itens")
@@ -305,6 +340,13 @@ export async function gerarPedidosDeCotacao(
       return { erro: itensErr?.message ?? "Erro ao buscar itens" };
     }
 
+    // Itens selecionados ainda sem cadastro no Omie (produto_id nulo) bloqueiam
+    // o pedido — precisam ser cadastrados antes (botão "Cadastrar no Omie").
+    const selecionadosPendentes = itens.filter(i => selecoes[i.id] && !i.produto_id);
+    if (selecionadosPendentes.length > 0) {
+      return { erro: `${selecionadosPendentes.length} item(ns) selecionado(s) ainda sem cadastro no Omie. Use "Cadastrar no Omie" na cotação antes de gerar o pedido.` };
+    }
+
     // Agrupar por fornecedor
     const grupos = new Map<string, {
       preco_unitario: number; quantidade: number; produto_id: string;
@@ -313,7 +355,7 @@ export async function gerarPedidosDeCotacao(
 
     for (const item of itens) {
       const fornId = selecoes[item.id];
-      if (!fornId) continue;
+      if (!fornId || !item.produto_id) continue;
       const cell = item.cotacao_matriz.find(c => c.fornecedor_id === fornId);
       if (!cell || !cell.preco_unitario) continue;
       if (!grupos.has(fornId)) grupos.set(fornId, []);
@@ -799,6 +841,13 @@ export async function aprovarCotacao(
   const itens = (cotacao.cotacao_itens as ItemRaw[]).filter(i => i.selecionado_forn);
   if (itens.length === 0) {
     return { erro: "Nenhum item tem fornecedor vencedor atribuído" };
+  }
+
+  // Itens selecionados ainda sem cadastro no Omie (livre ou produto sem
+  // omie_codigo) bloqueiam — precisam ser cadastrados antes do pedido.
+  const semCadastroOmie = itens.filter(i => !i.produtos?.omie_codigo);
+  if (semCadastroOmie.length > 0) {
+    return { erro: `${semCadastroOmie.length} item(ns) selecionado(s) ainda sem cadastro no Omie. Use "Cadastrar no Omie" na cotação antes de aprovar.` };
   }
 
   // 3. Agrupar itens por fornecedor vencedor
