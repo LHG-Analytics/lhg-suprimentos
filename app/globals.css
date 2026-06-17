@@ -240,3 +240,29 @@
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: calc(var(--radius) - 2px);
 }
+
+/* ============================================================
+   Impressão do Mapa de Cotação (PDF via window.print)
+   Escopado por body.cotacao-print-mode para não afetar outras
+   telas: só o #cotacao-print-doc é impresso.
+   ============================================================ */
+@media print {
+  body.cotacao-print-mode * { visibility: hidden !important; }
+  body.cotacao-print-mode #cotacao-print-doc,
+  body.cotacao-print-mode #cotacao-print-doc * { visibility: visible !important; }
+  body.cotacao-print-mode #cotacao-print-doc {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    box-shadow: none !important;
+  }
+  body.cotacao-print-mode .no-print { display: none !important; }
+
+  @page { size: A4 landscape; margin: 10mm; }
+
+  /* Evita cortar linhas/blocos entre páginas */
+  #cotacao-print-doc tr,
+  #cotacao-print-doc .avoid-break { break-inside: avoid; }
+  #cotacao-print-doc thead { display: table-header-group; }
+}

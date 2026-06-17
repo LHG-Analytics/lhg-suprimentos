@@ -7,11 +7,12 @@
  *   (valor total · frete · total geral · cond. pgto · prazo · garantia).
  * Preserva seleção por item, sugestão IA, e geração de pedidos.
  */
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, X, Plus,
   Loader2, AlertTriangle, Calendar, Users, Check, Mail, Send, Info, Truck, ShieldCheck,
+  FileDown, Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
 import { MatrizCelula, type MatrizCellData } from "./matriz-celula";
 import { ProdutoOmieModal } from "@/app/(app)/requisicoes/[id]/_components/produto-omie-modal";
+import { CotacaoPrintDoc } from "./cotacao-print-doc";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -111,8 +113,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   const [emailMensagem,    setEmailMensagem]    = useState("");
   const [removingFornId,   setRemovingFornId]   = useState<string | null>(null);
   const [cadastroItem,     setCadastroItem]     = useState<{ id: string; nome: string } | null>(null);
+  const [printOpen,        setPrintOpen]        = useState(false);
 
   const unidadeIdCotacao = cotacao.cotacao_unidades[0]?.unidade_id ?? "";
+
+  // Liga o modo de impressão escopado (CSS em globals.css) enquanto o overlay
+  // de PDF está aberto — assim window.print() imprime só o documento.
+  useEffect(() => {
+    document.body.classList.toggle("cotacao-print-mode", printOpen);
+    return () => document.body.classList.remove("cotacao-print-mode");
+  }, [printOpen]);
 
   const editavel = cotacao.status !== "aprovado" && cotacao.status !== "aprovada" && cotacao.status !== "fechada";
 
@@ -364,7 +374,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
           )}
         </div>
 
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className={cn(
@@ -399,14 +409,15 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
           </div>
 
           {/* Ações */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
             {fornComEmail.length > 0 && (
               <button
                 onClick={() => setEmailModalOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-sky-700/60 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-400 hover:bg-sky-500/20 transition-colors"
               >
                 <Mail size={13} />
-                Solicitar cotação
+                <span className="hidden sm:inline">Solicitar cotação</span>
+                <span className="sm:hidden">Cotação</span>
               </button>
             )}
             <button
@@ -415,6 +426,15 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             >
               <Plus size={13} />
               Fornecedor
+            </button>
+            <button
+              onClick={() => setPrintOpen(true)}
+              disabled={cotacao.cotacao_itens.length === 0 || fornecedores.length === 0}
+              title="Exportar o mapa de cotação em PDF"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <FileDown size={13} />
+              <span className="hidden sm:inline">Exportar </span>PDF
             </button>
             <button
               onClick={() => setWizardOpen(true)}
@@ -913,6 +933,56 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         todosFornecedores={todosFornecedores}
         jaAdicionados={fornecedores.map(f => f.id)}
       />
+
+      {/* ── Overlay de exportação PDF (pré-visualização + imprimir) ──────────── */}
+      {printOpen && (
+        <div className="fixed inset-0 z-[200] flex flex-col bg-zinc-200/95 backdrop-blur-sm">
+          {/* Barra de ações — não vai para o PDF */}
+          <div className="no-print flex items-center justify-between gap-3 bg-zinc-900 px-4 sm:px-6 py-3 text-white shadow-lg">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <FileDown size={15} className="text-emerald-400" />
+              <span className="hidden sm:inline">Pré-visualização — </span>Mapa de Cotação
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors"
+              >
+                <Printer size={14} />
+                Imprimir / Salvar PDF
+              </button>
+              <button
+                onClick={() => setPrintOpen(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors"
+              >
+                <X size={14} />
+                Fechar
+              </button>
+            </div>
+          </div>
+
+          {/* Área de papel — rolável */}
+          <div className="flex-1 overflow-auto p-4 sm:p-8">
+            <div className="mx-auto w-full max-w-[1100px] rounded-sm bg-white shadow-2xl">
+              <CotacaoPrintDoc
+                numero={cotacao.numero}
+                titulo={cotacao.titulo}
+                unidades={nomeUnidades}
+                comprador={cotacao.comprador?.nome ?? null}
+                dataEmissao={formatDataCompleta(cotacao.created_at)}
+                prazo={cotacao.prazo ? formatDate(cotacao.prazo) : null}
+                fornecedores={fornecedores.map(f => ({
+                  id: f.id, razao_social: f.razao_social, nome_fantasia: f.nome_fantasia,
+                  telefone: f.telefone ?? null, contato: f.contato ?? null,
+                }))}
+                itens={cotacao.cotacao_itens}
+                selecoes={selecoes}
+                matrizMap={matrizMap}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Cadastrar Produto no Omie (item livre da cotação) ──────────── */}
       {cadastroItem && unidadeIdCotacao && (
