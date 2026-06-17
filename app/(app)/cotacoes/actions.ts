@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { incluirPedCompra } from "@/lib/omie/pedidos";
+import { calcularEconomia, type ItemEconomia } from "@/lib/cotacao/economia";
 
 // ── deletarCotacao ────────────────────────────────────────────────────────────
 
@@ -451,42 +452,27 @@ export async function gerarPedidosDeCotacao(
       }
     }
 
-    // Economia vs concorrência (mesma lógica de aprovarCotacao): compara o preço
-    // do vencedor de cada item com a média dos concorrentes que cotaram o item.
-    // Sem isso, cotações aprovadas pelo wizard não somavam economia no dashboard.
-    let valorAprovadoTotal = 0;
-    let mediaRejeitadosTotal = 0;
-    let itensComConcorrencia = 0;
+    // Economia vs maior preço cotado (helper compartilhado calcularEconomia).
+    const itensEcon: ItemEconomia[] = itens
+      .filter(i => selecoes[i.id] && i.produto_id)
+      .map(i => {
+        const venc = selecoes[i.id]!;
+        const cellV = i.cotacao_matriz.find(c => c.fornecedor_id === venc);
+        return {
+          quantidade:    i.quantidade,
+          precoVencedor: cellV?.preco_unitario ?? 0,
+          precosCotados: i.cotacao_matriz.map(c => c.preco_unitario).filter((p): p is number => p != null && p > 0),
+        };
+      })
+      .filter(it => it.precoVencedor > 0);
 
-    for (const item of itens) {
-      const fornVencedor = selecoes[item.id];
-      if (!fornVencedor) continue;
-      const cellV = item.cotacao_matriz.find(c => c.fornecedor_id === fornVencedor);
-      if (!cellV?.preco_unitario) continue;
-
-      valorAprovadoTotal += item.quantidade * cellV.preco_unitario;
-
-      const concorrentes = item.cotacao_matriz
-        .filter(c => c.fornecedor_id !== fornVencedor && c.preco_unitario != null && c.preco_unitario > 0)
-        .map(c => c.preco_unitario as number);
-
-      if (concorrentes.length > 0) {
-        const media = concorrentes.reduce((a, b) => a + b, 0) / concorrentes.length;
-        mediaRejeitadosTotal += item.quantidade * media;
-        itensComConcorrencia++;
-      }
-    }
-
-    const economiaCalc    = itensComConcorrencia > 0 ? mediaRejeitadosTotal - valorAprovadoTotal : null;
-    const economiaPctCalc = itensComConcorrencia > 0 && mediaRejeitadosTotal > 0
-      ? (economiaCalc! / mediaRejeitadosTotal) * 100
-      : null;
+    const { economia: economiaCalc, economiaPct: economiaPctCalc, valorAprovado } = calcularEconomia(itensEcon);
 
     await supabase
       .from("cotacoes")
       .update({
         status:         "aprovado",
-        ...(valorAprovadoTotal > 0 ? { valor_estimado: valorAprovadoTotal } : {}),
+        ...(valorAprovado   > 0    ? { valor_estimado: valorAprovado   } : {}),
         ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
         ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),
       })
@@ -978,46 +964,26 @@ export async function aprovarCotacao(
     });
   }
 
-  // 8. Calcular valor total aprovado e economia vs. concorrência
-  // Para cada item: compara o preço do fornecedor vencedor com a média dos
-  // fornecedores que perderam a cotação — mede ganho real da disputa competitiva.
-  let valorAprovadoTotal = 0;
-  let mediaRejeitadosTotal = 0;
-  let itensComConcorrencia = 0;
+  // 8. Calcular valor aprovado + economia (helper compartilhado: vs maior preço
+  //    cotado por item, só itens com concorrência — evita o bug de escopo que
+  //    misturava itens com/sem concorrência e gerava economia negativa falsa).
+  const itensEcon: ItemEconomia[] = itens
+    .map(item => {
+      const cellV = item.cotacao_matriz.find(m => m.fornecedor_id === item.selecionado_forn);
+      return {
+        quantidade:    item.quantidade,
+        precoVencedor: cellV?.preco_unitario ?? 0,
+        precosCotados: item.cotacao_matriz.map(m => m.preco_unitario).filter(p => p != null && p > 0),
+      };
+    })
+    .filter(it => it.precoVencedor > 0);
 
-  for (const item of itens) {
-    const fornVencedor = item.selecionado_forn;
-    if (!fornVencedor) continue;
-
-    const entradaVencedor = item.cotacao_matriz.find(m => m.fornecedor_id === fornVencedor);
-    if (!entradaVencedor?.preco_unitario) continue;
-
-    const precoVencedor = entradaVencedor.preco_unitario;
-    valorAprovadoTotal += item.quantidade * precoVencedor;
-
-    // Média dos concorrentes (excluindo o vencedor, apenas com preço preenchido)
-    const precosConcorrentes = item.cotacao_matriz
-      .filter(m => m.fornecedor_id !== fornVencedor && m.preco_unitario != null && m.preco_unitario > 0)
-      .map(m => m.preco_unitario);
-
-    if (precosConcorrentes.length > 0) {
-      const mediaConcorrentes = precosConcorrentes.reduce((a, b) => a + b, 0) / precosConcorrentes.length;
-      mediaRejeitadosTotal += item.quantidade * mediaConcorrentes;
-      itensComConcorrencia++;
-    }
-  }
-
-  // Economia = quanto o vencedor foi mais barato que a média dos concorrentes
-  // Só calculável quando há ao menos 1 item com concorrência real
-  const economiaCalc      = itensComConcorrencia > 0 ? mediaRejeitadosTotal - valorAprovadoTotal : null;
-  const economiaPctCalc   = itensComConcorrencia > 0 && mediaRejeitadosTotal > 0
-    ? (economiaCalc! / mediaRejeitadosTotal) * 100
-    : null;
+  const { economia: economiaCalc, economiaPct: economiaPctCalc, valorAprovado } = calcularEconomia(itensEcon);
 
   // 9. Atualizar status + campos financeiros da cotação
   await supabase.from("cotacoes").update({
     status:          "aprovado",
-    valor_estimado:  valorAprovadoTotal > 0 ? valorAprovadoTotal : undefined,
+    valor_estimado:  valorAprovado > 0 ? valorAprovado : undefined,
     ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
     ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),
   }).eq("id", cotacaoId);
