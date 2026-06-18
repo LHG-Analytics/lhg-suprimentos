@@ -24,6 +24,7 @@ import { AprovarCompraPanel } from "./aprovar-compra-panel";
 import { MatrizCelula, type MatrizCellData } from "./matriz-celula";
 import { ProdutoOmieModal } from "@/app/(app)/requisicoes/[id]/_components/produto-omie-modal";
 import { CotacaoPrintDoc } from "./cotacao-print-doc";
+import { calcularEconomia, type ItemEconomia } from "@/lib/cotacao/economia";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -271,17 +272,27 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   }, [matrizMap, cotacao.cotacao_itens]);
 
   // Total por fornecedor (itens + frete) e o menor entre fornecedores que atendem tudo
-  const totalSemOtimizacao = useMemo(() => {
-    const totais = fornecedores.map(f => {
-      const { total, atendeAll } = subtotalItensForn(f.id);
-      return atendeAll ? total + freteForn(f.id) : Infinity;
-    }).filter(t => t !== Infinity);
-    return totais.length > 0 ? Math.min(...totais) : 0;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fornecedores, matrizMap, cotacao.cotacao_itens]);
+  // Economia em tempo real — MESMO critério gravado na aprovação e mostrado na
+  // lista (calcularEconomia: vs maior preço cotado por item, só com concorrência).
+  // Antes a barra usava "mix vs fornecedor único", divergindo da lista.
+  const economia = useMemo(() => {
+    const itensEcon: ItemEconomia[] = cotacao.cotacao_itens
+      .filter(i => selecoes[i.id])
+      .map(i => {
+        const venc = selecoes[i.id]!;
+        const cell = matrizMap[i.id]?.[venc];
+        return {
+          quantidade:    i.quantidade,
+          precoVencedor: cell?.preco_unitario ?? 0,
+          precosCotados: Object.values(matrizMap[i.id] ?? {})
+            .map(c => c.preco_unitario)
+            .filter((p): p is number => p != null && p > 0),
+        };
+      })
+      .filter(it => it.precoVencedor > 0);
+    return calcularEconomia(itensEcon).economia ?? 0;
+  }, [selecoes, matrizMap, cotacao.cotacao_itens]);
 
-  const economia = totalSemOtimizacao > 0 && totalSelecao > 0
-    ? totalSemOtimizacao - totalSelecao : 0;
   const itensComSelecao = cotacao.cotacao_itens.filter(i => selecoes[i.id]).length;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -877,20 +888,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                 </div>
               </>
             )}
-            {totalSemOtimizacao > 0 && (
-              <>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Fornecedor único mais barato</div>
-                  <div className="font-mono text-sm font-semibold text-muted-foreground line-through">{formatBRL(totalSemOtimizacao)}</div>
-                </div>
-              </>
-            )}
             <div className="flex-1" />
             {economia > 0 && (
               <div className="text-right mr-4">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-700">Economia</div>
-                <div className="font-mono text-lg font-bold text-emerald-400">-{formatBRL(economia)}</div>
+                <div className="text-[10px] uppercase tracking-wider text-emerald-700">Economia (vs maior preço)</div>
+                <div className="font-mono text-lg font-bold text-emerald-400">{formatBRL(economia)}</div>
               </div>
             )}
             <button
