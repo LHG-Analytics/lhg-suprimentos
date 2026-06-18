@@ -27,16 +27,16 @@ export async function getUnidadeSheetConfig(): Promise<UnidadeSheetConfig | null
 
   const supabase = await createClient();
 
-  // Tenta pela unidade do cookie primeiro.
-  // Não filtra por `ativa` aqui: o usuário escolheu explicitamente essa unidade,
-  // então devemos honrar a seleção independente do flag.
+  // Unidade específica selecionada: usa SOMENTE a planilha dela. Se não tiver
+  // planilha configurada, retorna null (o widget mostra "não configurada") —
+  // NUNCA cai no fallback de outra unidade, que fazia todas exibirem os mesmos
+  // dados (o da Lush Ipiranga, única com planilha).
   if (slugCookie && slugCookie !== "todas") {
     const { data } = await supabase
       .from("unidades")
       .select("slug, google_sheet_id, google_sheet_name")
       .eq("slug", slugCookie)
-      .not("google_sheet_id", "is", null)
-      .single();
+      .maybeSingle();
 
     if (data?.google_sheet_id) {
       return {
@@ -45,9 +45,10 @@ export async function getUnidadeSheetConfig(): Promise<UnidadeSheetConfig | null
         sheetName:   data.google_sheet_name ?? "Custos",
       };
     }
+    return null; // unidade sem planilha → sem orçamento (não usar de outra)
   }
 
-  // Fallback: primeira unidade com sheet configurado (independente do flag ativa)
+  // Só "Todas as unidades" usa o fallback (referência da rede): primeira com sheet.
   const { data: fallback } = await supabase
     .from("unidades")
     .select("slug, google_sheet_id, google_sheet_name")
