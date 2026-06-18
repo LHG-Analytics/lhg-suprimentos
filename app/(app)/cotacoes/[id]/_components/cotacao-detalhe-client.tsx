@@ -644,9 +644,10 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
               <tbody>
                 {cotacao.cotacao_itens.map((item, idx) => {
                   const prod = item.produtos;
-                  // Precisa cadastro no Omie: item livre (produto_novo) ou produto
-                  // do catálogo ainda sem vínculo Omie (omie_codigo nulo).
-                  const precisaCadastroOmie = item.produto_novo === true || (!!prod && !prod.omie_codigo);
+                  // Item livre (sem produto no catálogo) precisa ser cadastrado
+                  // para virar pedido. Produtos do catálogo já servem (com ou sem
+                  // vínculo Omie — unidades internas como Altana não têm omie_codigo).
+                  const precisaCadastro = item.produto_novo === true && !prod;
                   const nomeItem = prod?.nome ?? item.produto_nome_livre ?? "—";
                   const unidItem = prod?.unidade_med ?? item.produto_unidade_med ?? "";
                   return (
@@ -668,23 +669,23 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                               {prod?.codigo && (
                                 <span className="text-[10px] text-muted-foreground/40 font-mono">{prod.codigo}</span>
                               )}
-                              {precisaCadastroOmie && (
-                                item.produto_novo && editavel ? (
+                              {precisaCadastro && (
+                                editavel ? (
                                   <button
                                     onClick={() => setCadastroItem({ id: item.id, nome: nomeItem })}
-                                    title="Cadastrar este produto no Omie — necessário antes de gerar o pedido de compra"
+                                    title="Cadastrar este produto no catálogo — necessário antes de gerar o pedido de compra"
                                     className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/12 text-amber-400 ring-1 ring-amber-500/25 hover:bg-amber-500/25 uppercase tracking-wide transition-colors"
                                   >
                                     <AlertTriangle size={9} />
-                                    cadastrar no Omie
+                                    cadastrar produto
                                   </button>
                                 ) : (
                                   <span
-                                    title="Este produto ainda não tem cadastro no Omie. Será necessário cadastrá-lo antes de gerar o pedido de compra."
+                                    title="Produto ainda não cadastrado no catálogo — necessário antes de gerar o pedido."
                                     className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/12 text-amber-400 ring-1 ring-amber-500/25 uppercase tracking-wide"
                                   >
                                     <AlertTriangle size={9} />
-                                    sem vínculo Omie
+                                    produto não cadastrado
                                   </span>
                                 )
                               )}

@@ -254,12 +254,12 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
       const { produtoId } = result;
       if (onCreated) {
         await onCreated(produtoId);
-        toast.success(`Produto "${nome}" criado no Omie e vinculado`);
+        toast.success(`Produto "${nome}" cadastrado e vinculado`);
       } else if (requisicaoItemId) {
         await vincularProdutoItem(requisicaoItemId, produtoId);
-        toast.success(`Produto "${nome}" criado no Omie e vinculado`);
+        toast.success(`Produto "${nome}" cadastrado e vinculado`);
       } else {
-        toast.success(`Produto "${nome}" criado no Omie`);
+        toast.success(`Produto "${nome}" cadastrado`);
       }
       onClose();
     });
@@ -269,7 +269,7 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-foreground">Cadastrar produto no Omie</h2>
+          <h2 className="text-base font-semibold text-foreground">Cadastrar produto</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
@@ -344,7 +344,7 @@ export function ProdutoOmieModal({ open, onClose, requisicaoItemId, unidadeId, n
             <button type="submit" disabled={pending || !nome || !unidade || !ncmCodigo || !codigoProduto}
               className="flex-1 h-9 rounded-lg bg-lhg-500 hover:bg-lhg-600 text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
               {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Criar no Omie
+              Cadastrar produto
             </button>
           </div>
         </form>

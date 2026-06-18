@@ -345,7 +345,7 @@ export async function gerarPedidosDeCotacao(
     // o pedido — precisam ser cadastrados antes (botão "Cadastrar no Omie").
     const selecionadosPendentes = itens.filter(i => selecoes[i.id] && !i.produto_id);
     if (selecionadosPendentes.length > 0) {
-      return { erro: `${selecionadosPendentes.length} item(ns) selecionado(s) ainda sem cadastro no Omie. Use "Cadastrar no Omie" na cotação antes de gerar o pedido.` };
+      return { erro: `${selecionadosPendentes.length} item(ns) selecionado(s) ainda sem produto no catálogo. Use "Cadastrar produto" na cotação antes de gerar o pedido.` };
     }
 
     // Agrupar por fornecedor

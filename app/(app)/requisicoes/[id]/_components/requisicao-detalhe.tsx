@@ -185,7 +185,7 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
                   onClick={() => setModalItem(item)}
                   className="flex items-center gap-1.5 h-7 px-3 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-medium transition-colors shrink-0">
                   <PackagePlus size={12} />
-                  Cadastrar no Omie
+                  Cadastrar produto
                 </button>
               )}
               {podeExcluirItens && (

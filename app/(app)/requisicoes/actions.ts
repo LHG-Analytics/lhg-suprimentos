@@ -346,44 +346,48 @@ export async function criarProdutoOmie(
   const parsed = ProdutoOmieSchema.safeParse(data);
   if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
 
+  // Unidade sem credenciais Omie (ex: Altana) → cadastra o produto SÓ localmente.
   const unidadeCreds = await getCredsUnidade(unidadeId);
-  if (!unidadeCreds) return { erro: "Unidade sem credenciais Omie configuradas" };
-  const { creds } = unidadeCreds;
+  const temOmie = !!unidadeCreds;
 
   const localId = crypto.randomUUID();
   const codigoIntegracao = parsed.data.codigoIntegracao?.trim() || `LHG-${localId.slice(0, 8)}`;
 
-  let codigoProduto: number;
-  try {
-    codigoProduto = await incluirProduto(creds, {
-      nome:              parsed.data.nome,
-      unidade:           parsed.data.unidade,
-      familia_omie:      parsed.data.familiaDescricao,
-      familia_codigo:    parsed.data.familiaCodigo,
-      valor_unitario:    parsed.data.valorCusto ?? 0,
-      codigo_integracao: codigoIntegracao,
-      codigo_interno:    parsed.data.codigoProduto,
-      ncm:               parsed.data.ncm || "00000000",
-    });
-  } catch (err) {
-    return { erro: `Falhou no Omie: ${(err as Error).message}` };
+  let codigoProduto: number | null = null;
+  if (temOmie) {
+    try {
+      codigoProduto = await incluirProduto(unidadeCreds!.creds, {
+        nome:              parsed.data.nome,
+        unidade:           parsed.data.unidade,
+        familia_omie:      parsed.data.familiaDescricao,
+        familia_codigo:    parsed.data.familiaCodigo,
+        valor_unitario:    parsed.data.valorCusto ?? 0,
+        codigo_integracao: codigoIntegracao,
+        codigo_interno:    parsed.data.codigoProduto,
+        ncm:               parsed.data.ncm || "00000000",
+      });
+    } catch (err) {
+      return { erro: `Falhou no Omie: ${(err as Error).message}` };
+    }
+    if (!codigoProduto) return { erro: "Omie não retornou código do produto (codProduto=0)" };
   }
-
-  if (!codigoProduto) return { erro: "Omie não retornou código do produto (codProduto=0)" };
 
   const serviceClient = createServiceClient();
   const { data: prod, error } = await serviceClient
     .from("produtos")
     .insert({
-      id:              localId,
-      nome:            parsed.data.nome,
-      unidade_med:     parsed.data.unidade,
-      codigo:          codigoIntegracao,
-      categoria:       "livre",
-      omie_codigo:     String(codigoProduto),
-      omie_unidade_id: unidadeId,
-      ativo:           true,
-      preco_custo:     parsed.data.valorCusto ?? null,
+      id:                   localId,
+      nome:                 parsed.data.nome,
+      unidade_med:          parsed.data.unidade,
+      codigo:               parsed.data.codigoProduto?.trim() || codigoIntegracao,
+      categoria:            "livre",
+      familia_omie:         parsed.data.familiaDescricao || null,
+      ncm:                  parsed.data.ncm || null,
+      omie_codigo:          codigoProduto != null ? String(codigoProduto) : null,
+      omie_sincronizado_em: codigoProduto != null ? new Date().toISOString() : null,
+      omie_unidade_id:      unidadeId,
+      ativo:                true,
+      preco_custo:          parsed.data.valorCusto ?? null,
     })
     .select("id")
     .single();
