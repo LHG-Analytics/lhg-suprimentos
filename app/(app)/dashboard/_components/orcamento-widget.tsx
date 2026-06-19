@@ -22,9 +22,9 @@ function fBRL(v: number) {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function ProgressBar({ pct, warn }: { pct: number; warn: boolean }) {
+function ProgressBar({ pct, warn, className }: { pct: number; warn: boolean; className?: string }) {
   return (
-    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+    <div className={cn("h-2 w-full rounded-full bg-muted/60 overflow-hidden", className)}>
       <div
         className={cn(
           "h-full rounded-full transition-all duration-500",
@@ -32,7 +32,7 @@ function ProgressBar({ pct, warn }: { pct: number; warn: boolean }) {
           : warn     ? "bg-amber-500"
           :            "bg-lhg-500",
         )}
-        style={{ width: `${Math.min(pct, 100)}%` }}
+        style={{ width: `${Math.max(Math.min(pct, 100), pct > 0 ? 3 : 0)}%` }}
       />
     </div>
   );
@@ -165,27 +165,50 @@ export function OrcamentoWidget({ orcamento, gastosPorCategoria }: OrcamentoWidg
           </div>
 
           {/* Lista scrollável — permite ver todas as categorias */}
-          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-0.5">
-            {catRows.map((c) => (
-              <div key={c.categoria} className="space-y-1">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-xs text-foreground/70 truncate flex-1" title={c.categoria}>
-                    {c.categoria}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-[10px] font-mono shrink-0",
-                      c.pct >= 100 ? "text-red-600 dark:text-red-400"
-                      : c.pct >= 80 ? "text-amber-600 dark:text-amber-400"
-                      :               "text-muted-foreground",
-                    )}
-                  >
-                    {fBRL(c.gasto)}/{fBRL(c.orcado)}
-                  </span>
+          <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-1.5 -mr-1.5">
+            {catRows.map((c) => {
+              const over  = c.pct >= 100;
+              const warn  = c.pct >= 80 && !over;
+              const resto = c.orcado - c.gasto;
+              return (
+                <div key={c.categoria} className="space-y-1.5">
+                  {/* Nome + percentual */}
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-xs font-medium text-foreground truncate flex-1" title={c.categoria}>
+                      {c.categoria}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold font-mono tabular-nums shrink-0 px-1.5 py-0.5 rounded",
+                        over   ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                        : warn ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        :        "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {c.pct.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  <ProgressBar pct={c.pct} warn={warn} />
+
+                  {/* Realizado · orçado · saldo */}
+                  <div className="flex justify-between items-baseline gap-2 tabular-nums">
+                    <span className="text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-foreground/90">{fBRL(c.gasto)}</span>
+                      {" "}de {fBRL(c.orcado)}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] shrink-0",
+                        over ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground/70",
+                      )}
+                    >
+                      {over ? `+${fBRL(-resto)} acima` : `restam ${fBRL(resto)}`}
+                    </span>
+                  </div>
                 </div>
-                <ProgressBar pct={c.pct} warn={c.pct >= 80} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
