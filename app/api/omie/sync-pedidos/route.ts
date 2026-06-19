@@ -14,7 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
-import { syncPedidosCompra } from "@/lib/omie/sync";
+import { after } from "next/server";
+import { syncPedidosCompra, syncItensPedidosOmie } from "@/lib/omie/sync";
 import { countPedidosCompra } from "@/lib/omie/client";
 import type { OmieCredentials, OmiePedidoFiltro } from "@/lib/omie/client";
 import type { SyncResult } from "@/lib/omie/sync";
@@ -245,6 +246,23 @@ async function runSync(tag: string, slug: string | null, filtro: OmiePedidoFiltr
 
   const duracaoTotal = Date.now() - inicio;
   console.log(`${tag} Concluído em ${duracaoTotal}ms — ${results.length} resultado(s)`);
+
+  // Em background: detalha os itens dos pedidos recém-sincronizados (lote por
+  // unidade) para alimentar o "Realizado" do dashboard. Não bloqueia a resposta.
+  const paraItens = unidades.map(u => ({
+    id: u.id as string, nome: u.nome as string,
+    appKey: u.omie_app_key as string, appSecret: u.omie_app_secret as string,
+  }));
+  after(async () => {
+    for (const u of paraItens) {
+      try {
+        const r = await syncItensPedidosOmie(createServiceClient(), { appKey: u.appKey, appSecret: u.appSecret }, u.id, 60);
+        if (r.processados > 0) console.log(`${tag} itens pedidos "${u.nome}": ${r.processados} pedidos, ${r.itens} itens`);
+      } catch (err) {
+        console.error(`${tag} itens pedidos erro "${u.nome}":`, err instanceof Error ? err.message : String(err));
+      }
+    }
+  });
 
   return NextResponse.json({
     ok: true,

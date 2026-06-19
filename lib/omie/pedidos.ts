@@ -115,6 +115,36 @@ export async function upsertPedCompra(
   return res.nCodPed ?? 0;
 }
 
+// ── consultarPedCompraItens ────────────────────────────────────────────────────
+// Busca os itens (produtos) de um pedido de compra específico no Omie.
+// PesquisarPedCompra só traz o cabeçalho; os itens vêm via ConsultarPedCompra.
+
+export interface OmiePedItemConsulta {
+  nCodProd?:   number;
+  cDescricao?: string;
+  nQtde?:      number;
+  nValTot?:    number;   // valor total do item
+}
+
+interface ConsultarPedCompraResponse {
+  produtos_consulta?: OmiePedItemConsulta[];
+}
+
+export async function consultarPedCompraItens(
+  creds: OmieCredentials,
+  nCodPed: number,
+): Promise<OmiePedItemConsulta[]> {
+  // maxRetries=2: "não cadastrado" (pedido excluído no Omie) cai no catch do chamador
+  const res = await omiePost<{ nCodPed: number }, ConsultarPedCompraResponse>(
+    "/produtos/pedidocompra/",
+    "ConsultarPedCompra",
+    creds,
+    { nCodPed },
+    2,
+  );
+  return res.produtos_consulta ?? [];
+}
+
 // ── alterarPedCompra ───────────────────────────────────────────────────────────
 
 export interface OmiePedCabecalhoAlterar {

@@ -35,6 +35,7 @@ import {
   type OmieRequisicaoItem,
   type OmieRequisicaoItemDetalhe,
 } from "./requisicao";
+import { consultarPedCompraItens } from "./pedidos";
 
 // ── Tipos internos ─────────────────────────────────────────────────────────────
 
@@ -726,6 +727,76 @@ function mapPedidoCompra(
     filtro_omie:          filtro,
     omie_sincronizado_em: new Date().toISOString(),
   };
+}
+
+/**
+ * Busca os ITENS dos pedidos de compra do Omie ainda não detalhados
+ * (itens_sincronizados=false), categoriza pelo produto local e grava em
+ * omie_pedido_itens. Processa em lote (limite) para caber no budget do cron.
+ * Mantém o "Realizado" do dashboard atualizado com as compras feitas no Omie.
+ */
+export async function syncItensPedidosOmie(
+  supabase: SupabaseClient,
+  creds: OmieCredentials,
+  unidadeId: string,
+  limite = 60,
+): Promise<{ processados: number; itens: number }> {
+  // Cast do builder: itens_sincronizados/omie_pedido_itens estão fora dos tipos gerados.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: pedidos } = await (supabase.from("omie_pedidos_compra") as any)
+    .select("id, omie_codigo, data_pedido")
+    .eq("unidade_id", unidadeId)
+    .eq("itens_sincronizados", false)
+    .limit(limite);
+  if (!pedidos?.length) return { processados: 0, itens: 0 };
+
+  // Mapa produtos da unidade (omie_codigo → categoria), paginado
+  const prodMap = new Map<string, string | null>();
+  for (let from = 0; ; from += 1000) {
+    const { data: prods } = await supabase
+      .from("produtos")
+      .select("omie_codigo, categoria")
+      .eq("omie_unidade_id", unidadeId)
+      .not("omie_codigo", "is", null)
+      .range(from, from + 999);
+    if (!prods?.length) break;
+    for (const p of prods) prodMap.set(String((p as { omie_codigo: string }).omie_codigo), (p as { categoria: string | null }).categoria);
+    if (prods.length < 1000) break;
+  }
+
+  let processados = 0, totalItens = 0;
+  for (const ped of pedidos as Array<{ id: string; omie_codigo: number; data_pedido: string | null }>) {
+    let itensOmie;
+    try {
+      itensOmie = await consultarPedCompraItens(creds, Number(ped.omie_codigo));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Pedido excluído no Omie → marca como processado para não travar o lote
+      if (/n[ãa]o cadastrado/i.test(msg)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await supabase.from("omie_pedidos_compra").update({ itens_sincronizados: true } as any).eq("id", ped.id);
+      }
+      continue;
+    }
+
+    const rows = itensOmie.map(p => ({
+      omie_pedido_id: ped.id,
+      unidade_id:     unidadeId,
+      omie_codigo:    ped.omie_codigo,
+      data_pedido:    ped.data_pedido,
+      omie_cod_prod:  p.nCodProd ?? null,
+      descricao:      (p.cDescricao ?? "").slice(0, 200),
+      quantidade:     Number(p.nQtde ?? 0),
+      valor_total:    Number(p.nValTot ?? 0),
+      categoria:      prodMap.get(String(p.nCodProd)) ?? "Outros",
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (rows.length) { await supabase.from("omie_pedido_itens").insert(rows as any); totalItens += rows.length; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await supabase.from("omie_pedidos_compra").update({ itens_sincronizados: true } as any).eq("id", ped.id);
+    processados++;
+  }
+  return { processados, itens: totalItens };
 }
 
 export async function syncPedidosCompra(
