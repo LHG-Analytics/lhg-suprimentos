@@ -46,8 +46,9 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
   const [excluindoItem, setExcluindoItem] = useState<string | null>(null);
 
   const itensPendentes = req.requisicao_itens.filter(i => i.produto_novo);
-  const podAprovar = itensPendentes.length === 0
-    && req.status !== "aguardando_cotacao"
+  // Produtos não cadastrados NÃO bloqueiam mais o avanço para cotação:
+  // a cotação aceita itens livres e o aviso persiste até o cadastro.
+  const podAprovar = req.status !== "aguardando_cotacao"
     && req.status !== "aprovado"
     && req.status !== "cotacao";
 
@@ -59,7 +60,7 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
     startTransition(async () => {
       try {
         await aprovarRequisicao(req.id);
-        toast.success("Requisição aprovada e enviada ao Omie");
+        toast.success("Requisição liberada para cotação");
         router.refresh();
       } catch (err) {
         toast.error((err as Error).message);
@@ -142,7 +143,7 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
               {itensPendentes.length} produto{itensPendentes.length > 1 ? "s" : ""} não cadastrado{itensPendentes.length > 1 ? "s" : ""} no Omie
             </span>
           </div>
-          <p className="text-xs text-amber-300/70">Cadastre os produtos abaixo antes de aprovar a requisição.</p>
+          <p className="text-xs text-amber-300/70">Você pode cotar mesmo assim — o aviso permanece até o cadastro. O produto deve ser cadastrado antes de gerar o pedido de compra.</p>
         </div>
       )}
 

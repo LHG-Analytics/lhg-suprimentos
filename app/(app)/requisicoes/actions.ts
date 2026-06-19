@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { incluirProduto, alterarProduto, isOmieRedundantError, listFamiliasProduto, omiePost } from "@/lib/omie/client";
 import { consultarReq, toOmieId } from "@/lib/omie/requisicao";
+import { CATEGORIAS_CONTABEIS_PADRAO } from "@/lib/omie/categorias-contabeis";
 import type { OmieCredentials } from "@/lib/omie/client";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -161,16 +162,9 @@ export async function aprovarRequisicao(requisicaoId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { count } = await supabase
-    .from("requisicao_itens")
-    .select("*", { count: "exact", head: true })
-    .eq("requisicao_id", requisicaoId)
-    .eq("produto_novo", true);
-
-  if ((count ?? 0) > 0) {
-    throw new Error("Há produtos não cadastrados nesta requisição. Cadastre todos antes de aprovar.");
-  }
-
+  // Produtos não cadastrados NÃO impedem avançar para cotação — a cotação aceita
+  // itens livres (aviso persiste até o cadastro). O cadastro só é exigido na
+  // geração do Pedido de Compra (validado em gerarPedidosDeCotacao).
   const { data: req } = await supabase
     .from("requisicoes")
     .select("id, titulo, omie_codigo, requisicao_unidades(unidade_id)")
@@ -248,7 +242,10 @@ export async function listarCategoriasOmie(
   unidadeId: string,
 ): Promise<{ categorias: CategoriaOmie[] } | { erro: string }> {
   const unidadeCreds = await getCredsUnidade(unidadeId);
-  if (!unidadeCreds) return { erro: "Unidade sem credenciais Omie" };
+  // Unidade sem Omie (ex: Altana) → usa o plano de contas interno (snapshot do Omie)
+  if (!unidadeCreds) {
+    return { categorias: CATEGORIAS_CONTABEIS_PADRAO };
+  }
 
   try {
     const PER_PAGE = 50;
