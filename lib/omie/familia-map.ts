@@ -61,6 +61,7 @@ export const FAMILIA_TO_CATEGORIA: Record<string, CategoriaOrcamento> = {
   "LATICINIOS":                "Alimentos",
   "MENU DE VERAO":             "Alimentos",
   "PAES":                      "Alimentos",
+  "COLABORADORES":             "Alimentos",   // Lapa/AdC: refeição de colaboradores (carnes, grãos)
   "PESCADOS E FRUTOS DO MAR":  "Alimentos",
   "PETISCOS":                  "Alimentos",
   "PRATOS PRINCIPAIS":         "Alimentos",
@@ -106,25 +107,33 @@ export const FAMILIA_TO_CATEGORIA: Record<string, CategoriaOrcamento> = {
   "MATERIAL LIMPEZA":          "Materiais de Limpeza",
   "PRODUTOS DE LIMPEZA":       "Materiais de Limpeza",
   "HIGIENE E LIMPEZA":         "Materiais de Limpeza",
+  "HIGIENE E LIMPEZA GOVERNANÇA": "Materiais de Limpeza",
 
   // ── Materiais de Manutenção ──────────────────────────────────────────────
   "MANUTENCAO":                "Materiais de Manutenção",
   "MATERIAL DE MANUTENCAO":    "Materiais de Manutenção",
+  "MATERIAL DE MANUTENÇÃO":    "Materiais de Manutenção",   // variação com acento (Lapa)
   "FERRAMENTAS":               "Materiais de Manutenção",
   "ELETRICA":                  "Materiais de Manutenção",
   "HIDRAULICA":                "Materiais de Manutenção",
+  "MAQUINAS E EQUIPAMENTOS":      "Materiais de Manutenção",   // bens duráveis / CAPEX
+  "MOVEIS E UTENSILIOS DOMESTICO": "Materiais de Manutenção",
+  "MÓVEIS E UTENSILIOS":          "Materiais de Manutenção",   // variação com acento (AdC)
 
   // ── Produtos Químicos - Piscina ──────────────────────────────────────────
   "QUIMICOS PISCINA":          "Produtos Químicos - Piscina",
   "PRODUTOS QUIMICOS":         "Produtos Químicos - Piscina",
+  "ITENS DE PISCINAS":         "Produtos Químicos - Piscina",
 
   // ── Reposições louças e talheres ─────────────────────────────────────────
   "LOUCAS E TALHERES":         "Reposições louças e talheres",
   "REPOSICOES":                "Reposições louças e talheres",
+  "PRATOS":                    "Reposições louças e talheres",
 
   // ── Utensílios de Suítes ─────────────────────────────────────────────────
   "UTENSILIOS SUITES":         "Utensílios de Suítes",
   "UTENSILIOS":                "Utensílios de Suítes",
+  "ITENS DE SUITE":            "Utensílios de Suítes",
 
   // ── Amenities ────────────────────────────────────────────────────────────
   "AMENITIES":                 "Amenities",
@@ -135,18 +144,24 @@ export const FAMILIA_TO_CATEGORIA: Record<string, CategoriaOrcamento> = {
   "DECORACOES":                "Decorações e Experiências",
   "EXPERIENCIAS":              "Decorações e Experiências",
   "BRINDES E PRESENTES":       "Decorações e Experiências",
+  "ITENS DE EXPERIENCIAS E RESERVAS": "Decorações e Experiências",
 
   // ── Descartáveis ─────────────────────────────────────────────────────────
   "DESCARTAVEIS":              "Descartáveis",
   "EMBALAGENS":                "Descartáveis",
+  "DESCARTAVEIS COZINHA":      "Descartáveis",
 
-  // ── Outros (sem categoria mapeada) ───────────────────────────────────────
+  // ── Outros (sem categoria de custo equivalente: administrativo/operacional) ─
   "CAUCAO":                    "Outros",
-  "COLABORADORES":             "Outros",
   "ITENS EXTRAS":              "Outros",
   "RESERVAS":                  "Outros",
   "SERVICOS":                  "Outros",
   "TAXAS DE REEMBOLSOS":       "Outros",
+  "IMPRESSOS / GRAFICA":       "Outros",
+  "UNIFORMES E EPI":           "Outros",
+  "ESCRITORIO":                "Outros",
+  "ITENS DE PEQUENOS VALORES": "Outros",
+  "PRODUTOS PARA COLABORADOR (RH E FESTA)": "Outros",
 };
 
 /**
