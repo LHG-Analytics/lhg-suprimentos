@@ -24,6 +24,7 @@ import { OmieResumoSection } from "./_components/omie-resumo-section";
 import { OmieResumoWidgetSkeleton } from "./_components/omie-resumo-widget";
 import { type OrcamentoSheet } from "@/lib/sheets/client";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
+import { gastosOmiePorCategoria, mesclarGastos } from "@/lib/omie/gastos-realizado";
 // getUnidadeSheetConfig foi movido para OrcamentoSection (carregado via Suspense)
 // ── Metadados ─────────────────────────────────────────────────────────────────
 export const metadata = { title: "Dashboard" };
@@ -376,6 +377,7 @@ async function fetchGastosPorPeriodo(
   startIso:  string,
   endIso:    string | undefined,
   pedIds:    string[] | null,
+  unidadeId: string | null,
 ): Promise<Record<string, number>> {
   let baseQuery = supabase
     .from("pedido_itens")
@@ -400,7 +402,10 @@ async function fetchGastosPorPeriodo(
     const catOrc  = cat ?? (familia ? (FAMILIA_TO_CATEGORIA[familia.toUpperCase()] ?? "Outros") : "Outros");
     map[catOrc] = (map[catOrc] ?? 0) + (item.valor_total ?? 0);
   }
-  return map;
+
+  // Soma as compras feitas direto no Omie (deduplicadas) ao realizado.
+  const omie = await gastosOmiePorCategoria(supabase, startIso, endIso, unidadeId);
+  return mesclarGastos(map, omie);
 }
 
 // ── CMV: métricas calculadas ──────────────────────────────────────────────────
@@ -524,8 +529,8 @@ export default async function DashboardPage({
     fetchChartData(supabase, periodoFrom, periodoTo, pedIds),
     fetchAcoes(supabase, cotIds, pedIds),
     fetchCotacoes(supabase, cotIds),
-    fetchGastosPorPeriodo(supabase, monthStart.toISOString(), undefined, pedIds),
-    fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString(), pedIds),
+    fetchGastosPorPeriodo(supabase, monthStart.toISOString(), undefined, pedIds, unidadeId),
+    fetchGastosPorPeriodo(supabase, prevStart.toISOString(), prevEnd.toISOString(), pedIds, unidadeId),
   ]);
 
   // Valores de fallback para cada seção

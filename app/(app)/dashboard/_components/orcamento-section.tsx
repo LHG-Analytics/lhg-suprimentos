@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchOrcamento } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { FAMILIA_TO_CATEGORIA } from "@/lib/omie/familia-map";
+import { gastosOmiePorCategoria, mesclarGastos } from "@/lib/omie/gastos-realizado";
 import { OrcamentoWidget } from "./orcamento-widget";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -57,25 +58,28 @@ export async function OrcamentoSection() {
     // Filtra o realizado pela MESMA unidade do orçamento (sheetConfig.unidadeSlug),
     // para orçado e realizado ficarem no mesmo escopo.
     let pedIds: string[] | null = null;
+    let unidadeId: string | null = null;
     if (sheetConfig && sheetConfig.unidadeSlug && sheetConfig.unidadeSlug !== "todas") {
       const { data: u } = await supabase.from("unidades").select("id").eq("slug", sheetConfig.unidadeSlug).single();
       if (u?.id) {
+        unidadeId = u.id;
         const { data: pu } = await supabase.from("pedido_unidades").select("pedido_id").eq("unidade_id", u.id);
         pedIds = (pu ?? []).map(r => r.pedido_id);
       }
     }
 
-    const [orcamento, gastosCat] = await Promise.all([
+    const [orcamento, gastosNosso, gastosOmie] = await Promise.all([
       sheetConfig
         ? fetchOrcamento(sheetConfig.sheetId, sheetConfig.sheetName)
         : Promise.resolve(null),
       fetchGastosPorPeriodo(supabase, monthStart.toISOString(), pedIds),
+      gastosOmiePorCategoria(supabase, monthStart.toISOString(), undefined, unidadeId),
     ]);
 
     return (
       <OrcamentoWidget
         orcamento={orcamento}
-        gastosPorCategoria={gastosCat}
+        gastosPorCategoria={mesclarGastos(gastosNosso, gastosOmie)}
       />
     );
   } catch (err) {
