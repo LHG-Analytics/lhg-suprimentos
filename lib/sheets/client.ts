@@ -140,6 +140,10 @@ function parseOrcamentoCSV(csvText: string): Omit<OrcamentoSheet, "fetchedAt"> |
 
   // ── Parsear linhas de dados ────────────────────────────────────────────────
   const categorias: OrcamentoCategoria[] = [];
+  // Dedup por nome (case-insensitive): a aba "Administrativas" repete a mesma
+  // categoria em mais de um bloco. Mantém a ocorrência de maior valor anual
+  // em vez de listar duplicada (que inflava o total).
+  const catIndex = new Map<string, number>();
   let secaoAtual: OrcamentoSecao = "servicos";
 
   for (let i = headerIdx + 1; i < lines.length; i++) {
@@ -172,12 +176,16 @@ function parseOrcamentoCSV(csvText: string): Omit<OrcamentoSheet, "fetchedAt"> |
     // Mantém mesmo com zero para mostrar categorias sem orçamento
     const anual = Object.values(mensal).reduce((s, v) => s + v, 0);
 
-    categorias.push({
-      categoria: desc,
-      secao:     secaoAtual,
-      mensal,
-      anual,
-    });
+    const nova: OrcamentoCategoria = { categoria: desc, secao: secaoAtual, mensal, anual };
+    const key = desc.toLowerCase();
+    const jaVisto = catIndex.get(key);
+    if (jaVisto !== undefined) {
+      // Duplicata: substitui só se a nova tiver valor maior (evita perder a linha com dados)
+      if (anual > categorias[jaVisto].anual) categorias[jaVisto] = nova;
+      continue;
+    }
+    catIndex.set(key, categorias.length);
+    categorias.push(nova);
   }
 
   return { unidade, ano, categorias };
