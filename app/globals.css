@@ -281,4 +281,13 @@
   #cotacao-print-doc tr,
   #cotacao-print-doc .avoid-break { break-inside: avoid; }
   #cotacao-print-doc thead { display: table-header-group; }
+
+  /* Força a impressão das cores de fundo (header escuro, faixa verde, zebra,
+     célula selecionada). Sem isto o navegador descarta os backgrounds e o
+     texto branco do cabeçalho fica invisível sobre o papel. */
+  #cotacao-print-doc,
+  #cotacao-print-doc * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

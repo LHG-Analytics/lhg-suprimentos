@@ -83,7 +83,14 @@ export function CotacaoPrintDoc({
     <div
       id="cotacao-print-doc"
       className="bg-white text-zinc-900 mx-auto"
-      style={{ fontFamily: "var(--font-sans, system-ui)", maxWidth: "100%", padding: "4mm" }}
+      style={{
+        fontFamily: "var(--font-sans, system-ui)",
+        maxWidth: "100%",
+        padding: "4mm",
+        // Garante que os fundos (header escuro, faixa verde) saiam no PDF
+        WebkitPrintColorAdjust: "exact",
+        printColorAdjust: "exact",
+      }}
     >
       {/* Cabeçalho do documento */}
       <div className="flex items-start justify-between border-b-2 border-zinc-900 pb-3 mb-4">
