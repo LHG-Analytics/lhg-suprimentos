@@ -120,8 +120,8 @@ function parseOrcamentoCSV(csvText: string): Omit<OrcamentoSheet, "fetchedAt"> |
 
     for (let j = 0; j < row.length; j++) {
       const cell = row[j].toLowerCase().replace(/^["']|["']$/g, "").trim();
-      // Detecta "jan.26", "fev.26", etc.
-      const m = cell.match(/^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.(\d{2})$/);
+      // Detecta "jan.26", "jan/26", "jan./26" (aba Administrativas usa barra), etc.
+      const m = cell.match(/^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[.\/]+(\d{2})$/);
       if (m) {
         detected[m[1] as MesKey] = j;
         if (!anoDetected) anoDetected = 2000 + parseInt(m[2], 10);

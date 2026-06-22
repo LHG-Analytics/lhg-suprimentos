@@ -35,6 +35,8 @@ export const CATEGORIAS_ORCAMENTO = [
   "Amenities",
   "Decorações e Experiências",
   "Descartáveis",
+  // ── Administrativo (unidades administrativas, ex: LHG Holding) ─────────────
+  "Material de Escritório",
   // ── Fallback ──────────────────────────────────────────────────────────────
   "Outros",
 ] as const;
@@ -150,6 +152,11 @@ export const FAMILIA_TO_CATEGORIA: Record<string, CategoriaOrcamento> = {
   "DESCARTAVEIS":              "Descartáveis",
   "EMBALAGENS":                "Descartáveis",
   "DESCARTAVEIS COZINHA":      "Descartáveis",
+
+  // ── Material de Escritório (administrativo — ex: LHG Holding) ─────────────
+  // ⚠️ distinto de "ESCRITORIO" (Lapa/AdC → Outros): esta é a compra de
+  //    insumos de escritório (canetas, cartuchos, papelaria) da Holding.
+  "MATERIAL DE ESCRITORIO":    "Material de Escritório",
 
   // ── Outros (sem categoria de custo equivalente: administrativo/operacional) ─
   "CAUCAO":                    "Outros",
