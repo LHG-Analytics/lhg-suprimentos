@@ -37,6 +37,7 @@ export const CATEGORIAS_ORCAMENTO = [
   "Descartáveis",
   // ── Administrativo (unidades administrativas, ex: LHG Holding) ─────────────
   "Material de Escritório",
+  "Serviços de TI, Informática e Periféricos",
   // ── Fallback ──────────────────────────────────────────────────────────────
   "Outros",
 ] as const;
@@ -172,10 +173,33 @@ export const FAMILIA_TO_CATEGORIA: Record<string, CategoriaOrcamento> = {
 };
 
 /**
+ * Override de mapeamento POR UNIDADE (chave = slug).
+ * Para unidades administrativas (ex: LHG Holding) a mesma família Omie tem
+ * significado diferente das operacionais — ex: "MAQUINAS E EQUIPAMENTOS" é
+ * TI/informática na Holding, mas é equipamento de cozinha/serviço nas demais.
+ *
+ * É uma WHITELIST: se a unidade tem override, SÓ as famílias listadas mapeiam;
+ * qualquer outra família cai em "Outros" (a Holding rastreia só 2 categorias).
+ */
+export const MAPA_FAMILIA_POR_UNIDADE: Record<string, Record<string, CategoriaOrcamento>> = {
+  "lhg-holding": {
+    "MATERIAL DE ESCRITORIO":  "Material de Escritório",
+    "MAQUINAS E EQUIPAMENTOS":  "Serviços de TI, Informática e Periféricos",
+  },
+};
+
+/**
  * Resolve a categoria de orçamento para uma família Omie.
+ * Quando `unidadeSlug` tem override (whitelist), usa-o; senão usa o mapa global.
  * Retorna a categoria mapeada ou "Outros" como fallback.
  */
-export function categoriaParaFamilia(familia: string | null | undefined): string {
+export function categoriaParaFamilia(
+  familia: string | null | undefined,
+  unidadeSlug?: string | null,
+): string {
   if (!familia) return "Outros";
-  return FAMILIA_TO_CATEGORIA[familia.toUpperCase()] ?? "Outros";
+  const f = familia.toUpperCase();
+  const override = unidadeSlug ? MAPA_FAMILIA_POR_UNIDADE[unidadeSlug] : undefined;
+  if (override) return override[f] ?? "Outros"; // whitelist: resto → Outros
+  return FAMILIA_TO_CATEGORIA[f] ?? "Outros";
 }

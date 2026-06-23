@@ -103,7 +103,7 @@ function mapFornecedor(item: OmieClienteItem, unidadeId: string) {
   };
 }
 
-function mapProduto(item: OmieProdutoItem, unidadeId: string) {
+function mapProduto(item: OmieProdutoItem, unidadeId: string, unidadeSlug?: string | null) {
   // A API Omie retorna o nome da família em "descricao_familia".
   // "familia_produto" não existe na resposta real — mantido como fallback por segurança.
   const familiaOmie: string | null =
@@ -120,7 +120,7 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
     nome:                  item.descricao,
     codigo:                item.codigo ?? `OMIE-${item.codigo_produto}`,
     unidade_med:           item.unidade ?? "un",
-    categoria:             categoriaParaFamilia(familiaOmie),
+    categoria:             categoriaParaFamilia(familiaOmie, unidadeSlug),
     familia_omie:          familiaOmie,
     codigo_familia_omie:   item.codigo_familia ?? null,
     omie_codigo:           String(item.codigo_produto),
@@ -152,9 +152,9 @@ function mapProduto(item: OmieProdutoItem, unidadeId: string) {
  *
  * Exportado para uso em importarProdutoOmie (server action).
  */
-export function mapProdutoUpsert(item: OmieProdutoItem, unidadeId: string) {
+export function mapProdutoUpsert(item: OmieProdutoItem, unidadeId: string, unidadeSlug?: string | null) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { preco_custo: _, ...rest } = mapProduto(item, unidadeId);
+  const { preco_custo: _, ...rest } = mapProduto(item, unidadeId, unidadeSlug);
   return rest;
 }
 
@@ -323,6 +323,10 @@ export async function syncProdutos(
   let novos = 0;
   let erros = 0;
 
+  // Slug da unidade → habilita override de categoria por unidade (ex: LHG Holding)
+  const { data: uSlug } = await supabase.from("unidades").select("slug").eq("id", unidadeId).maybeSingle();
+  const unidadeSlug = (uSlug as { slug?: string } | null)?.slug ?? null;
+
   // Modo inteligente: compara count Omie vs DB antes de baixar tudo.
   // 1 chamada API (vs N páginas) — skip se catálogo já está em dia.
   if (modo === "inteligente") {
@@ -353,7 +357,7 @@ export async function syncProdutos(
     for (let i = 0; i < items.length; i += BATCH) {
       // mapProdutoUpsert exclui preco_custo → preserva o CMC em produtos existentes
       // e deixa null em novos (preenchido pelo syncCMCProdutos em after()).
-      const batch = items.slice(i, i + BATCH).map((item) => mapProdutoUpsert(item, unidadeId));
+      const batch = items.slice(i, i + BATCH).map((item) => mapProdutoUpsert(item, unidadeId, unidadeSlug));
 
       // Upsert em batch: INSERT em novos, UPDATE de metadados em existentes.
       // ignoreDuplicates: false → atualiza todos os campos do payload em conflito.
