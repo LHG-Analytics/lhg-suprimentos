@@ -141,6 +141,10 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const byPed = (q: any) => (pedIds ? q.in("id", pedIds) : q);
 
+  // Produtos cotados: itens das cotações da unidade (cotacao_itens.cotacao_id ∈ cotIds)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itensQuery = (q: any) => (cotIds ? q.in("cotacao_id", cotIds) : q);
+
   const [
     { count: abertas },
     { count: abertasPrev },
@@ -149,6 +153,8 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     { data: economiaRows },
     { count: pendAprov },
     { count: pendAprovPrev },
+    { count: totalCotacoes },
+    { count: produtosCotados },
   ] = await Promise.all([
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null)),
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null)),
@@ -157,6 +163,10 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     byCot(supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null)),
     byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao")),
     byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso)),
+    // Total de cotações já feitas (qualquer status, não deletadas) da unidade
+    byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).is("deleted_at", null)),
+    // Total de produtos cotados (itens) das cotações da unidade
+    itensQuery(supabase.from("cotacao_itens").select("*", { count: "exact", head: true })),
   ]);
 
   const valor     = ((valorRows     ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
@@ -176,6 +186,8 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     pendAprov:     pendAprov     ?? 0,
     pendAprovPrev: pendAprovPrev ?? 0,
     deltaPendAprov: pendAprovPrev ? (((pendAprov ?? 0) - pendAprovPrev) / pendAprovPrev) * 100 : null,
+    totalCotacoes:   totalCotacoes   ?? 0,
+    produtosCotados: produtosCotados ?? 0,
   };
 }
 
@@ -534,7 +546,7 @@ export default async function DashboardPage({
   ]);
 
   // Valores de fallback para cada seção
-  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null };
+  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, totalCotacoes: 0, produtosCotados: 0 };
   const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
   const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [], subtitulo: "pedidos enviados e recebidos" };
   const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
@@ -552,7 +564,7 @@ export default async function DashboardPage({
       <DashboardHeader from={periodoFrom} to={periodoTo} />
 
       {/* ── KPIs ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard
           label="COTAÇÕES ABERTAS"
           value={kpis.abertas.toString()}
@@ -594,6 +606,20 @@ export default async function DashboardPage({
           meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
           metaLabel="ORÇADO"
           accent={cmv.temOrcamento && cmv.totalReal > cmv.cmvOrcado ? "negative" : "neutral"}
+          mono
+        />
+        {/* Total de cotações já feitas (qualquer status) */}
+        <KpiCard
+          label="COTAÇÕES FEITAS"
+          value={kpis.totalCotacoes.toString()}
+          meta={kpis.abertas.toString()}
+          metaLabel="ABERTAS"
+          mono
+        />
+        {/* Total de produtos cotados (itens) */}
+        <KpiCard
+          label="PRODUTOS COTADOS"
+          value={kpis.produtosCotados.toString()}
           mono
         />
       </div>
