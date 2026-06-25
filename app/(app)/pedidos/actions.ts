@@ -16,6 +16,7 @@ import { fetchOrcamento, getBudgetMesAtual } from "@/lib/sheets/client";
 import { getUnidadeSheetConfig } from "@/lib/sheets/get-unidade-sheet";
 import { OmieError } from "@/lib/omie/client";
 import { incluirPedCompra, upsertPedCompra, alterarPedCompra, excluirPedCompra, recuperarPedCompraPorFornecedor, consultarPedCompraPorCodIntPed } from "@/lib/omie/pedidos";
+import { codigoContabilParaCategoria } from "@/lib/omie/categorias-contabeis";
 
 // ── aprovarPedido ──────────────────────────────────────────────────────────────
 
@@ -151,7 +152,7 @@ export async function pushPedidoOmie(
       fornecedores ( razao_social, nome_fantasia ),
       pedido_itens (
         id, quantidade, preco_unitario,
-        produtos ( omie_codigo, omie_unidade_id, nome, unidade_med )
+        produtos ( omie_codigo, omie_unidade_id, nome, unidade_med, categoria )
       ),
       pedido_unidades (
         unidades ( id, omie_app_key, omie_app_secret, omie_conta_corrente, omie_categoria_compras )
@@ -209,7 +210,7 @@ export async function pushPedidoOmie(
     id: string;
     quantidade: number;
     preco_unitario: number;
-    produtos: { omie_codigo: string | null; omie_unidade_id: string | null; nome: string; unidade_med: string } | null;
+    produtos: { omie_codigo: string | null; omie_unidade_id: string | null; nome: string; unidade_med: string; categoria: string | null } | null;
   };
   const itens = pedido.pedido_itens as PedidoItemRaw[] | null;
 
@@ -294,9 +295,25 @@ export async function pushPedidoOmie(
 
   const nCodCC = unidade.omie_conta_corrente ? Number(unidade.omie_conta_corrente) : undefined;
 
-  // Busca codCateg da requisição vinculada (via cotação → requisição)
+  // Categoria contábil (cCodCateg) do pedido: deriva da categoria dos PRODUTOS.
+  // O pedido carrega uma categoria no cabeçalho — usamos a predominante por valor
+  // (a categoria do produto vem da família Omie e segue desde a requisição).
+  // Fallbacks: categoria definida na requisição → categoria padrão da unidade.
   let cCodCateg = (unidade as { omie_categoria_compras?: string | null }).omie_categoria_compras ?? "";
-  if (pedido.cotacao_id) {
+
+  const valorPorCategoria = new Map<string, number>();
+  for (const it of itens ?? []) {
+    const codigo = codigoContabilParaCategoria(it.produtos?.categoria);
+    if (!codigo) continue; // categoria "Outros"/sem conta → ignora (usa fallback)
+    const v = (it.preco_unitario ?? 0) * (it.quantidade ?? 0);
+    valorPorCategoria.set(codigo, (valorPorCategoria.get(codigo) ?? 0) + v);
+  }
+  if (valorPorCategoria.size > 0) {
+    // Categoria predominante (maior valor somado entre os itens)
+    const [predominante] = [...valorPorCategoria.entries()].sort((a, b) => b[1] - a[1])[0];
+    cCodCateg = predominante;
+  } else if (pedido.cotacao_id) {
+    // Sem categoria nos produtos → tenta a categoria definida na requisição de origem
     const { data: cotReq } = await supabase
       .from("cotacoes").select("requisicao_id").eq("id", pedido.cotacao_id).maybeSingle();
     if (cotReq?.requisicao_id) {
@@ -304,6 +321,7 @@ export async function pushPedidoOmie(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from("requisicoes").select("omie_categoria" as any)
         .eq("id", cotReq.requisicao_id).maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cat = (req as any)?.omie_categoria as string | null;
       if (cat) cCodCateg = cat;
     }

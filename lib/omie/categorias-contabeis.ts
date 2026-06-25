@@ -16,6 +16,36 @@ export interface CategoriaContabil {
   descricao: string;
 }
 
+/** Normaliza texto p/ casar nomes: minúsculo, sem acento, espaços colapsados. */
+function norm(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\s*-\s*/g, "-").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Aliases categoria de ORÇAMENTO → descrição da conta CONTÁBIL, para os casos
+ * em que o nome não bate exatamente com uma linha do plano de contas.
+ */
+const ALIAS_CATEGORIA_CONTABIL: Record<string, string> = {
+  "materiais de limpeza":       "produtos de limpeza",
+  "materiais de manutencao":    "manutencao - operacional",
+  "reposicoes loucas e talheres": "reposicoes loucas e talheres",
+};
+
+/**
+ * Resolve o código contábil do Omie (cCodCateg, ex "2.02.87") a partir da
+ * categoria de orçamento de um produto (ex "Alimentos"). Casa pelo nome
+ * (normalizado) com o plano de contas; usa aliases quando o nome difere.
+ * Retorna null se não houver correspondência (ex: "Outros").
+ */
+export function codigoContabilParaCategoria(categoria: string | null | undefined): string | null {
+  if (!categoria) return null;
+  const n = norm(categoria);
+  const alvo = ALIAS_CATEGORIA_CONTABIL[n] ?? n;
+  const hit = CATEGORIAS_CONTABEIS_PADRAO.find((c) => norm(c.descricao) === norm(alvo));
+  return hit?.codigo ?? null;
+}
+
 export const CATEGORIAS_CONTABEIS_PADRAO: CategoriaContabil[] = [
   { codigo: "2.01.01", descricao: "Chargeback" },
   { codigo: "2.01.02", descricao: "Ressarcimento a Clientes" },

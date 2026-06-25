@@ -16,7 +16,7 @@ interface Item {
   produto_novo:        boolean;
   produto_nome_livre:  string | null;
   produto_unidade_med: string | null;
-  produtos: { id: string; nome: string; unidade_med: string; preco_custo: number | null } | null;
+  produtos: { id: string; nome: string; unidade_med: string; preco_custo: number | null; categoria: string | null } | null;
 }
 
 interface Req {
@@ -172,8 +172,13 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
                 }
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-foreground">
-                  {item.produto_novo ? item.produto_nome_livre : (item.produtos?.nome ?? "—")}
+                <div className="text-sm font-medium text-foreground flex items-center gap-2 flex-wrap">
+                  <span>{item.produto_novo ? item.produto_nome_livre : (item.produtos?.nome ?? "—")}</span>
+                  {!item.produto_novo && item.produtos?.categoria && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      {item.produtos.categoria}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {item.quantidade}× {item.produto_novo ? item.produto_unidade_med : item.produtos?.unidade_med}

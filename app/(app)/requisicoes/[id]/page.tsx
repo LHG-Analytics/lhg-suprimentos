@@ -22,7 +22,7 @@ export default async function RequisicaoPage({ params }: Props) {
        requisicao_itens(
          id, quantidade, observacao, produto_novo,
          produto_nome_livre, produto_unidade_med,
-         produtos(id, nome, unidade_med, preco_custo)
+         produtos(id, nome, unidade_med, preco_custo, categoria)
        )`,
     )
     .eq("id", id)

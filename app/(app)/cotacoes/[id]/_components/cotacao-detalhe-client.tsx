@@ -680,6 +680,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                               {prod?.codigo && (
                                 <span className="text-[10px] text-muted-foreground/40 font-mono">{prod.codigo}</span>
                               )}
+                              {prod?.categoria && prod.categoria !== "Outros" && (
+                                <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                  {prod.categoria}
+                                </span>
+                              )}
                               {precisaCadastro && (
                                 editavel ? (
                                   <button
