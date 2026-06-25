@@ -155,6 +155,7 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     { count: pendAprovPrev },
     { count: totalCotacoes },
     { count: produtosCotados },
+    { count: pedidosNoMes },
   ] = await Promise.all([
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null)),
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null)),
@@ -167,6 +168,8 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).is("deleted_at", null)),
     // Total de produtos cotados (itens) das cotações da unidade
     itensQuery(supabase.from("cotacao_itens").select("*", { count: "exact", head: true })),
+    // Pedidos de compra criados no mês corrente (da unidade)
+    byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).gte("created_at", startIso)),
   ]);
 
   const valor     = ((valorRows     ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
@@ -188,6 +191,7 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     deltaPendAprov: pendAprovPrev ? (((pendAprov ?? 0) - pendAprovPrev) / pendAprovPrev) * 100 : null,
     totalCotacoes:   totalCotacoes   ?? 0,
     produtosCotados: produtosCotados ?? 0,
+    pedidosNoMes:    pedidosNoMes    ?? 0,
   };
 }
 
@@ -546,7 +550,7 @@ export default async function DashboardPage({
   ]);
 
   // Valores de fallback para cada seção
-  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, totalCotacoes: 0, produtosCotados: 0 };
+  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, totalCotacoes: 0, produtosCotados: 0, pedidosNoMes: 0 };
   const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
   const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [], subtitulo: "pedidos enviados e recebidos" };
   const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
@@ -597,6 +601,12 @@ export default async function DashboardPage({
           prev={kpis.pendAprovPrev.toString()}
           meta="< 24h"
           metaLabel="SLA MÉDIO"
+          mono
+        />
+        {/* Pedidos de compra emitidos no mês corrente */}
+        <KpiCard
+          label="PEDIDOS NO MÊS"
+          value={kpis.pedidosNoMes.toString()}
           mono
         />
         {/* Total Insumos — gasto real vs orçamento de produtos da planilha */}
