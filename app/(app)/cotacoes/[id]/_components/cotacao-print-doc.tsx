@@ -65,6 +65,11 @@ export function CotacaoPrintDoc({
     itens.forEach(it => { const g = cell(it.id, fId)?.garantia?.trim(); if (g) s.add(g); });
     return s.size ? Array.from(s).join(" · ") : null;
   }
+  function obsForn(fId: string) {
+    const s = new Set<string>();
+    itens.forEach(it => { const o = cell(it.id, fId)?.observacao?.trim(); if (o) s.add(o); });
+    return s.size ? Array.from(s).join(" · ") : null;
+  }
   function totalSelecionadoForn(fId: string) {
     return itens.reduce((acc, it) => {
       if (selecoes[it.id] !== fId) return acc;
@@ -237,6 +242,11 @@ export function CotacaoPrintDoc({
           <tr>
             <td className="border border-zinc-300 px-2 py-1.5 text-[9px] uppercase tracking-wide text-zinc-600 font-semibold">Garantia</td>
             {fornecedores.map(f => <td key={f.id} className="border border-zinc-300 px-2 py-1.5 text-center text-[9px] text-zinc-700">{garantiaForn(f.id) ?? "—"}</td>)}
+          </tr>
+          {/* Observação */}
+          <tr>
+            <td className="border border-zinc-300 px-2 py-1.5 text-[9px] uppercase tracking-wide text-zinc-600 font-semibold align-top">Observação</td>
+            {fornecedores.map(f => <td key={f.id} className="border border-zinc-300 px-2 py-1.5 text-center text-[9px] text-zinc-600 italic align-top">{obsForn(f.id) ?? "—"}</td>)}
           </tr>
         </tfoot>
       </table>
