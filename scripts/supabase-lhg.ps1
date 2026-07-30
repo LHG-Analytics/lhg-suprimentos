@@ -27,16 +27,34 @@ $LHG_HEADERS = @{
 
 function Invoke-LhgSql([string]$Query) {
     $body = ConvertTo-Json @{ query = $Query } -Compress
+    # PS 5.1 envia o body na codificacao ANSI por padrao: acentos e simbolos viram
+    # bytes invalidos e a API responde "Expected ',' or '}' after property value in JSON".
+    # Serializar para UTF-8 explicitamente resolve.
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
     Invoke-RestMethod -Method POST `
         -Uri "https://api.supabase.com/v1/projects/$LHG_PROJECT/database/query" `
         -Headers $LHG_HEADERS `
-        -Body $body
+        -Body $bytes
 }
 
-function Apply-LhgMigration([string]$Name, [string]$Query) {
+# Aplica uma migracao. Prefira -Path: ele le o arquivo como UTF-8.
+# Passar -Query com (Get-Content -Raw) sem -Encoding UTF8 corrompe acentos.
+function Apply-LhgMigration([string]$Name, [string]$Query, [string]$Path) {
+    if ($Path) {
+        if (-not (Test-Path $Path)) {
+            Write-Host "ERRO: arquivo nao encontrado: $Path" -ForegroundColor Red
+            return
+        }
+        $Query = [System.IO.File]::ReadAllText((Resolve-Path $Path), [System.Text.Encoding]::UTF8)
+        if (-not $Name) { $Name = [System.IO.Path]::GetFileNameWithoutExtension($Path) }
+    }
+    if (-not $Query) {
+        Write-Host "ERRO: informe -Path ou -Query." -ForegroundColor Red
+        return
+    }
     Write-Host "Aplicando migracao '$Name'..." -ForegroundColor Cyan
     Invoke-LhgSql -Query $Query | Out-Null
-    Write-Host "OK - Migracao '$Name' aplicada." -ForegroundColor Green
+    if ($?) { Write-Host "OK - Migracao '$Name' aplicada." -ForegroundColor Green }
 }
 
 function Get-LhgTables {

@@ -131,16 +131,22 @@ export type Database = {
           cotacao_id: string
           email_enviado_em: string | null
           fornecedor_id: string
+          frete: number | null
+          garantia: string | null
         }
         Insert: {
           cotacao_id: string
           email_enviado_em?: string | null
           fornecedor_id: string
+          frete?: number | null
+          garantia?: string | null
         }
         Update: {
           cotacao_id?: string
           email_enviado_em?: string | null
           fornecedor_id?: string
+          frete?: number | null
+          garantia?: string | null
         }
         Relationships: [
           {
@@ -164,7 +170,10 @@ export type Database = {
           cotacao_id: string
           id: string
           melhor_forn: string | null
-          produto_id: string
+          produto_id: string | null
+          produto_nome_livre: string | null
+          produto_novo: boolean
+          produto_unidade_med: string | null
           quantidade: number
           selecionado_forn: string | null
         }
@@ -172,7 +181,10 @@ export type Database = {
           cotacao_id: string
           id?: string
           melhor_forn?: string | null
-          produto_id: string
+          produto_id?: string | null
+          produto_nome_livre?: string | null
+          produto_novo?: boolean
+          produto_unidade_med?: string | null
           quantidade: number
           selecionado_forn?: string | null
         }
@@ -180,7 +192,10 @@ export type Database = {
           cotacao_id?: string
           id?: string
           melhor_forn?: string | null
-          produto_id?: string
+          produto_id?: string | null
+          produto_nome_livre?: string | null
+          produto_novo?: boolean
+          produto_unidade_med?: string | null
           quantidade?: number
           selecionado_forn?: string | null
         }
@@ -221,6 +236,8 @@ export type Database = {
           cotacao_item_id: string
           cotado_em: string | null
           fornecedor_id: string
+          frete: number | null
+          garantia: string | null
           observacao: string | null
           prazo_entrega_dias: number | null
           preco_unitario: number | null
@@ -230,6 +247,8 @@ export type Database = {
           cotacao_item_id: string
           cotado_em?: string | null
           fornecedor_id: string
+          frete?: number | null
+          garantia?: string | null
           observacao?: string | null
           prazo_entrega_dias?: number | null
           preco_unitario?: number | null
@@ -239,6 +258,8 @@ export type Database = {
           cotacao_item_id?: string
           cotado_em?: string | null
           fornecedor_id?: string
+          frete?: number | null
+          garantia?: string | null
           observacao?: string | null
           prazo_entrega_dias?: number | null
           preco_unitario?: number | null
@@ -391,6 +412,42 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      fornecedor_unidade: {
+        Row: {
+          fornecedor_id: string
+          omie_codigo: string
+          omie_sincronizado_em: string | null
+          unidade_id: string
+        }
+        Insert: {
+          fornecedor_id: string
+          omie_codigo: string
+          omie_sincronizado_em?: string | null
+          unidade_id: string
+        }
+        Update: {
+          fornecedor_id?: string
+          omie_codigo?: string
+          omie_sincronizado_em?: string | null
+          unidade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedor_unidade_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedor_unidade_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fornecedores: {
         Row: {
@@ -552,138 +609,56 @@ export type Database = {
         }
         Relationships: []
       }
-      nf_itens: {
+      omie_pedido_itens: {
         Row: {
-          decisao: string | null
-          descricao_omie: string | null
-          divergencia: Database["public"]["Enums"]["nf_item_kind"]
-          familia_omie: string | null
-          id: string
-          nf_id: string
-          preco_nf: number | null
-          preco_pedido: number | null
-          produto_id: string | null
-          qtd_nf: number | null
-          qtd_pedido: number | null
-        }
-        Insert: {
-          decisao?: string | null
-          descricao_omie?: string | null
-          divergencia?: Database["public"]["Enums"]["nf_item_kind"]
-          familia_omie?: string | null
-          id?: string
-          nf_id: string
-          preco_nf?: number | null
-          preco_pedido?: number | null
-          produto_id?: string | null
-          qtd_nf?: number | null
-          qtd_pedido?: number | null
-        }
-        Update: {
-          decisao?: string | null
-          descricao_omie?: string | null
-          divergencia?: Database["public"]["Enums"]["nf_item_kind"]
-          familia_omie?: string | null
-          id?: string
-          nf_id?: string
-          preco_nf?: number | null
-          preco_pedido?: number | null
-          produto_id?: string | null
-          qtd_nf?: number | null
-          qtd_pedido?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "nf_itens_nf_id_fkey"
-            columns: ["nf_id"]
-            isOneToOne: false
-            referencedRelation: "notas_fiscais"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "nf_itens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notas_fiscais: {
-        Row: {
-          chave_acesso: string | null
+          categoria: string | null
           created_at: string
-          emissao: string | null
-          fornecedor_id: string | null
+          data_pedido: string | null
+          descricao: string | null
           id: string
-          lancada_em: string | null
-          lancada_no_omie: boolean | null
-          numero: string | null
-          omie_concluido: boolean | null
-          omie_num_nf: string | null
-          omie_receb_id: number | null
-          pedido_id: string | null
-          serie: string | null
-          status: string
-          unidade_id: string | null
+          omie_cod_prod: number | null
+          omie_codigo: number | null
+          omie_pedido_id: string
+          quantidade: number | null
+          unidade_id: string
           valor_total: number | null
-          xml_url: string | null
         }
         Insert: {
-          chave_acesso?: string | null
+          categoria?: string | null
           created_at?: string
-          emissao?: string | null
-          fornecedor_id?: string | null
+          data_pedido?: string | null
+          descricao?: string | null
           id?: string
-          lancada_em?: string | null
-          lancada_no_omie?: boolean | null
-          numero?: string | null
-          omie_concluido?: boolean | null
-          omie_num_nf?: string | null
-          omie_receb_id?: number | null
-          pedido_id?: string | null
-          serie?: string | null
-          status?: string
-          unidade_id?: string | null
+          omie_cod_prod?: number | null
+          omie_codigo?: number | null
+          omie_pedido_id: string
+          quantidade?: number | null
+          unidade_id: string
           valor_total?: number | null
-          xml_url?: string | null
         }
         Update: {
-          chave_acesso?: string | null
+          categoria?: string | null
           created_at?: string
-          emissao?: string | null
-          fornecedor_id?: string | null
+          data_pedido?: string | null
+          descricao?: string | null
           id?: string
-          lancada_em?: string | null
-          lancada_no_omie?: boolean | null
-          numero?: string | null
-          omie_concluido?: boolean | null
-          omie_num_nf?: string | null
-          omie_receb_id?: number | null
-          pedido_id?: string | null
-          serie?: string | null
-          status?: string
-          unidade_id?: string | null
+          omie_cod_prod?: number | null
+          omie_codigo?: number | null
+          omie_pedido_id?: string
+          quantidade?: number | null
+          unidade_id?: string
           valor_total?: number | null
-          xml_url?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "notas_fiscais_fornecedor_id_fkey"
-            columns: ["fornecedor_id"]
+            foreignKeyName: "omie_pedido_itens_omie_pedido_id_fkey"
+            columns: ["omie_pedido_id"]
             isOneToOne: false
-            referencedRelation: "fornecedores"
+            referencedRelation: "omie_pedidos_compra"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "notas_fiscais_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notas_fiscais_unidade_id_fkey"
+            foreignKeyName: "omie_pedido_itens_unidade_id_fkey"
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "unidades"
@@ -702,6 +677,7 @@ export type Database = {
           fornecedor_nome: string | null
           id: string
           itens: Json | null
+          itens_sincronizados: boolean
           numero: number | null
           numero_pedido_forn: string | null
           omie_codigo: number
@@ -721,6 +697,7 @@ export type Database = {
           fornecedor_nome?: string | null
           id?: string
           itens?: Json | null
+          itens_sincronizados?: boolean
           numero?: number | null
           numero_pedido_forn?: string | null
           omie_codigo: number
@@ -740,6 +717,7 @@ export type Database = {
           fornecedor_nome?: string | null
           id?: string
           itens?: Json | null
+          itens_sincronizados?: boolean
           numero?: number | null
           numero_pedido_forn?: string | null
           omie_codigo?: number
@@ -752,6 +730,75 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "omie_pedidos_compra_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      omie_requisicoes: {
+        Row: {
+          created_at: string
+          data_necessidade: string | null
+          data_requisicao: string | null
+          departamento: string | null
+          id: string
+          itens: Json | null
+          numero: string | null
+          observacao: string | null
+          omie_codigo: number
+          omie_sincronizado_em: string
+          requisicao_id: string | null
+          situacao: string | null
+          solicitante_nome: string | null
+          unidade_id: string
+          valor_total: number | null
+        }
+        Insert: {
+          created_at?: string
+          data_necessidade?: string | null
+          data_requisicao?: string | null
+          departamento?: string | null
+          id?: string
+          itens?: Json | null
+          numero?: string | null
+          observacao?: string | null
+          omie_codigo: number
+          omie_sincronizado_em?: string
+          requisicao_id?: string | null
+          situacao?: string | null
+          solicitante_nome?: string | null
+          unidade_id: string
+          valor_total?: number | null
+        }
+        Update: {
+          created_at?: string
+          data_necessidade?: string | null
+          data_requisicao?: string | null
+          departamento?: string | null
+          id?: string
+          itens?: Json | null
+          numero?: string | null
+          observacao?: string | null
+          omie_codigo?: number
+          omie_sincronizado_em?: string
+          requisicao_id?: string | null
+          situacao?: string | null
+          solicitante_nome?: string | null
+          unidade_id?: string
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_requisicoes_requisicao_id_fkey"
+            columns: ["requisicao_id"]
+            isOneToOne: false
+            referencedRelation: "requisicoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "omie_requisicoes_unidade_id_fkey"
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "unidades"
@@ -889,6 +936,7 @@ export type Database = {
           email_enviado_em: string | null
           entrega_prev: string | null
           fornecedor_id: string
+          frete: number | null
           id: string
           numero: string
           omie_codigo: string | null
@@ -906,6 +954,7 @@ export type Database = {
           email_enviado_em?: string | null
           entrega_prev?: string | null
           fornecedor_id: string
+          frete?: number | null
           id?: string
           numero: string
           omie_codigo?: string | null
@@ -923,6 +972,7 @@ export type Database = {
           email_enviado_em?: string | null
           entrega_prev?: string | null
           fornecedor_id?: string
+          frete?: number | null
           id?: string
           numero?: string
           omie_codigo?: string | null
@@ -966,7 +1016,9 @@ export type Database = {
         Row: {
           ativo: boolean
           categoria: string
+          cmc_updated_at: string | null
           codigo: string
+          codigo_familia_omie: number | null
           created_at: string
           ean: string | null
           familia_omie: string | null
@@ -983,7 +1035,9 @@ export type Database = {
         Insert: {
           ativo?: boolean
           categoria: string
+          cmc_updated_at?: string | null
           codigo: string
+          codigo_familia_omie?: number | null
           created_at?: string
           ean?: string | null
           familia_omie?: string | null
@@ -1000,7 +1054,9 @@ export type Database = {
         Update: {
           ativo?: boolean
           categoria?: string
+          cmc_updated_at?: string | null
           codigo?: string
+          codigo_familia_omie?: number | null
           created_at?: string
           ean?: string | null
           familia_omie?: string | null
@@ -1159,11 +1215,12 @@ export type Database = {
           id: string
           justificativa: string | null
           numero: string
+          omie_categoria: string | null
           omie_codigo: number | null
           omie_sincronizado_em: string | null
           omie_unidade_id: string | null
           origem: string
-          solicitante_id: string
+          solicitante_id: string | null
           status: Database["public"]["Enums"]["req_status"]
           titulo: string
           updated_at: string
@@ -1175,11 +1232,12 @@ export type Database = {
           id?: string
           justificativa?: string | null
           numero: string
+          omie_categoria?: string | null
           omie_codigo?: number | null
           omie_sincronizado_em?: string | null
           omie_unidade_id?: string | null
           origem?: string
-          solicitante_id: string
+          solicitante_id?: string | null
           status?: Database["public"]["Enums"]["req_status"]
           titulo: string
           updated_at?: string
@@ -1191,11 +1249,12 @@ export type Database = {
           id?: string
           justificativa?: string | null
           numero?: string
+          omie_categoria?: string | null
           omie_codigo?: number | null
           omie_sincronizado_em?: string | null
           omie_unidade_id?: string | null
           origem?: string
-          solicitante_id?: string
+          solicitante_id?: string | null
           status?: Database["public"]["Enums"]["req_status"]
           titulo?: string
           updated_at?: string
@@ -1203,6 +1262,13 @@ export type Database = {
           valor_estimado?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "requisicoes_omie_unidade_id_fkey"
+            columns: ["omie_unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "requisicoes_solicitante_id_fkey"
             columns: ["solicitante_id"]
@@ -1218,14 +1284,18 @@ export type Database = {
           cidade: string | null
           cor_hex: string | null
           created_at: string
+          email_remetente: string | null
           google_sheet_id: string | null
           google_sheet_name: string
           id: string
           nome: string
           omie_app_key: string | null
           omie_app_secret: string | null
+          omie_categoria_compras: string | null
           omie_cnpj: string | null
+          omie_conta_corrente: number | null
           omie_empresa_id: string | null
+          omie_locais_estoque: number[] | null
           slug: string
           uf: string | null
         }
@@ -1234,14 +1304,18 @@ export type Database = {
           cidade?: string | null
           cor_hex?: string | null
           created_at?: string
+          email_remetente?: string | null
           google_sheet_id?: string | null
           google_sheet_name?: string
           id?: string
           nome: string
           omie_app_key?: string | null
           omie_app_secret?: string | null
+          omie_categoria_compras?: string | null
           omie_cnpj?: string | null
+          omie_conta_corrente?: number | null
           omie_empresa_id?: string | null
+          omie_locais_estoque?: number[] | null
           slug: string
           uf?: string | null
         }
@@ -1250,14 +1324,18 @@ export type Database = {
           cidade?: string | null
           cor_hex?: string | null
           created_at?: string
+          email_remetente?: string | null
           google_sheet_id?: string | null
           google_sheet_name?: string
           id?: string
           nome?: string
           omie_app_key?: string | null
           omie_app_secret?: string | null
+          omie_categoria_compras?: string | null
           omie_cnpj?: string | null
+          omie_conta_corrente?: number | null
           omie_empresa_id?: string | null
+          omie_locais_estoque?: number[] | null
           slug?: string
           uf?: string | null
         }
@@ -1328,7 +1406,21 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      fornecedor_metricas: {
+        Row: {
+          competitividade_pct: number | null
+          confianca: string | null
+          cotacao_celulas: number | null
+          entregas: number | null
+          entregas_no_prazo: number | null
+          fornecedor_id: string | null
+          gap_medio_pct: number | null
+          pontualidade_pct: number | null
+          rating: number | null
+          unidade_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       current_user_role: {
