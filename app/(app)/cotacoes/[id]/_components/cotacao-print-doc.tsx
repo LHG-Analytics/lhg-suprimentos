@@ -65,9 +65,19 @@ export function CotacaoPrintDoc({
     itens.forEach(it => { const g = cell(it.id, fId)?.garantia?.trim(); if (g) s.add(g); });
     return s.size ? Array.from(s).join(" · ") : null;
   }
+  /**
+   * Observações de células SEM preço — as com preço já aparecem sob o valor, na
+   * própria célula. Sem esse filtro o rodapé repetiria cada descrição de modelo,
+   * virando um bloco de texto gigante no PDF.
+   */
   function obsForn(fId: string) {
     const s = new Set<string>();
-    itens.forEach(it => { const o = cell(it.id, fId)?.observacao?.trim(); if (o) s.add(o); });
+    itens.forEach(it => {
+      const c = cell(it.id, fId);
+      if (c?.preco_unitario) return;
+      const o = c?.observacao?.trim();
+      if (o) s.add(o);
+    });
     return s.size ? Array.from(s).join(" · ") : null;
   }
   function totalSelecionadoForn(fId: string) {
@@ -191,6 +201,17 @@ export function CotacaoPrintDoc({
                             {brl(c.preco_unitario)}
                           </div>
                           <div className="font-mono text-[9px] text-zinc-500">{brl(total)}</div>
+                          {/*
+                            Observação por célula. A linha do rodapé junta todas as
+                            observações do fornecedor com " · " e perde a qual item
+                            cada uma pertence — mas é justamente aqui que ela
+                            identifica o modelo cotado para ESTE item.
+                          */}
+                          {c.observacao?.trim() && (
+                            <div className="mt-0.5 text-[8px] leading-snug text-zinc-600 italic text-left whitespace-normal break-words">
+                              {c.observacao.trim()}
+                            </div>
+                          )}
                         </>
                       ) : (
                         <span className="text-zinc-300">—</span>
@@ -243,11 +264,13 @@ export function CotacaoPrintDoc({
             <td className="border border-zinc-300 px-2 py-1.5 text-[9px] uppercase tracking-wide text-zinc-600 font-semibold">Garantia</td>
             {fornecedores.map(f => <td key={f.id} className="border border-zinc-300 px-2 py-1.5 text-center text-[9px] text-zinc-700">{garantiaForn(f.id) ?? "—"}</td>)}
           </tr>
-          {/* Observação */}
-          <tr>
-            <td className="border border-zinc-300 px-2 py-1.5 text-[9px] uppercase tracking-wide text-zinc-600 font-semibold align-top">Observação</td>
-            {fornecedores.map(f => <td key={f.id} className="border border-zinc-300 px-2 py-1.5 text-center text-[9px] text-zinc-600 italic align-top">{obsForn(f.id) ?? "—"}</td>)}
-          </tr>
+          {/* Observação — só aparece se sobrou algo que não está nas células */}
+          {fornecedores.some(f => obsForn(f.id)) && (
+            <tr>
+              <td className="border border-zinc-300 px-2 py-1.5 text-[9px] uppercase tracking-wide text-zinc-600 font-semibold align-top">Observação</td>
+              {fornecedores.map(f => <td key={f.id} className="border border-zinc-300 px-2 py-1.5 text-center text-[9px] text-zinc-600 italic align-top">{obsForn(f.id) ?? "—"}</td>)}
+            </tr>
+          )}
         </tfoot>
       </table>
 

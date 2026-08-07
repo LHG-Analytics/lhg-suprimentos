@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Check, Loader2, Plus, X } from "lucide-react";
+import { Pencil, Check, Loader2, Plus, X, Eraser } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { upsertMatrizCell } from "../../actions";
 import { toast } from "sonner";
@@ -74,15 +74,15 @@ export function MatrizCelula({
     setEditando(false);
   }
 
-  function handleSalvar(e: React.MouseEvent) {
-    e.stopPropagation();
-    const precoStr = formPreco.replace(/\./g, "").replace(",", ".");
-    const preco = parseFloat(precoStr);
-    if (!formPreco || isNaN(preco) || preco <= 0) {
-      toast.error("Informe um preço válido");
-      return;
-    }
-
+  /**
+   * Grava a célula. `preco === null` = fornecedor não cotou este item.
+   *
+   * NUNCA gravar 0: a matriz destaca o menor preço da linha, então R$ 0,00
+   * venceria toda comparação e distorceria a competitividade em
+   * `fornecedor_metricas`. `null` é o que a matriz, o PDF e a view já leem
+   * como "sem cotação".
+   */
+  function persistir(preco: number | null) {
     const freteStr = formFrete.replace(/\./g, "").replace(",", ".").trim();
     const freteNum = freteStr === "" ? 0 : parseFloat(freteStr);
     if (isNaN(freteNum) || freteNum < 0) {
@@ -106,11 +106,33 @@ export function MatrizCelula({
         await upsertMatrizCell(dados);
         onCellSaved(itemId, fornecedorId, dados);
         setEditando(false);
-        toast.success("Cotação salva");
+        toast.success(preco === null ? "Marcado como não cotado" : "Cotação salva");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao salvar");
       }
     });
+  }
+
+  function handleSalvar(e: React.MouseEvent) {
+    e.stopPropagation();
+
+    // Campo vazio ou zerado = não cotou. É o caso de "o fornecedor não tem esse
+    // produto" e o de corrigir um preço digitado na coluna errada.
+    const precoStr = formPreco.replace(/\./g, "").replace(",", ".").trim();
+    if (precoStr === "") return persistir(null);
+
+    const preco = parseFloat(precoStr);
+    if (isNaN(preco) || preco < 0) {
+      toast.error("Preço inválido. Deixe o campo vazio se o fornecedor não cotou.");
+      return;
+    }
+    persistir(preco > 0 ? preco : null);
+  }
+
+  function handleNaoCotou(e: React.MouseEvent) {
+    e.stopPropagation();
+    setFormPreco("");
+    persistir(null);
   }
 
   // ── Modo edição ──────────────────────────────────────────────────────────────
@@ -130,7 +152,7 @@ export function MatrizCelula({
         <div className="grid grid-cols-2 gap-1.5">
           <div>
             <label className="text-[9px] uppercase tracking-wider text-muted-foreground/60 block mb-0.5">
-              Preço/UN <span className="text-rose-400">*</span>
+              Preço/UN <span className="normal-case tracking-normal text-muted-foreground/40">(vazio = não cotou)</span>
             </label>
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/50">R$</span>
@@ -243,6 +265,18 @@ export function MatrizCelula({
         </div>
 
         <div className="flex items-center justify-end gap-1.5 pt-0.5">
+          {/* Atalho para o caso mais comum: preço lançado na coluna errada. */}
+          {temDados && (
+            <button
+              onClick={handleNaoCotou}
+              disabled={pending}
+              title="Zera o preço e marca este item como não cotado por este fornecedor"
+              className="mr-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-rose-400 px-1.5 py-1 transition-colors disabled:opacity-50"
+            >
+              <Eraser size={10} />
+              Não cotou
+            </button>
+          )}
           <button
             onClick={fecharEdicao}
             className="text-[11px] text-muted-foreground hover:text-foreground/70 px-2 py-1 transition-colors"

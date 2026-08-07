@@ -316,6 +316,21 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
       ...prev,
       [itemId]: { ...(prev[itemId] ?? {}), [fornId]: { ...(prev[itemId]?.[fornId] ?? {}), ...data } },
     }));
+
+    // Preço zerado num item cujo vencedor era este fornecedor deixaria uma
+    // seleção apontando para um preço que não existe mais — e o "Total
+    // selecionado" e o wizard de pedidos leem essa seleção. Desfaz junto.
+    const zerou = "preco_unitario" in data && !data.preco_unitario;
+    if (zerou && selecoes[itemId] === fornId) {
+      setSelecoes(s => ({ ...s, [itemId]: null }));
+      startTransition(async () => {
+        try {
+          await selecionarFornecedorItem(itemId, null);
+        } catch {
+          toast.error("Preço zerado, mas a seleção do vencedor não pôde ser desfeita");
+        }
+      });
+    }
   }
 
   function aplicarSugestaoIA() {
@@ -572,8 +587,14 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
             </div>
           </div>
 
-          {/* Tabela */}
-          <div className="overflow-x-auto">
+          {/*
+            Tabela — região de rolagem com altura limitada e cabeçalho fixo.
+            A barra horizontal fica no rodapé do container: se o container tiver a
+            altura da tabela inteira, é preciso rolar a página até o fim para
+            alcançá-la, e aí o cabeçalho com os nomes dos fornecedores sai de vista.
+            Limitando a altura, cabeçalho e barra ficam na tela ao mesmo tempo.
+          */}
+          <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-x-contain">
             <table className="w-full min-w-max border-separate border-spacing-0">
               <colgroup>
                 <col className={colItem} />
@@ -584,11 +605,12 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
               {/* Header: blocos de fornecedor (empresa / contato / telefone) */}
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-card px-5 py-3 text-left align-bottom border-b-2 border-border/70">
+                  {/* Canto: fixo nos dois eixos, z acima das duas faixas sticky */}
+                  <th className="sticky left-0 top-0 z-30 bg-card px-5 py-3 text-left align-bottom border-b-2 border-border/70">
                     <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Descrição dos produtos</div>
                   </th>
                   {fornecedores.map((f, idx) => (
-                    <th key={f.id} className="px-3 py-3 text-center align-top border-l border-b-2 border-border/70 relative">
+                    <th key={f.id} className="sticky top-0 z-20 bg-card px-3 py-3 text-center align-top border-l border-b-2 border-border/70 relative">
                       {editavel && (
                         <button
                           onClick={() => handleRemoverFornecedor(f.id, getFornecedorNome(f))}
@@ -637,8 +659,11 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                       </div>
                     </th>
                   ))}
+                  {/* `bg-card` sob o gradiente: sem cor de fundo opaca, o corpo da
+                      tabela apareceria através do trecho `to-transparent` quando o
+                      cabeçalho está fixo. */}
                   {temSugestaoIA && (
-                    <th className="px-3 py-3 text-center align-top border-l-2 border-b-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/[0.05] to-transparent">
+                    <th className="sticky top-0 z-20 px-3 py-3 text-center align-top border-l-2 border-b-2 border-emerald-500/40 bg-card bg-gradient-to-b from-emerald-500/[0.05] to-transparent">
                       <div className="flex flex-col items-center gap-1.5">
                         <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
                           <Sparkles size={14} className="text-white" />
