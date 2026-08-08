@@ -6,6 +6,7 @@
  * Layout claro estilo planilha de compras — cores fixas (não usa tokens dark),
  * para renderizar corretamente no papel. Visível só dentro do overlay/print.
  */
+import { calcularEconomia, type ItemEconomia } from "@/lib/cotacao/economia";
 import type { MatrizCellData } from "./matriz-celula";
 
 interface Produto    { id: string; codigo: string; nome: string; unidade_med: string; omie_codigo: string | null }
@@ -90,6 +91,25 @@ export function CotacaoPrintDoc({
 
   const totalGeralSelecionado = fornecedores.reduce((acc, f) => acc + totalSelecionadoForn(f.id), 0);
   const itensSelecionados = itens.filter(i => selecoes[i.id]).length;
+
+  /**
+   * Economia pelo MESMO critério da barra da tela, da lista de cotações e do
+   * valor gravado na aprovação (`calcularEconomia`): por item com concorrência,
+   * o preço escolhido contra o MAIOR preço cotado naquele item.
+   * Reusar a função é o que impede o PDF de mostrar um número diferente da tela.
+   */
+  const { economia, economiaPct } = calcularEconomia(
+    itens
+      .filter(it => selecoes[it.id])
+      .map<ItemEconomia>(it => ({
+        quantidade:    it.quantidade,
+        precoVencedor: cell(it.id, selecoes[it.id]!)?.preco_unitario ?? 0,
+        precosCotados: Object.values(matrizMap[it.id] ?? {})
+          .map(c => c.preco_unitario)
+          .filter((p): p is number => p != null && p > 0),
+      }))
+      .filter(it => it.precoVencedor > 0),
+  );
 
   // Larguras proporcionais — coluna item maior, fornecedores dividem o resto
   const colFornPct = fornecedores.length > 0 ? Math.max(12, Math.floor(62 / fornecedores.length)) : 20;
@@ -280,9 +300,22 @@ export function CotacaoPrintDoc({
           <div>Emitido em {dataEmissao} pelo LHG Suprimentos.</div>
           <div>{itensSelecionados} de {itens.length} {itens.length === 1 ? "item selecionado" : "itens selecionados"}.</div>
         </div>
-        <div className="text-right">
-          <div className="text-[9px] uppercase tracking-wider text-zinc-500">Total da compra (seleção)</div>
-          <div className="font-mono text-2xl font-bold text-emerald-700">{brl(totalGeralSelecionado)}</div>
+        <div className="flex items-end gap-8">
+          {economia != null && economia > 0 && (
+            <div className="text-right border-r border-zinc-300 pr-8">
+              <div className="text-[9px] uppercase tracking-wider text-zinc-500">Economia (vs maior preço)</div>
+              <div className="font-mono text-xl font-bold text-emerald-600">{brl(economia)}</div>
+              {economiaPct != null && (
+                <div className="text-[9px] text-zinc-500">
+                  {economiaPct.toFixed(1)}% sobre o cenário mais caro
+                </div>
+              )}
+            </div>
+          )}
+          <div className="text-right">
+            <div className="text-[9px] uppercase tracking-wider text-zinc-500">Total da compra (seleção)</div>
+            <div className="font-mono text-2xl font-bold text-emerald-700">{brl(totalGeralSelecionado)}</div>
+          </div>
         </div>
       </div>
 
