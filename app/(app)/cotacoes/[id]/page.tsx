@@ -22,6 +22,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
   const [
     { data: cotacao },
     fornecedores,
+    { data: pedidosDaCotacao },
   ] = await Promise.all([
     supabase
       .from("cotacoes")
@@ -50,6 +51,14 @@ export default async function CotacaoDetalhePage({ params }: Props) {
         .order("id")
         .range(from, to),
     ),
+
+    // Fornecedores desta cotação que já viraram pedido — a cotação pode ser
+    // fechada em rodadas (um fornecedor agora, o resto depois), então a UI precisa
+    // marcar os já fechados em vez de oferecê-los de novo.
+    supabase
+      .from("pedidos")
+      .select("id, numero, fornecedor_id")
+      .eq("cotacao_id", id),
   ]);
 
   if (!cotacao) notFound();
@@ -58,6 +67,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
     <CotacaoDetalheClient
       cotacao={cotacao as any}
       todosFornecedores={fornecedores}
+      pedidosGerados={pedidosDaCotacao ?? []}
     />
   );
 }

@@ -31,6 +31,8 @@ interface Props {
   selecoes:    Record<string, string | null>;
   fornecedores: FornecedorBase[];
   matrizMap:   Record<string, Record<string, MatrizCell>>;
+  /** fornecedor_id → número do pedido já emitido nesta cotação. */
+  fornecedoresComPedido: Map<string, string>;
 }
 
 function formatBRL(v: number | null) {
@@ -38,7 +40,9 @@ function formatBRL(v: number | null) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 
-export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedores, matrizMap }: Props) {
+export function WizardGerarPedidos({
+  open, onClose, cotacao, selecoes, fornecedores, matrizMap, fornecedoresComPedido,
+}: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const submittingRef = useRef(false); // guarda contra cliques simultâneos
@@ -46,7 +50,13 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
   if (!open) return null;
 
   // Agrupar itens selecionados por fornecedor
-  const grupos: { fornecedor: FornecedorBase; itens: { item: CotacaoItem; cell: MatrizCell }[]; total: number }[] = [];
+  type Grupo = {
+    fornecedor: FornecedorBase;
+    itens: { item: CotacaoItem; cell: MatrizCell }[];
+    total: number;
+    pedidoExistente: string | null;
+  };
+  const grupos: Grupo[] = [];
 
   for (const forn of fornecedores) {
     const itensDoForn = cotacao.cotacao_itens.filter(i => selecoes[i.id] === forn.id);
@@ -61,8 +71,25 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
       return acc + (cell.preco_unitario ?? 0) * item.quantidade;
     }, 0);
 
-    grupos.push({ fornecedor: forn, itens, total });
+    grupos.push({
+      fornecedor: forn,
+      itens,
+      total,
+      pedidoExistente: fornecedoresComPedido.get(forn.id) ?? null,
+    });
   }
+
+  // Só os fornecedores ainda sem pedido viram pedido nesta rodada.
+  const novos       = grupos.filter(g => !g.pedidoExistente);
+  const jaFechados  = grupos.filter(g =>  g.pedidoExistente);
+
+  // Itens compráveis que ainda não têm vencedor definido — enquanto sobrar algum,
+  // a cotação não fecha e segue editável.
+  const itensSemVencedor = cotacao.cotacao_itens.filter(i => {
+    if (selecoes[i.id]) return false;
+    const cells = matrizMap[i.id] ?? {};
+    return Object.values(cells).some(c => c.preco_unitario != null && c.preco_unitario > 0);
+  }).length;
 
   function getFornNome(f: FornecedorBase) {
     return f.nome_fantasia || f.razao_social;
@@ -86,14 +113,25 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
           if (!("erro" in push)) enviados++;
         }
 
+        const omieMsg = enviados === res.numeroPedidos
+          ? `${enviados} enviado${enviados !== 1 ? "s" : ""} ao Omie com sucesso`
+          : `${enviados}/${res.numeroPedidos} enviado${enviados !== 1 ? "s" : ""} ao Omie — use "Tentar novamente" nos demais`;
+
+        const restam = res.itensSemVencedor;
         toast.success(
           `${res.numeroPedidos} pedido${res.numeroPedidos !== 1 ? "s" : ""} gerado${res.numeroPedidos !== 1 ? "s" : ""}`,
-          { description: enviados === res.numeroPedidos
-              ? `${enviados} enviado${enviados !== 1 ? "s" : ""} ao Omie com sucesso`
-              : `${enviados}/${res.numeroPedidos} enviado${enviados !== 1 ? "s" : ""} ao Omie — use "Tentar novamente" nos demais` },
+          {
+            description: res.completa
+              ? omieMsg
+              : `${omieMsg}. Ainda faltam ${restam} ${restam === 1 ? "item" : "itens"} sem fornecedor — a cotação segue aberta.`,
+          },
         );
         onClose();
-        router.push("/pedidos");
+
+        // Cotação incompleta: continua na matriz para fechar o resto. Levar para
+        // /pedidos aqui interrompia o trabalho no meio.
+        if (res.completa) router.push("/pedidos");
+        else router.refresh();
       } finally {
         submittingRef.current = false;
       }
@@ -110,7 +148,10 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
           <div>
             <h2 className="text-base font-semibold text-foreground">Gerar pedidos de compra</h2>
             <p className="text-[12px] text-muted-foreground mt-0.5">
-              A cotação será dividida em <strong className="text-foreground/80">{grupos.length} pedido{grupos.length !== 1 ? "s" : ""}</strong>, um por fornecedor
+              {novos.length > 0
+                ? <>Serão criados <strong className="text-foreground/80">{novos.length} pedido{novos.length !== 1 ? "s" : ""}</strong>, um por fornecedor</>
+                : "Nenhum fornecedor novo selecionado"}
+              {jaFechados.length > 0 && ` · ${jaFechados.length} já fechado${jaFechados.length !== 1 ? "s" : ""}`}
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
@@ -120,11 +161,26 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
 
         {/* Grupos de pedidos */}
         <div className="px-6 py-4 space-y-3 max-h-[50vh] overflow-y-auto">
-          {grupos.map(({ fornecedor, itens, total }) => (
-            <div key={fornecedor.id} className="rounded-xl border border-border/80 bg-muted/40 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-semibold text-foreground">{getFornNome(fornecedor)}</div>
-                <div className="font-mono text-sm font-bold text-foreground">{formatBRL(total)}</div>
+          {grupos.map(({ fornecedor, itens, total, pedidoExistente }) => (
+            <div
+              key={fornecedor.id}
+              className={cn(
+                "rounded-xl border p-4",
+                pedidoExistente
+                  ? "border-border/50 bg-muted/20 opacity-60"
+                  : "border-border/80 bg-muted/40",
+              )}
+            >
+              <div className="flex items-center justify-between mb-3 gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">{getFornNome(fornecedor)}</div>
+                  {pedidoExistente && (
+                    <div className="text-[11px] text-amber-400 mt-0.5">
+                      Já gerou o pedido {pedidoExistente} — será ignorado
+                    </div>
+                  )}
+                </div>
+                <div className="font-mono text-sm font-bold text-foreground shrink-0">{formatBRL(total)}</div>
               </div>
               <div className="space-y-1">
                 {itens.map(({ item, cell }) => (
@@ -148,10 +204,17 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
         </div>
 
         {/* Disclaimer */}
-        <div className="px-6 py-3 bg-muted/40 border-t border-border/60">
+        <div className="px-6 py-3 bg-muted/40 border-t border-border/60 space-y-1.5">
           <p className="text-[12px] text-muted-foreground leading-relaxed">
             Os pedidos seguirão para <strong className="text-muted-foreground">aprovação</strong> antes de serem enviados aos fornecedores e sincronizados com o Omie.
           </p>
+          {itensSemVencedor > 0 && (
+            <p className="text-[12px] text-emerald-400/90 leading-relaxed">
+              A cotação continua <strong>aberta e editável</strong>: ainda faltam {itensSemVencedor}{" "}
+              {itensSemVencedor === 1 ? "item" : "itens"} sem fornecedor escolhido. Você pode voltar
+              e gerar os pedidos restantes depois.
+            </p>
+          )}
         </div>
 
         {/* Footer */}
@@ -161,7 +224,7 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
           </button>
           <button
             onClick={handleConfirmar}
-            disabled={pending || grupos.length === 0}
+            disabled={pending || novos.length === 0}
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border",
               "border-emerald-700/60 bg-emerald-500/10 px-4 py-2",
@@ -171,7 +234,7 @@ export function WizardGerarPedidos({ open, onClose, cotacao, selecoes, fornecedo
             )}
           >
             {pending ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14} />}
-            {pending ? "Gerando…" : `Confirmar e gerar ${grupos.length} pedido${grupos.length !== 1 ? "s" : ""}`}
+            {pending ? "Gerando…" : `Confirmar e gerar ${novos.length} pedido${novos.length !== 1 ? "s" : ""}`}
           </button>
         </div>
       </div>

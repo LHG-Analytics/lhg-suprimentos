@@ -294,20 +294,28 @@ export async function removerFornecedorCotacao(
 export async function gerarPedidosDeCotacao(
   cotacaoId: string,
   selecoes: Record<string, string | null>,
-): Promise<{ ok: true; numeroPedidos: number; pedidoIds: string[] } | { erro: string }> {
+): Promise<
+  | { ok: true; numeroPedidos: number; pedidoIds: string[]; jaTinhamPedido: number; completa: boolean; itensSemVencedor: number }
+  | { erro: string }
+> {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { erro: "Não autenticado" };
 
-    // Guarda contra chamadas duplicadas: se já existem pedidos desta cotação, aborta
-    const { count: jaExistem } = await supabase
+    /*
+     * Guarda contra pedido duplicado — POR FORNECEDOR, não por cotação.
+     *
+     * Antes qualquer pedido existente abortava a chamada inteira, o que impedia o
+     * fluxo real da compradora: fechar um fornecedor agora e voltar depois para os
+     * itens restantes. A intenção do guard (não duplicar) continua valendo; só a
+     * granularidade estava errada.
+     */
+    const { data: pedidosExistentes } = await supabase
       .from("pedidos")
-      .select("id", { count: "exact", head: true })
+      .select("fornecedor_id")
       .eq("cotacao_id", cotacaoId);
-    if (jaExistem && jaExistem > 0) {
-      return { erro: `Esta cotação já gerou ${jaExistem} pedido(s). Acesse a tela de Pedidos.` };
-    }
+    const fornecedoresJaPedidos = new Set((pedidosExistentes ?? []).map(p => p.fornecedor_id));
 
     // Buscar prazo da cotação (fallback quando prazo_entrega_dias não preenchido na matriz)
     const { data: cotacaoPrazo } = await supabase
@@ -354,9 +362,12 @@ export async function gerarPedidosDeCotacao(
       condicao_pgto: string | null; prazo_entrega_dias: number | null; frete: number;
     }[]>();
 
+    let itensJaPedidos = 0;
     for (const item of itens) {
       const fornId = selecoes[item.id];
       if (!fornId || !item.produto_id) continue;
+      // Fornecedor já fechado numa rodada anterior: não gera pedido de novo
+      if (fornecedoresJaPedidos.has(fornId)) { itensJaPedidos++; continue; }
       const cell = item.cotacao_matriz.find(c => c.fornecedor_id === fornId);
       if (!cell || !cell.preco_unitario) continue;
       if (!grupos.has(fornId)) grupos.set(fornId, []);
@@ -370,7 +381,13 @@ export async function gerarPedidosDeCotacao(
       });
     }
 
-    if (grupos.size === 0) return { erro: "Nenhum item selecionado" };
+    if (grupos.size === 0) {
+      return {
+        erro: itensJaPedidos > 0
+          ? "Os fornecedores selecionados já têm pedido nesta cotação. Selecione os itens dos fornecedores que ainda faltam."
+          : "Nenhum item selecionado",
+      };
+    }
     const pedidoIds: string[] = [];
 
     // Número sequencial PED-YYYY-NNNN
@@ -468,10 +485,25 @@ export async function gerarPedidosDeCotacao(
 
     const { economia: economiaCalc, economiaPct: economiaPctCalc, valorAprovado } = calcularEconomia(itensEcon);
 
+    /*
+     * A cotação só fecha (status "aprovado") quando não sobra item comprável sem
+     * vencedor. Fechar na primeira geração parcial marcava `aprovado`, e
+     * `editavel` no client é `status !== "aprovado"` — a matriz virava
+     * somente-leitura no meio do trabalho.
+     *
+     * "Comprável" = item com ao menos um preço cotado. Item que ninguém cotou não
+     * pode impedir o fechamento, senão a cotação nunca sairia de rascunho.
+     */
+    const itensCompraveis = itens.filter(i =>
+      i.cotacao_matriz.some(c => c.preco_unitario != null && c.preco_unitario > 0),
+    );
+    const itensSemVencedor = itensCompraveis.filter(i => !selecoes[i.id]).length;
+    const completa = itensSemVencedor === 0;
+
     await supabase
       .from("cotacoes")
       .update({
-        status:         "aprovado",
+        ...(completa ? { status: "aprovado" } : {}),
         ...(valorAprovado   > 0    ? { valor_estimado: valorAprovado   } : {}),
         ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
         ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),
@@ -479,9 +511,17 @@ export async function gerarPedidosDeCotacao(
       .eq("id", cotacaoId);
 
     revalidatePath("/cotacoes");
+    revalidatePath(`/cotacoes/${cotacaoId}`);
     revalidatePath("/pedidos");
     revalidatePath("/dashboard");
-    return { ok: true, numeroPedidos: grupos.size, pedidoIds };
+    return {
+      ok: true,
+      numeroPedidos: grupos.size,
+      pedidoIds,
+      jaTinhamPedido: fornecedoresJaPedidos.size,
+      completa,
+      itensSemVencedor,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro inesperado ao gerar pedidos";
     console.error("[gerarPedidos] unexpected error:", err);

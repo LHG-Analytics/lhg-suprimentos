@@ -43,9 +43,13 @@ interface Cotacao {
   cotacao_itens: CotacaoItem[];
 }
 
+export interface PedidoGerado { id: string; numero: string; fornecedor_id: string }
+
 interface Props {
   cotacao:           Cotacao;
   todosFornecedores: { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null }[];
+  /** Pedidos já emitidos desta cotação — a compra pode ser fechada em rodadas. */
+  pedidosGerados:    PedidoGerado[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,7 +98,7 @@ const AVATAR_COLORS = [
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
+export function CotacaoDetalheClient({ cotacao, todosFornecedores, pedidosGerados }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -130,6 +134,14 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
   }, [printOpen]);
 
   const editavel = cotacao.status !== "aprovado" && cotacao.status !== "aprovada" && cotacao.status !== "fechada";
+
+  // Fornecedores já fechados em rodadas anteriores: as células deles não voltam a
+  // virar pedido, então a matriz sinaliza isso em vez de deixar a compradora
+  // selecionar e só descobrir no erro do wizard.
+  const fornecedoresComPedido = useMemo(
+    () => new Map(pedidosGerados.map(p => [p.fornecedor_id, p.numero])),
+    [pedidosGerados],
+  );
 
   async function handleRemoverFornecedor(fornecedorId: string, nome: string) {
     if (!confirm(`Remover "${nome}" desta cotação?`)) return;
@@ -631,6 +643,16 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
                         <div className="text-[12px] font-semibold text-foreground text-center leading-tight max-w-[170px] break-words">
                           {getFornecedorNome(f)}
                         </div>
+                        {/* Fornecedor já fechado: bolinha + texto (cor sozinha não atende WCAG) */}
+                        {fornecedoresComPedido.has(f.id) && (
+                          <span
+                            title={`Pedido ${fornecedoresComPedido.get(f.id)} já gerado para este fornecedor`}
+                            className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-px text-[9px] font-medium text-emerald-400"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            {fornecedoresComPedido.get(f.id)}
+                          </span>
+                        )}
                         {/* Contato / telefone */}
                         <div className="text-[10px] text-muted-foreground/70 leading-snug text-center space-y-0.5">
                           <div className="truncate max-w-[170px]" title={f.contato ?? undefined}>
@@ -960,6 +982,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores }: Props) {
         selecoes={selecoes}
         fornecedores={fornecedores}
         matrizMap={matrizMap}
+        fornecedoresComPedido={fornecedoresComPedido}
       />
 
       {/* ── Adicionar Fornecedor ─────────────────────────────────────────────── */}
