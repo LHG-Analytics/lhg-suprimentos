@@ -33,6 +33,8 @@ interface Props {
   matrizMap:   Record<string, Record<string, MatrizCell>>;
   /** fornecedor_id → número do pedido já emitido nesta cotação. */
   fornecedoresComPedido: Map<string, string>;
+  /** ids de itens que já viraram linha de pedido — fonte de verdade, não a seleção. */
+  itensJaPedidos: Set<string>;
 }
 
 function formatBRL(v: number | null) {
@@ -41,7 +43,7 @@ function formatBRL(v: number | null) {
 }
 
 export function WizardGerarPedidos({
-  open, onClose, cotacao, selecoes, fornecedores, matrizMap, fornecedoresComPedido,
+  open, onClose, cotacao, selecoes, fornecedores, matrizMap, fornecedoresComPedido, itensJaPedidos,
 }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -83,10 +85,14 @@ export function WizardGerarPedidos({
   const novos       = grupos.filter(g => !g.pedidoExistente);
   const jaFechados  = grupos.filter(g =>  g.pedidoExistente);
 
-  // Itens compráveis que ainda não têm vencedor definido — enquanto sobrar algum,
-  // a cotação não fecha e segue editável.
+  /*
+   * Itens compráveis que seguirão sem pedido depois desta rodada.
+   * Conta como resolvido o que JÁ virou pedido (itensJaPedidos) além do que está
+   * selecionado agora — a seleção some quando a compradora clica de novo na célula,
+   * e usar só ela fazia o aviso acusar itens já comprados como pendentes.
+   */
   const itensSemVencedor = cotacao.cotacao_itens.filter(i => {
-    if (selecoes[i.id]) return false;
+    if (selecoes[i.id] || itensJaPedidos.has(i.id)) return false;
     const cells = matrizMap[i.id] ?? {};
     return Object.values(cells).some(c => c.preco_unitario != null && c.preco_unitario > 0);
   }).length;

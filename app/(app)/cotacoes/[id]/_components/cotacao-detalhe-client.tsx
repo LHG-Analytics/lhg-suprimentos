@@ -50,6 +50,8 @@ interface Props {
   todosFornecedores: { id: string; razao_social: string; nome_fantasia: string | null; rating: number | null; pontualidade_pct: number | null }[];
   /** Pedidos já emitidos desta cotação — a compra pode ser fechada em rodadas. */
   pedidosGerados:    PedidoGerado[];
+  /** ids de `cotacao_itens` que já viraram linha de pedido (fonte de verdade). */
+  itensJaPedidos:    string[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -98,7 +100,9 @@ const AVATAR_COLORS = [
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function CotacaoDetalheClient({ cotacao, todosFornecedores, pedidosGerados }: Props) {
+export function CotacaoDetalheClient({
+  cotacao, todosFornecedores, pedidosGerados, itensJaPedidos,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -142,6 +146,8 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores, pedidosGerado
     () => new Map(pedidosGerados.map(p => [p.fornecedor_id, p.numero])),
     [pedidosGerados],
   );
+
+  const itensPedidos = useMemo(() => new Set(itensJaPedidos), [itensJaPedidos]);
 
   async function handleRemoverFornecedor(fornecedorId: string, nome: string) {
     if (!confirm(`Remover "${nome}" desta cotação?`)) return;
@@ -983,6 +989,7 @@ export function CotacaoDetalheClient({ cotacao, todosFornecedores, pedidosGerado
         fornecedores={fornecedores}
         matrizMap={matrizMap}
         fornecedoresComPedido={fornecedoresComPedido}
+        itensJaPedidos={itensPedidos}
       />
 
       {/* ── Adicionar Fornecedor ─────────────────────────────────────────────── */}

@@ -289,6 +289,52 @@ export async function removerFornecedorCotacao(
   revalidatePath(`/cotacoes/${cotacaoId}`);
 }
 
+// ── avaliarCompletudeCotacao ──────────────────────────────────────────────────
+
+/**
+ * Uma cotação está completa quando todo item COMPRÁVEL já virou linha de pedido.
+ *
+ * A âncora é `pedido_itens.cotacao_item_id` (migration 0025), não
+ * `cotacao_itens.selecionado_forn`. Seleção é estado de rascunho e muda com um
+ * clique na matriz — usá-la significava que desmarcar uma célula "desfazia" uma
+ * compra já enviada ao Omie, e a cotação voltava a parecer inacabada.
+ *
+ * "Comprável" = tem ao menos um preço cotado. Item que ninguém cotou não pode
+ * impedir o fechamento, senão a cotação nunca sairia de rascunho.
+ */
+async function avaliarCompletudeCotacao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cotacaoId: string,
+): Promise<{ completa: boolean; itensSemVencedor: number; totalCompraveis: number }> {
+  const { data: itens } = await supabase
+    .from("cotacao_itens")
+    .select("id, cotacao_matriz(preco_unitario)")
+    .eq("cotacao_id", cotacaoId);
+
+  const compraveis = (itens ?? []).filter(i =>
+    (i.cotacao_matriz as { preco_unitario: number | null }[] ?? [])
+      .some(c => c.preco_unitario != null && c.preco_unitario > 0),
+  );
+  if (compraveis.length === 0) {
+    return { completa: false, itensSemVencedor: 0, totalCompraveis: 0 };
+  }
+
+  // Itens desta cotação que já têm linha de pedido
+  const { data: linhas } = await supabase
+    .from("pedido_itens")
+    .select("cotacao_item_id, pedidos!inner(cotacao_id)")
+    .eq("pedidos.cotacao_id", cotacaoId);
+
+  const jaPedidos = new Set(
+    (linhas ?? [])
+      .map(l => (l as { cotacao_item_id: string | null }).cotacao_item_id)
+      .filter((id): id is string => !!id),
+  );
+
+  const pendentes = compraveis.filter(i => !jaPedidos.has(i.id)).length;
+  return { completa: pendentes === 0, itensSemVencedor: pendentes, totalCompraveis: compraveis.length };
+}
+
 // ── gerarPedidosDeCotacao ─────────────────────────────────────────────────────
 
 export async function gerarPedidosDeCotacao(
@@ -359,6 +405,7 @@ export async function gerarPedidosDeCotacao(
     // Agrupar por fornecedor
     const grupos = new Map<string, {
       preco_unitario: number; quantidade: number; produto_id: string;
+      cotacao_item_id: string;
       condicao_pgto: string | null; prazo_entrega_dias: number | null; frete: number;
     }[]>();
 
@@ -375,6 +422,7 @@ export async function gerarPedidosDeCotacao(
         preco_unitario:     cell.preco_unitario,
         quantidade:         item.quantidade,
         produto_id:         item.produto_id,
+        cotacao_item_id:    item.id,
         condicao_pgto:      cell.condicao_pagamento,
         prazo_entrega_dias: cell.prazo_entrega_dias ?? null,
         frete:              Number(cell.frete ?? 0),
@@ -382,11 +430,19 @@ export async function gerarPedidosDeCotacao(
     }
 
     if (grupos.size === 0) {
-      return {
-        erro: itensJaPedidos > 0
-          ? "Os fornecedores selecionados já têm pedido nesta cotação. Selecione os itens dos fornecedores que ainda faltam."
-          : "Nenhum item selecionado",
-      };
+      if (itensJaPedidos > 0) {
+        // Nada novo a gerar: aproveita para reconciliar o status, que pode estar
+        // preso em rascunho de uma rodada anterior.
+        const { completa } = await avaliarCompletudeCotacao(supabase, cotacaoId);
+        if (completa) {
+          await supabase.from("cotacoes").update({ status: "aprovado" }).eq("id", cotacaoId);
+          revalidatePath("/cotacoes");
+          revalidatePath(`/cotacoes/${cotacaoId}`);
+          return { erro: "Todos os itens já viraram pedido. Cotação marcada como concluída." };
+        }
+        return { erro: "Os fornecedores selecionados já têm pedido nesta cotação. Selecione os itens dos fornecedores que ainda faltam." };
+      }
+      return { erro: "Nenhum item selecionado" };
     }
     const pedidoIds: string[] = [];
 
@@ -446,11 +502,14 @@ export async function gerarPedidosDeCotacao(
       const { error: itensInsErr } = await supabase
         .from("pedido_itens")
         .insert(
+          // cotacao_item_id (migration 0025): registra QUAL item da cotação virou
+          // esta linha, para "item já pedido" ser fato e não inferência por produto.
           linhas.map(l => ({
-            pedido_id:      pedido.id,
-            produto_id:     l.produto_id,
-            quantidade:     l.quantidade,
-            preco_unitario: l.preco_unitario,
+            pedido_id:       pedido.id,
+            produto_id:      l.produto_id,
+            quantidade:      l.quantidade,
+            preco_unitario:  l.preco_unitario,
+            cotacao_item_id: l.cotacao_item_id,
             // valor_total é GENERATED ALWAYS AS (quantidade * preco_unitario) — não inserir
           })),
         );
@@ -485,25 +544,12 @@ export async function gerarPedidosDeCotacao(
 
     const { economia: economiaCalc, economiaPct: economiaPctCalc, valorAprovado } = calcularEconomia(itensEcon);
 
-    /*
-     * A cotação só fecha (status "aprovado") quando não sobra item comprável sem
-     * vencedor. Fechar na primeira geração parcial marcava `aprovado`, e
-     * `editavel` no client é `status !== "aprovado"` — a matriz virava
-     * somente-leitura no meio do trabalho.
-     *
-     * "Comprável" = item com ao menos um preço cotado. Item que ninguém cotou não
-     * pode impedir o fechamento, senão a cotação nunca sairia de rascunho.
-     */
-    const itensCompraveis = itens.filter(i =>
-      i.cotacao_matriz.some(c => c.preco_unitario != null && c.preco_unitario > 0),
-    );
-    const itensSemVencedor = itensCompraveis.filter(i => !selecoes[i.id]).length;
-    const completa = itensSemVencedor === 0;
+    const { completa, itensSemVencedor } = await avaliarCompletudeCotacao(supabase, cotacaoId);
 
     await supabase
       .from("cotacoes")
       .update({
-        ...(completa ? { status: "aprovado" } : {}),
+        status: completa ? "aprovado" : "rascunho",
         ...(valorAprovado   > 0    ? { valor_estimado: valorAprovado   } : {}),
         ...(economiaCalc    !== null ? { economia:     economiaCalc    } : {}),
         ...(economiaPctCalc !== null ? { economia_pct: economiaPctCalc } : {}),

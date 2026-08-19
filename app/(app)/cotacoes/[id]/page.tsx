@@ -52,22 +52,30 @@ export default async function CotacaoDetalhePage({ params }: Props) {
         .range(from, to),
     ),
 
-    // Fornecedores desta cotação que já viraram pedido — a cotação pode ser
-    // fechada em rodadas (um fornecedor agora, o resto depois), então a UI precisa
-    // marcar os já fechados em vez de oferecê-los de novo.
+    // Pedidos já emitidos desta cotação — ela pode ser fechada em rodadas (um
+    // fornecedor agora, o resto depois), então a UI precisa marcar o que já saiu.
+    // `pedido_itens.cotacao_item_id` (migration 0025) é a fonte de verdade de
+    // "este item já virou pedido": a seleção na matriz é mutável e não serve.
     supabase
       .from("pedidos")
-      .select("id, numero, fornecedor_id")
+      .select("id, numero, fornecedor_id, pedido_itens(cotacao_item_id)")
       .eq("cotacao_id", id),
   ]);
 
   if (!cotacao) notFound();
 
+  const pedidos = pedidosDaCotacao ?? [];
+  const itensJaPedidos = pedidos
+    .flatMap(p => (p.pedido_itens ?? []) as { cotacao_item_id: string | null }[])
+    .map(pi => pi.cotacao_item_id)
+    .filter((v): v is string => !!v);
+
   return (
     <CotacaoDetalheClient
       cotacao={cotacao as any}
       todosFornecedores={fornecedores}
-      pedidosGerados={pedidosDaCotacao ?? []}
+      pedidosGerados={pedidos.map(({ id: pid, numero, fornecedor_id }) => ({ id: pid, numero, fornecedor_id }))}
+      itensJaPedidos={itensJaPedidos}
     />
   );
 }

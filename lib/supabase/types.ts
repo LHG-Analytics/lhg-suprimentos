@@ -856,6 +856,7 @@ export type Database = {
       }
       pedido_itens: {
         Row: {
+          cotacao_item_id: string | null
           id: string
           pedido_id: string
           preco_unitario: number
@@ -864,6 +865,7 @@ export type Database = {
           valor_total: number | null
         }
         Insert: {
+          cotacao_item_id?: string | null
           id?: string
           pedido_id: string
           preco_unitario: number
@@ -872,6 +874,7 @@ export type Database = {
           valor_total?: number | null
         }
         Update: {
+          cotacao_item_id?: string | null
           id?: string
           pedido_id?: string
           preco_unitario?: number
@@ -880,6 +883,13 @@ export type Database = {
           valor_total?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "pedido_itens_cotacao_item_id_fkey"
+            columns: ["cotacao_item_id"]
+            isOneToOne: false
+            referencedRelation: "cotacao_itens"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pedido_itens_pedido_id_fkey"
             columns: ["pedido_id"]
