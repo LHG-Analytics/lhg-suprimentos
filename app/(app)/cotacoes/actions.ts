@@ -289,6 +289,164 @@ export async function removerFornecedorCotacao(
   revalidatePath(`/cotacoes/${cotacaoId}`);
 }
 
+// ── Edição de itens da cotação ────────────────────────────────────────────────
+
+/**
+ * Valida que a cotação aceita mudança na lista de itens.
+ * Mesma regra de `editavel` no client: cotação fechada não se altera mais.
+ */
+async function guardCotacaoEditavel(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cotacaoId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const { data: cot } = await supabase
+    .from("cotacoes")
+    .select("id, status")
+    .eq("id", cotacaoId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!cot) return { erro: "Cotação não encontrada" };
+  if (cot.status === "aprovado") {
+    return { erro: "Cotação concluída — para alterar itens, gere uma nova cotação." };
+  }
+  return { ok: true };
+}
+
+/** Item que já virou pedido não pode ser mexido: o pedido já foi ao fornecedor. */
+async function itemJaPedido(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cotacaoItemId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("pedido_itens")
+    .select("pedidos(numero)")
+    .eq("cotacao_item_id", cotacaoItemId)
+    .limit(1)
+    .maybeSingle();
+  const ped = data?.pedidos as { numero: string } | null | undefined;
+  return ped?.numero ?? null;
+}
+
+const ItemCotacaoSchema = z.discriminatedUnion("tipo", [
+  z.object({
+    tipo:       z.literal("catalogo"),
+    produto_id: z.string().uuid(),
+    quantidade: z.number().positive(),
+  }),
+  z.object({
+    tipo:                z.literal("livre"),
+    produto_nome_livre:  z.string().min(2, "Descreva o produto (mínimo 2 caracteres)"),
+    produto_unidade_med: z.string().min(1, "Informe a unidade (ex: UN, KG)"),
+    quantidade:          z.number().positive(),
+  }),
+]);
+
+export async function adicionarItemCotacao(
+  cotacaoId: string,
+  input: z.infer<typeof ItemCotacaoSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const parsed = ItemCotacaoSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const guard = await guardCotacaoEditavel(supabase, cotacaoId);
+  if ("erro" in guard) return guard;
+
+  const item = parsed.data;
+  // Um objeto só com todas as colunas: a união dos dois formatos quebrava a
+  // inferência de tipo do insert do Supabase.
+  const { error } = await supabase.from("cotacao_itens").insert({
+    cotacao_id:          cotacaoId,
+    quantidade:          item.quantidade,
+    produto_id:          item.tipo === "catalogo" ? item.produto_id : null,
+    produto_nome_livre:  item.tipo === "livre" ? item.produto_nome_livre.trim() : null,
+    produto_unidade_med: item.tipo === "livre" ? item.produto_unidade_med.trim() : null,
+    produto_novo:        item.tipo === "livre",
+  });
+  if (error) return { erro: error.message };
+
+  revalidatePath(`/cotacoes/${cotacaoId}`);
+  revalidatePath("/cotacoes");
+  return { ok: true };
+}
+
+export async function removerItemCotacao(
+  itemId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const { data: item } = await supabase
+    .from("cotacao_itens")
+    .select("id, cotacao_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { erro: "Item não encontrado" };
+
+  const guard = await guardCotacaoEditavel(supabase, item.cotacao_id);
+  if ("erro" in guard) return guard;
+
+  const pedido = await itemJaPedido(supabase, itemId);
+  if (pedido) return { erro: `Este item já está no pedido ${pedido} — não pode ser removido.` };
+
+  // Não deixa a cotação sem itens
+  const { count } = await supabase
+    .from("cotacao_itens")
+    .select("*", { count: "exact", head: true })
+    .eq("cotacao_id", item.cotacao_id);
+  if ((count ?? 0) <= 1) {
+    return { erro: "A cotação precisa de pelo menos 1 item — para remover tudo, exclua a cotação." };
+  }
+
+  // `cotacao_matriz` tem ON DELETE CASCADE em cotacao_item_id: os preços cotados
+  // deste item saem junto, o que é o comportamento desejado.
+  const { error } = await supabase.from("cotacao_itens").delete().eq("id", itemId);
+  if (error) return { erro: error.message };
+
+  revalidatePath(`/cotacoes/${item.cotacao_id}`);
+  revalidatePath("/cotacoes");
+  return { ok: true };
+}
+
+export async function atualizarQuantidadeItemCotacao(
+  itemId: string,
+  quantidade: number,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  if (!Number.isFinite(quantidade) || quantidade <= 0) {
+    return { erro: "Quantidade deve ser maior que zero" };
+  }
+
+  const { data: item } = await supabase
+    .from("cotacao_itens")
+    .select("id, cotacao_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { erro: "Item não encontrado" };
+
+  const guard = await guardCotacaoEditavel(supabase, item.cotacao_id);
+  if ("erro" in guard) return guard;
+
+  const pedido = await itemJaPedido(supabase, itemId);
+  if (pedido) return { erro: `Este item já está no pedido ${pedido} — a quantidade não pode mudar.` };
+
+  const { error } = await supabase
+    .from("cotacao_itens")
+    .update({ quantidade })
+    .eq("id", itemId);
+  if (error) return { erro: error.message };
+
+  revalidatePath(`/cotacoes/${item.cotacao_id}`);
+  return { ok: true };
+}
+
 // ── avaliarCompletudeCotacao ──────────────────────────────────────────────────
 
 /**

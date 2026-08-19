@@ -13,11 +13,12 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, X, Plus,
   Loader2, AlertTriangle, Calendar, Users, Check, Mail, Send, Info, Truck, ShieldCheck,
-  FileDown, Printer,
+  FileDown, Printer, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, vincularProdutoCotacaoItem } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, vincularProdutoCotacaoItem, adicionarItemCotacao, removerItemCotacao, atualizarQuantidadeItemCotacao } from "../../actions";
+import { AdicionarItemModal, type ProdutoOpcao, type NovoItem } from "@/components/lhg/adicionar-item-modal";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
 import { AprovarCompraPanel } from "./aprovar-compra-panel";
@@ -52,6 +53,8 @@ interface Props {
   pedidosGerados:    PedidoGerado[];
   /** ids de `cotacao_itens` que já viraram linha de pedido (fonte de verdade). */
   itensJaPedidos:    string[];
+  /** Catálogo da unidade, para o modal "Adicionar item". */
+  produtos:          ProdutoOpcao[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,7 +104,7 @@ const AVATAR_COLORS = [
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function CotacaoDetalheClient({
-  cotacao, todosFornecedores, pedidosGerados, itensJaPedidos,
+  cotacao, todosFornecedores, pedidosGerados, itensJaPedidos, produtos,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -125,6 +128,10 @@ export function CotacaoDetalheClient({
   const [cadastroItem,     setCadastroItem]     = useState<{ id: string; nome: string } | null>(null);
   const [printOpen,        setPrintOpen]        = useState(false);
   const [mounted,          setMounted]          = useState(false);
+  const [addItemOpen,      setAddItemOpen]      = useState(false);
+  const [editandoQtd,      setEditandoQtd]      = useState<string | null>(null);
+  const [qtdDraft,         setQtdDraft]         = useState("");
+  const [removendoItem,    setRemovendoItem]    = useState<string | null>(null);
 
   const unidadeIdCotacao = cotacao.cotacao_unidades[0]?.unidade_id ?? "";
 
@@ -148,6 +155,48 @@ export function CotacaoDetalheClient({
   );
 
   const itensPedidos = useMemo(() => new Set(itensJaPedidos), [itensJaPedidos]);
+
+  async function salvarQtdItem(itemId: string) {
+    const q = parseFloat(qtdDraft.replace(",", "."));
+    if (!Number.isFinite(q) || q <= 0) {
+      toast.error("Quantidade deve ser maior que zero");
+      return;
+    }
+    const res = await atualizarQuantidadeItemCotacao(itemId, q);
+    if ("erro" in res) { toast.error(res.erro); return; }
+    setEditandoQtd(null);
+    router.refresh();
+  }
+
+  async function handleRemoverItem(itemId: string, nome: string) {
+    if (!confirm(`Remover "${nome}" desta cotação? Os preços já cotados para ele serão apagados.`)) return;
+    setRemovendoItem(itemId);
+    try {
+      const res = await removerItemCotacao(itemId);
+      if ("erro" in res) { toast.error(res.erro); return; }
+      toast.success("Item removido da cotação");
+      router.refresh();
+    } finally {
+      setRemovendoItem(null);
+    }
+  }
+
+  async function handleAdicionarItem(item: NovoItem) {
+    const payload = item.tipo === "catalogo"
+      ? { tipo: "catalogo" as const, produto_id: item.produto_id, quantidade: item.quantidade }
+      : {
+          tipo: "livre" as const,
+          produto_nome_livre:  item.produto_nome_livre,
+          produto_unidade_med: item.produto_unidade_med,
+          quantidade:          item.quantidade,
+        };
+    const res = await adicionarItemCotacao(cotacao.id, payload);
+    if (!("erro" in res)) {
+      toast.success("Item adicionado à cotação");
+      router.refresh();
+    }
+    return res;
+  }
 
   async function handleRemoverFornecedor(fornecedorId: string, nome: string) {
     if (!confirm(`Remover "${nome}" desta cotação?`)) return;
@@ -727,9 +776,46 @@ export function CotacaoDetalheClient({
                               {nomeItem}
                             </div>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="inline-flex items-center rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80 tabular-nums">
-                                {item.quantidade} {unidItem}
-                              </span>
+                              {editandoQtd === item.id ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    inputMode="decimal"
+                                    value={qtdDraft}
+                                    onChange={e => setQtdDraft(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter")  salvarQtdItem(item.id);
+                                      if (e.key === "Escape") setEditandoQtd(null);
+                                    }}
+                                    className="w-16 h-6 rounded border border-sky-500/50 bg-background px-1.5 text-[11px] font-mono text-foreground focus:outline-none"
+                                  />
+                                  <button onClick={() => salvarQtdItem(item.id)} title="Salvar"
+                                    className="p-0.5 text-emerald-400 hover:text-emerald-300">
+                                    <Check size={11} />
+                                  </button>
+                                  <button onClick={() => setEditandoQtd(null)} title="Cancelar"
+                                    className="p-0.5 text-muted-foreground hover:text-foreground">
+                                    <X size={11} />
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={editavel && !itensPedidos.has(item.id)
+                                    ? () => { setEditandoQtd(item.id); setQtdDraft(String(item.quantidade)); }
+                                    : undefined}
+                                  disabled={!editavel || itensPedidos.has(item.id)}
+                                  title={
+                                    itensPedidos.has(item.id) ? "Item já virou pedido — quantidade travada"
+                                    : editavel ? "Clique para editar a quantidade" : undefined
+                                  }
+                                  className={cn(
+                                    "inline-flex items-center rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80 tabular-nums",
+                                    editavel && !itensPedidos.has(item.id) && "hover:bg-sky-500/15 hover:text-sky-400 transition-colors cursor-pointer",
+                                  )}
+                                >
+                                  {item.quantidade} {unidItem}
+                                </button>
+                              )}
                               {prod?.codigo && (
                                 <span className="text-[10px] text-muted-foreground/40 font-mono">{prod.codigo}</span>
                               )}
@@ -758,8 +844,30 @@ export function CotacaoDetalheClient({
                                   </span>
                                 )
                               )}
+                              {itensPedidos.has(item.id) && (
+                                <span
+                                  title="Este item já virou pedido de compra"
+                                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-emerald-500/12 text-emerald-400 ring-1 ring-emerald-500/25 uppercase tracking-wide"
+                                >
+                                  <span className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
+                                  pedido gerado
+                                </span>
+                              )}
                             </div>
                           </div>
+                          {/* Remover item — bloqueado depois de virar pedido */}
+                          {editavel && !itensPedidos.has(item.id) && cotacao.cotacao_itens.length > 1 && (
+                            <button
+                              onClick={() => handleRemoverItem(item.id, nomeItem)}
+                              disabled={removendoItem === item.id}
+                              title="Remover este item da cotação (apaga os preços cotados dele)"
+                              className="ml-auto shrink-0 p-1 rounded text-muted-foreground/0 group-hover/row:text-muted-foreground/40 hover:!text-destructive transition-colors disabled:opacity-50"
+                            >
+                              {removendoItem === item.id
+                                ? <Loader2 size={12} className="animate-spin" />
+                                : <Trash2 size={12} />}
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -813,6 +921,23 @@ export function CotacaoDetalheClient({
                     </tr>
                   );
                 })}
+                {/* Acrescentar item esquecido sem precisar refazer a cotação */}
+                {editavel && (
+                  <tr>
+                    <td
+                      colSpan={1 + fornecedores.length + (temSugestaoIA ? 1 : 0)}
+                      className="border-b border-border/40 p-0"
+                    >
+                      <button
+                        onClick={() => setAddItemOpen(true)}
+                        className="w-full flex items-center gap-1.5 px-5 py-2.5 text-[11px] font-medium text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/[0.04] transition-colors"
+                      >
+                        <Plus size={12} />
+                        Adicionar item à cotação
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
 
               {/* Footer: subtotal · frete · total · pagamento · prazo · garantia */}
@@ -990,6 +1115,14 @@ export function CotacaoDetalheClient({
         matrizMap={matrizMap}
         fornecedoresComPedido={fornecedoresComPedido}
         itensJaPedidos={itensPedidos}
+      />
+
+      <AdicionarItemModal
+        open={addItemOpen}
+        onClose={() => setAddItemOpen(false)}
+        produtos={produtos}
+        titulo="Adicionar item à cotação"
+        onConfirm={handleAdicionarItem}
       />
 
       {/* ── Adicionar Fornecedor ─────────────────────────────────────────────── */}

@@ -3,6 +3,7 @@
  */
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { RequisicaoDetalhe } from "./_components/requisicao-detalhe";
 
 interface Props { params: Promise<{ id: string }> }
@@ -34,11 +35,31 @@ export default async function RequisicaoPage({ params }: Props) {
     unidade_id: string;
     unidades: { id: string; nome: string } | null;
   }>;
+  const unidadeId = unidades[0]?.unidade_id ?? "";
+
+  /*
+   * Catálogo para o modal "Adicionar item", restrito à unidade da requisição —
+   * o catálogo é por unidade (`omie_unidade_id`, migration 0014) e são 3.384
+   * produtos no total. fetchAllRows porque o PostgREST corta em 1.000 linhas.
+   */
+  const produtos = unidadeId
+    ? await fetchAllRows((from, to) =>
+        supabase
+          .from("produtos")
+          .select("id, codigo, nome, unidade_med, categoria")
+          .eq("ativo", true)
+          .eq("omie_unidade_id", unidadeId)
+          .order("nome")
+          .order("id")
+          .range(from, to),
+      )
+    : [];
 
   return (
     <RequisicaoDetalhe
       req={req as never}
-      unidadeId={unidades[0]?.unidade_id ?? ""}
+      unidadeId={unidadeId}
+      produtos={produtos ?? []}
     />
   );
 }

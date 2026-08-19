@@ -1061,7 +1061,10 @@ export async function syncRequisicoes(
               .from("requisicoes")
               .insert({
                 numero,
-                titulo:               item.obsReqCompra ?? `Requisição Omie ${item.codIntReqCompra ?? item.codReqCompra}`,
+                // `??` só cobre null/undefined: o Omie manda obsReqCompra como
+                // string VAZIA na maioria dos casos, e ela passava direto — 156 das
+                // 159 requisições importadas ficaram sem título. `||` + trim cobre.
+                titulo:               item.obsReqCompra?.trim() || `Requisição Omie ${item.codIntReqCompra ?? item.codReqCompra}`,
                 urgencia:             "normal",
                 status:               "aguardando_cotacao",
                 origem:               "omie",

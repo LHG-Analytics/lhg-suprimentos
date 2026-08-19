@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock, Scale, Trash2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ArrowLeft, PackagePlus, Clock, Scale, Trash2, Pencil, Plus, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { aprovarRequisicao, excluirItemRequisicao } from "../../actions";
+import { aprovarRequisicao, excluirItemRequisicao, atualizarItemRequisicao, adicionarItemRequisicao } from "../../actions";
+import { AdicionarItemModal, type ProdutoOpcao, type NovoItem } from "@/components/lhg/adicionar-item-modal";
+import { EditarRequisicaoModal } from "./editar-requisicao-modal";
 import { ProdutoOmieModal } from "./produto-omie-modal";
 
 interface Item {
@@ -27,7 +29,7 @@ interface Req {
   requisicao_unidades: Array<{ unidade_id: string; unidades: { id: string; nome: string } | null }>;
 }
 
-interface Props { req: Req; unidadeId: string; }
+interface Props { req: Req; unidadeId: string; produtos: ProdutoOpcao[] }
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho:            "Rascunho",
@@ -38,12 +40,17 @@ const STATUS_LABEL: Record<string, string> = {
   cancelado:           "Cancelado",
 };
 
-export function RequisicaoDetalhe({ req, unidadeId }: Props) {
+export function RequisicaoDetalhe({ req, unidadeId, produtos }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [modalItem, setModalItem] = useState<Item | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
   const [excluindoItem, setExcluindoItem] = useState<string | null>(null);
+  const [editarOpen, setEditarOpen] = useState(false);
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [editandoQtd, setEditandoQtd] = useState<string | null>(null);
+  const [qtdDraft, setQtdDraft] = useState("");
+  const [salvandoQtd, setSalvandoQtd] = useState(false);
 
   const itensPendentes = req.requisicao_itens.filter(i => i.produto_novo);
   // Produtos não cadastrados NÃO bloqueiam mais o avanço para cotação:
@@ -52,9 +59,15 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
     && req.status !== "aprovado"
     && req.status !== "cotacao";
 
-  // Itens só podem ser removidos enquanto a requisição não foi aprovada/cotada
-  const podeExcluirItens =
-    req.status !== "aprovado" && req.status !== "cotacao" && req.requisicao_itens.length > 1;
+  /*
+   * Depois de virar cotação os itens já foram COPIADOS para `cotacao_itens` —
+   * mexer na requisição não mudaria nada lá, só daria a falsa impressão de ter
+   * mudado. A partir desse ponto a edição acontece na própria cotação.
+   */
+  const editavel = req.status !== "aprovado" && req.status !== "cotacao";
+
+  // Nunca deixa a requisição sem item: o último não pode ser removido
+  const podeExcluirItens = editavel && req.requisicao_itens.length > 1;
 
   function handleAprovar() {
     startTransition(async () => {
@@ -66,6 +79,32 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
         toast.error((err as Error).message);
       }
     });
+  }
+
+  async function salvarQtd(itemId: string) {
+    const q = parseFloat(qtdDraft.replace(",", "."));
+    if (!Number.isFinite(q) || q <= 0) {
+      toast.error("Quantidade deve ser maior que zero");
+      return;
+    }
+    setSalvandoQtd(true);
+    try {
+      const res = await atualizarItemRequisicao(itemId, { quantidade: q });
+      if ("erro" in res) { toast.error(res.erro); return; }
+      setEditandoQtd(null);
+      router.refresh();
+    } finally {
+      setSalvandoQtd(false);
+    }
+  }
+
+  async function handleAdicionarItem(item: NovoItem) {
+    const res = await adicionarItemRequisicao(req.id, item);
+    if (!("erro" in res)) {
+      toast.success("Item adicionado");
+      router.refresh();
+    }
+    return res;
   }
 
   async function handleExcluirItem(itemId: string) {
@@ -125,13 +164,23 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
           </div>
         </div>
 
-        {podAprovar && (
-          <button onClick={handleAprovar} disabled={pending}
-            className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-colors disabled:opacity-50">
-            <CheckCircle2 size={14} />
-            Aprovar
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {editavel && (
+            <button onClick={() => setEditarOpen(true)}
+              title="Editar título, urgência e justificativa"
+              className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border bg-muted/40 hover:bg-muted text-foreground/80 hover:text-foreground font-medium text-sm transition-colors">
+              <Pencil size={13} />
+              Editar
+            </button>
+          )}
+          {podAprovar && (
+            <button onClick={handleAprovar} disabled={pending}
+              className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-colors disabled:opacity-50">
+              <CheckCircle2 size={14} />
+              Aprovar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Alerta produtos pendentes */}
@@ -180,10 +229,44 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {item.quantidade}× {item.produto_novo ? item.produto_unidade_med : item.produtos?.unidade_med}
-                  {item.produto_novo && <span className="ml-2 text-amber-400/70">produto não cadastrado no Omie</span>}
-                  {item.observacao && <span className="ml-2 text-muted-foreground/60">· {item.observacao}</span>}
+                <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {editandoQtd === item.id ? (
+                    <span className="inline-flex items-center gap-1">
+                      <input
+                        autoFocus
+                        inputMode="decimal"
+                        value={qtdDraft}
+                        onChange={e => setQtdDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") salvarQtd(item.id);
+                          if (e.key === "Escape") setEditandoQtd(null);
+                        }}
+                        className="w-16 h-6 rounded border border-emerald-500/50 bg-background px-1.5 text-xs font-mono text-foreground focus:outline-none"
+                      />
+                      <button onClick={() => salvarQtd(item.id)} disabled={salvandoQtd}
+                        title="Salvar" className="p-0.5 text-emerald-400 hover:text-emerald-300 disabled:opacity-50">
+                        <Check size={12} />
+                      </button>
+                      <button onClick={() => setEditandoQtd(null)}
+                        title="Cancelar" className="p-0.5 text-muted-foreground hover:text-foreground">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={editavel ? () => { setEditandoQtd(item.id); setQtdDraft(String(item.quantidade)); } : undefined}
+                      disabled={!editavel}
+                      title={editavel ? "Clique para editar a quantidade" : undefined}
+                      className={cn(
+                        "font-mono",
+                        editavel && "rounded px-1 -mx-1 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors cursor-pointer",
+                      )}
+                    >
+                      {item.quantidade}× {item.produto_novo ? item.produto_unidade_med : item.produtos?.unidade_med}
+                    </button>
+                  )}
+                  {item.produto_novo && <span className="text-amber-400/70">produto não cadastrado no Omie</span>}
+                  {item.observacao && <span className="text-muted-foreground/60">· {item.observacao}</span>}
                 </div>
               </div>
               {item.produto_novo && (
@@ -213,6 +296,15 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
             </div>
           ))}
         </div>
+        {editavel && (
+          <button
+            onClick={() => setAddItemOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-border/50 text-xs font-medium text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/[0.04] transition-colors"
+          >
+            <Plus size={13} />
+            Adicionar item
+          </button>
+        )}
       </div>
 
       {/* Status aguardando_cotacao + botão criar cotação */}
@@ -244,6 +336,21 @@ export function RequisicaoDetalhe({ req, unidadeId }: Props) {
           nomeSugerido={modalItem.produto_nome_livre ?? ""}
         />
       )}
+
+      <EditarRequisicaoModal
+        open={editarOpen}
+        onClose={() => setEditarOpen(false)}
+        req={req}
+      />
+
+      <AdicionarItemModal
+        open={addItemOpen}
+        onClose={() => setAddItemOpen(false)}
+        produtos={produtos}
+        comObservacao
+        titulo="Adicionar item à requisição"
+        onConfirm={handleAdicionarItem}
+      />
     </div>
   );
 }

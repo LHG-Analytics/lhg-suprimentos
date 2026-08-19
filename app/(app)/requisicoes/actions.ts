@@ -157,6 +157,166 @@ export async function criarRequisicao(input: NovaRequisicaoInput) {
 
 // ── aprovarRequisicao ─────────────────────────────────────────────────────────
 
+// ── Edição de requisição ──────────────────────────────────────────────────────
+
+/**
+ * Status em que a requisição ainda pode ser editada.
+ *
+ * Depois de virar cotação (`status = 'cotacao'`) os itens já foram COPIADOS para
+ * `cotacao_itens` — editar a requisição não mudaria nada lá, só daria a falsa
+ * impressão de ter mudado. Nesse ponto a edição acontece na própria cotação.
+ */
+const STATUS_REQ_EDITAVEL = ["rascunho", "pendente_produto", "aguardando_cotacao", "pendente"] as const;
+
+const EditarRequisicaoSchema = z.object({
+  titulo:        z.string().min(3, "Título obrigatório (mínimo 3 caracteres)"),
+  urgencia:      z.enum(["normal", "urgente"]),
+  justificativa: z.string().nullable().optional(),
+});
+
+/** Carrega a requisição e valida permissão + status editável. */
+async function guardRequisicaoEditavel(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  requisicaoId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const [{ data: req }, { data: profile }] = await Promise.all([
+    supabase.from("requisicoes").select("id, status, solicitante_id").eq("id", requisicaoId).maybeSingle(),
+    supabase.from("user_profiles").select("role").eq("id", userId).single(),
+  ]);
+
+  if (!req) return { erro: "Requisição não encontrada" };
+
+  if (!(STATUS_REQ_EDITAVEL as readonly string[]).includes(req.status)) {
+    return {
+      erro: req.status === "cotacao"
+        ? "Esta requisição já virou cotação. Ajuste os itens direto na cotação."
+        : `Requisição com status "${req.status}" não pode mais ser editada.`,
+    };
+  }
+
+  // Solicitantes só mexem nas próprias requisições
+  if (profile?.role === "solicitante" && req.solicitante_id !== userId) {
+    return { erro: "Sem permissão para editar esta requisição" };
+  }
+  return { ok: true };
+}
+
+export async function editarRequisicao(
+  requisicaoId: string,
+  input: z.infer<typeof EditarRequisicaoSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const parsed = EditarRequisicaoSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const guard = await guardRequisicaoEditavel(supabase, user.id, requisicaoId);
+  if ("erro" in guard) return guard;
+
+  const { error } = await supabase
+    .from("requisicoes")
+    .update({
+      titulo:        parsed.data.titulo.trim(),
+      urgencia:      parsed.data.urgencia,
+      justificativa: parsed.data.justificativa?.trim() || null,
+      updated_at:    new Date().toISOString(),
+    })
+    .eq("id", requisicaoId);
+
+  if (error) return { erro: error.message };
+
+  revalidatePath("/requisicoes");
+  revalidatePath(`/requisicoes/${requisicaoId}`);
+  return { ok: true };
+}
+
+const ItemRequisicaoUpdateSchema = z.object({
+  quantidade: z.number().positive("Quantidade deve ser maior que zero"),
+  observacao: z.string().nullable().optional(),
+});
+
+export async function atualizarItemRequisicao(
+  itemId: string,
+  input: z.infer<typeof ItemRequisicaoUpdateSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const parsed = ItemRequisicaoUpdateSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const { data: item } = await supabase
+    .from("requisicao_itens")
+    .select("id, requisicao_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { erro: "Item não encontrado" };
+
+  const guard = await guardRequisicaoEditavel(supabase, user.id, item.requisicao_id);
+  if ("erro" in guard) return guard;
+
+  const { error } = await supabase
+    .from("requisicao_itens")
+    .update({
+      quantidade: parsed.data.quantidade,
+      observacao: parsed.data.observacao?.trim() || null,
+    })
+    .eq("id", itemId);
+
+  if (error) return { erro: error.message };
+
+  revalidatePath(`/requisicoes/${item.requisicao_id}`);
+  return { ok: true };
+}
+
+export async function adicionarItemRequisicao(
+  requisicaoId: string,
+  input: ItemInput,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const parsed = ItemSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const guard = await guardRequisicaoEditavel(supabase, user.id, requisicaoId);
+  if ("erro" in guard) return guard;
+
+  const item = parsed.data;
+  // Um objeto só com todas as colunas: a união dos dois formatos quebrava a
+  // inferência de tipo do insert do Supabase.
+  const { error } = await supabase.from("requisicao_itens").insert({
+    requisicao_id:       requisicaoId,
+    quantidade:          item.quantidade,
+    observacao:          item.observacao?.trim() || null,
+    produto_id:          item.tipo === "catalogo" ? item.produto_id : null,
+    produto_nome_livre:  item.tipo === "livre" ? item.produto_nome_livre.trim() : null,
+    produto_unidade_med: item.tipo === "livre" ? item.produto_unidade_med.trim() : null,
+    produto_novo:        item.tipo === "livre",
+  });
+  if (error) return { erro: error.message };
+
+  // Item livre reintroduz pendência de cadastro — o status volta a refletir isso.
+  if (item.tipo === "livre") {
+    await supabase
+      .from("requisicoes")
+      .update({ status: "pendente_produto" })
+      .eq("id", requisicaoId)
+      .eq("status", "aguardando_cotacao");
+  }
+
+  revalidatePath("/requisicoes");
+  revalidatePath(`/requisicoes/${requisicaoId}`);
+  return { ok: true };
+}
+
+// ── aprovarRequisicao ─────────────────────────────────────────────────────────
+
 export async function aprovarRequisicao(requisicaoId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

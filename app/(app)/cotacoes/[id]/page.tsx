@@ -65,6 +65,25 @@ export default async function CotacaoDetalhePage({ params }: Props) {
   if (!cotacao) notFound();
 
   const pedidos = pedidosDaCotacao ?? [];
+
+  /*
+   * Catálogo da unidade da cotação, para o modal "Adicionar item".
+   * O catálogo é por unidade (`omie_unidade_id`, migration 0014) e são 3.384
+   * produtos no total — filtrar evita mandar o catálogo inteiro ao browser.
+   */
+  const unidadeCotacao = (cotacao.cotacao_unidades as Array<{ unidade_id: string }>)[0]?.unidade_id ?? "";
+  const produtos = unidadeCotacao
+    ? await fetchAllRows((from, to) =>
+        supabase
+          .from("produtos")
+          .select("id, codigo, nome, unidade_med, categoria")
+          .eq("ativo", true)
+          .eq("omie_unidade_id", unidadeCotacao)
+          .order("nome")
+          .order("id")
+          .range(from, to),
+      )
+    : [];
   const itensJaPedidos = pedidos
     .flatMap(p => (p.pedido_itens ?? []) as { cotacao_item_id: string | null }[])
     .map(pi => pi.cotacao_item_id)
@@ -76,6 +95,7 @@ export default async function CotacaoDetalhePage({ params }: Props) {
       todosFornecedores={fornecedores}
       pedidosGerados={pedidos.map(({ id: pid, numero, fornecedor_id }) => ({ id: pid, numero, fornecedor_id }))}
       itensJaPedidos={itensJaPedidos}
+      produtos={produtos ?? []}
     />
   );
 }
