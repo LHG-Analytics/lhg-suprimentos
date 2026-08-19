@@ -313,42 +313,17 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
     });
   }
 
-  // ── Mini-KPIs ──────────────────────────────────────────────────────────────
-  const emCotacao     = cotacoes.filter(c => c.status === "cotacao").length;
-  // Soma economia apenas de cotações aprovadas com valor calculado (> 0)
-  const economiaTotal = cotacoes
-    .filter(c => c.status === "aprovado" && (c.economia ?? 0) > 0)
-    .reduce((acc, c) => acc + (c.economia ?? 0), 0);
-  // Ciclo médio: apenas cotações aprovadas (do rascunho até aprovação) com pelo menos 1 dia
-  const aprovadas     = cotacoes.filter(c => c.status === "aprovado");
-  const cicloMedio    = aprovadas.length > 0
-    ? Math.round(aprovadas.reduce((acc, c) => {
-        const dias = (Date.now() - new Date(c.created_at).getTime()) / 86_400_000;
-        return acc + Math.max(dias, 1);
-      }, 0) / aprovadas.length)
-    : 0;
-
-  // ── Counts por status ──────────────────────────────────────────────────────
-  const counts = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const c of cotacoes) map[c.status] = (map[c.status] ?? 0) + 1;
-    return map;
-  }, [cotacoes]);
-
-  // ── Filtrar + buscar ───────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    const q = queryDebounced.toLowerCase().trim();
-    let lista = cotacoes.filter((c) => {
-      if (filter !== "todas" && c.status !== filter) return false;
-      if (!q) return true;
-      return (
-        c.numero.toLowerCase().includes(q) ||
-        c.titulo.toLowerCase().includes(q) ||
-        c.comprador?.nome.toLowerCase().includes(q) ||
-        c.cotacao_unidades.some(cu => cu.unidades?.nome.toLowerCase().includes(q))
-      );
-    });
-    // Filtro por data (created_at)
+  /*
+   * Recorte de PERÍODO, separado do recorte de navegação.
+   *
+   * Os KPIs seguem só as datas; a aba de status e a busca são para percorrer a
+   * lista e não devem mexer no total (clicar "Rascunho" não pode zerar a economia
+   * gerada). Antes os KPIs liam o array cru e ignoravam as datas, então a
+   * "Economia gerada" mostrava o histórico inteiro mesmo com período preenchido —
+   * era o que não fechava com o dashboard.
+   */
+  const noPeriodo = useMemo(() => {
+    let lista = cotacoes;
     if (dataInicio) {
       const inicio = new Date(dataInicio + "T00:00:00");
       lista = lista.filter(c => new Date(c.created_at) >= inicio);
@@ -358,7 +333,53 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
       lista = lista.filter(c => new Date(c.created_at) <= fim);
     }
     return lista;
-  }, [cotacoes, filter, queryDebounced, dataInicio, dataFim]);
+  }, [cotacoes, dataInicio, dataFim]);
+
+  /** Deixa explícito de que intervalo os KPIs falam — sem isso o número parecia arbitrário. */
+  const rotuloPeriodo = useMemo(() => {
+    const fmt = (d: string) => d.split("-").reverse().join("/");
+    if (dataInicio && dataFim) return `${fmt(dataInicio)} a ${fmt(dataFim)}`;
+    if (dataInicio)            return `desde ${fmt(dataInicio)}`;
+    if (dataFim)               return `até ${fmt(dataFim)}`;
+    return "todo o histórico";
+  }, [dataInicio, dataFim]);
+
+  // ── Mini-KPIs (seguem o período) ───────────────────────────────────────────
+  const emCotacao     = noPeriodo.filter(c => c.status === "cotacao").length;
+  // Soma economia apenas de cotações aprovadas com valor calculado (> 0)
+  const economiaTotal = noPeriodo
+    .filter(c => c.status === "aprovado" && (c.economia ?? 0) > 0)
+    .reduce((acc, c) => acc + (c.economia ?? 0), 0);
+  // Ciclo médio: apenas cotações aprovadas (do rascunho até aprovação) com pelo menos 1 dia
+  const aprovadas     = noPeriodo.filter(c => c.status === "aprovado");
+  const cicloMedio    = aprovadas.length > 0
+    ? Math.round(aprovadas.reduce((acc, c) => {
+        const dias = (Date.now() - new Date(c.created_at).getTime()) / 86_400_000;
+        return acc + Math.max(dias, 1);
+      }, 0) / aprovadas.length)
+    : 0;
+
+  // ── Counts por status (também no período, para as abas somarem com a tabela) ─
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of noPeriodo) map[c.status] = (map[c.status] ?? 0) + 1;
+    return map;
+  }, [noPeriodo]);
+
+  // ── Filtrar + buscar ───────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = queryDebounced.toLowerCase().trim();
+    return noPeriodo.filter((c) => {
+      if (filter !== "todas" && c.status !== filter) return false;
+      if (!q) return true;
+      return (
+        c.numero.toLowerCase().includes(q) ||
+        c.titulo.toLowerCase().includes(q) ||
+        c.comprador?.nome.toLowerCase().includes(q) ||
+        c.cotacao_unidades.some(cu => cu.unidades?.nome.toLowerCase().includes(q))
+      );
+    });
+  }, [noPeriodo, filter, queryDebounced]);
 
   function exportarCotacoesCSV() {
     const headers = ["Número", "Título", "Status", "Urgente", "Criado em"];
@@ -408,7 +429,7 @@ export function CotacoesClient({ cotacoes, requisicoes }: CotacoesClientProps) {
             label: "ECONOMIA GERADA",
             value: economiaTotal > 0 ? formatBRL(economiaTotal) : "R$ 0,00",
             color: "text-emerald-400",
-            sub:   economiaTotal > 0 ? "estimado vs. preço aprovado" : "nenhuma cotação aprovada com valores",
+            sub:   economiaTotal > 0 ? `vs. maior preço cotado · ${rotuloPeriodo}` : "nenhuma cotação aprovada com valores",
           },
           {
             label: "CICLO MÉDIO (dias)",

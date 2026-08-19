@@ -127,10 +127,35 @@ async function idsDaUnidade(
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
-async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedIds: string[] | null) {
+/**
+ * KPIs do dashboard.
+ *
+ * Duas naturezas de card, e a diferença precisa ficar explícita na UI:
+ *  • FLUXO (economia, pedidos, cotações feitas, produtos cotados) — acontecem
+ *    dentro de um intervalo e respeitam o seletor de período.
+ *  • RETRATO (cotações abertas, pendentes de aprovação, valor em cotação) —
+ *    são o estado de agora; período não se aplica.
+ *
+ * Antes o seletor de período era passado só ao gráfico: todos os KPIs ficavam
+ * presos no mês corrente (economia, pedidos) ou sem filtro algum (cotações feitas,
+ * produtos cotados). Escolher "1 ano" não mudava número nenhum, e a economia do
+ * dashboard nunca fechava com a da tela de Cotações.
+ */
+async function fetchKpis(
+  supabase: SupabaseClient,
+  cotIds: string[] | null,
+  pedIds: string[] | null,
+  periodoFrom: string,
+  periodoTo: string,
+) {
   const { start, startIso } = currentMonthRange();
-  const prevStart = new Date(start.getFullYear(), start.getMonth() - 1, 1);
-  const prevEnd   = new Date(start.getFullYear(), start.getMonth(), 0);
+
+  // Janela selecionada + janela imediatamente anterior de igual duração, para o "vs"
+  const deIso   = new Date(`${periodoFrom}T00:00:00`).toISOString();
+  const ateIso  = new Date(`${periodoTo}T23:59:59`).toISOString();
+  const duracao = new Date(ateIso).getTime() - new Date(deIso).getTime();
+  const prevDeIso  = new Date(new Date(deIso).getTime() - duracao - 1).toISOString();
+  const prevAteIso = new Date(new Date(deIso).getTime() - 1).toISOString();
 
   const OPEN_STATUS   = ["rascunho", "cotacao", "pendente"] as const;
   const IN_PROGRESS   = ["cotacao", "pendente"] as const;
@@ -141,9 +166,16 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const byPed = (q: any) => (pedIds ? q.in("id", pedIds) : q);
 
-  // Produtos cotados: itens das cotações da unidade (cotacao_itens.cotacao_id ∈ cotIds)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const itensQuery = (q: any) => (cotIds ? q.in("cotacao_id", cotIds) : q);
+  /*
+   * "Produtos cotados" conta linhas de `cotacao_itens`, que não tem data própria —
+   * a data vive na cotação. Então resolve-se primeiro quais cotações caem no
+   * período (já com o filtro de unidade) e conta-se os itens dessas.
+   */
+  const { data: cotsNoPeriodo } = await byCot(
+    supabase.from("cotacoes").select("id")
+      .gte("created_at", deIso).lte("created_at", ateIso).is("deleted_at", null),
+  );
+  const idsNoPeriodo: string[] = ((cotsNoPeriodo ?? []) as Array<{ id: string }>).map(c => c.id);
 
   const [
     { count: abertas },
@@ -153,30 +185,39 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     { data: economiaRows },
     { count: pendAprov },
     { count: pendAprovPrev },
-    { count: totalCotacoes },
     { count: produtosCotados },
     { count: pedidosNoMes },
+    { data: economiaPrevRows },
   ] = await Promise.all([
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).is("deleted_at", null)),
     byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).in("status", OPEN_STATUS).lt("created_at", startIso).is("deleted_at", null)),
+    // RETRATO: valor parado em cotações em andamento agora
     byCot(supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).is("deleted_at", null)),
-    byCot(supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).gte("created_at", prevStart.toISOString()).lte("created_at", prevEnd.toISOString()).is("deleted_at", null)),
-    byCot(supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", startIso).is("deleted_at", null)),
+    byCot(supabase.from("cotacoes").select("valor_estimado").in("status", IN_PROGRESS).lt("created_at", startIso).is("deleted_at", null)),
+    // FLUXO: economia das cotações aprovadas no período
+    byCot(supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", deIso).lte("created_at", ateIso).is("deleted_at", null)),
+    // RETRATO: pedidos aguardando aprovação agora
     byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao")),
     byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "aguardando_aprovacao").lt("created_at", startIso)),
-    // Total de cotações já feitas (qualquer status, não deletadas) da unidade
-    byCot(supabase.from("cotacoes").select("*", { count: "exact", head: true }).is("deleted_at", null)),
-    // Total de produtos cotados (itens) das cotações da unidade
-    itensQuery(supabase.from("cotacao_itens").select("*", { count: "exact", head: true })),
-    // Pedidos de compra criados no mês corrente (da unidade)
-    byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).gte("created_at", startIso)),
+    // FLUXO: itens das cotações do período (UUID sentinela força zero quando não há)
+    supabase.from("cotacao_itens").select("*", { count: "exact", head: true })
+      .in("cotacao_id", idsNoPeriodo.length ? idsNoPeriodo : ["00000000-0000-0000-0000-000000000000"]),
+    // FLUXO: pedidos de compra criados no período
+    byPed(supabase.from("pedidos").select("*", { count: "exact", head: true }).gte("created_at", deIso).lte("created_at", ateIso)),
+    // FLUXO (janela anterior): economia, para o delta "vs"
+    byCot(supabase.from("cotacoes").select("economia").in("status", ["aprovado"] as const).gte("created_at", prevDeIso).lte("created_at", prevAteIso).is("deleted_at", null)),
   ]);
+
+  const somaEconomia = (rows: unknown) =>
+    ((rows ?? []) as Array<{ economia: number | null }>)
+      // Economia negativa (compra acima do maior preço) não subtrai do total —
+      // o card mostra apenas os ganhos reais.
+      .reduce((s, r) => s + Math.max(0, r.economia ?? 0), 0);
 
   const valor     = ((valorRows     ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
   const valorPrev = ((valorPrevRows ?? []) as Array<{ valor_estimado: number | null }>).reduce((s, r) => s + (r.valor_estimado ?? 0), 0);
-  // Economias negativas (compra acima da média dos concorrentes) não subtraem
-  // do total — a "Economia do mês" mostra apenas os ganhos reais.
-  const economia  = ((economiaRows  ?? []) as Array<{ economia: number | null }>).reduce((s, r) => s + Math.max(0, r.economia ?? 0), 0);
+  const economia     = somaEconomia(economiaRows);
+  const economiaPrev = somaEconomia(economiaPrevRows);
 
   return {
     abertas:       abertas       ?? 0,
@@ -186,10 +227,12 @@ async function fetchKpis(supabase: SupabaseClient, cotIds: string[] | null, pedI
     valorPrev,
     deltaValor:    valorPrev     ? ((valor - valorPrev) / valorPrev) * 100                : null,
     economia,
+    economiaPrev,
+    deltaEconomia: economiaPrev  ? ((economia - economiaPrev) / economiaPrev) * 100        : null,
     pendAprov:     pendAprov     ?? 0,
     pendAprovPrev: pendAprovPrev ?? 0,
     deltaPendAprov: pendAprovPrev ? (((pendAprov ?? 0) - pendAprovPrev) / pendAprovPrev) * 100 : null,
-    totalCotacoes:   totalCotacoes   ?? 0,
+    totalCotacoes:   idsNoPeriodo.length,
     produtosCotados: produtosCotados ?? 0,
     pedidosNoMes:    pedidosNoMes    ?? 0,
   };
@@ -541,7 +584,7 @@ export default async function DashboardPage({
   // Busca dados do Supabase em paralelo (rápido ~300ms).
   // Promise.allSettled garante que uma falha isolada não derruba o dashboard inteiro.
   const results = await Promise.allSettled([
-    fetchKpis(supabase, cotIds, pedIds),
+    fetchKpis(supabase, cotIds, pedIds, periodoFrom, periodoTo),
     fetchChartData(supabase, periodoFrom, periodoTo, pedIds),
     fetchAcoes(supabase, cotIds, pedIds),
     fetchCotacoes(supabase, cotIds),
@@ -550,7 +593,7 @@ export default async function DashboardPage({
   ]);
 
   // Valores de fallback para cada seção
-  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, totalCotacoes: 0, produtosCotados: 0, pedidosNoMes: 0 };
+  const kpisDefault = { abertas: 0, abertasPrev: 0, deltaAbertas: null, valor: 0, valorPrev: 0, deltaValor: null, economia: 0, economiaPrev: 0, deltaEconomia: null, pendAprov: 0, pendAprovPrev: 0, deltaPendAprov: null, totalCotacoes: 0, produtosCotados: 0, pedidosNoMes: 0 };
   const kpis          = results[0].status === "fulfilled" ? results[0].value : kpisDefault;
   const chart         = results[1].status === "fulfilled" ? results[1].value : { series: [], labels: [], subtitulo: "pedidos enviados e recebidos" };
   const acoes         = results[2].status === "fulfilled" ? results[2].value : [];
@@ -570,14 +613,14 @@ export default async function DashboardPage({
       {/* ── KPIs ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard
-          label="COTAÇÕES ABERTAS"
+          label="COTAÇÕES ABERTAS · AGORA"
           value={kpis.abertas.toString()}
           delta={kpis.deltaAbertas ?? undefined}
           prev={kpis.abertasPrev.toString()}
           mono
         />
         <KpiCard
-          label="VALOR EM COTAÇÃO"
+          label="VALOR EM COTAÇÃO · AGORA"
           value={formatBRL(kpis.valor)}
           delta={kpis.deltaValor ?? undefined}
           prev={formatBRL(kpis.valorPrev)}
@@ -586,15 +629,15 @@ export default async function DashboardPage({
           mono
         />
         <KpiCard
-          label="ECONOMIA DO MÊS"
+          label="ECONOMIA NO PERÍODO"
           value={formatBRL(kpis.economia)}
-          meta={kpis.valor > 0 ? `${((kpis.economia / kpis.valor) * 100).toFixed(1)}%` : "—"}
-          metaLabel="% S/ VALOR"
+          delta={kpis.deltaEconomia ?? undefined}
+          prev={formatBRL(kpis.economiaPrev)}
           accent="positive"
           mono
         />
         <KpiCard
-          label="PEDIDOS PEND. APROVAÇÃO"
+          label="PEND. APROVAÇÃO · AGORA"
           value={kpis.pendAprov.toString()}
           delta={kpis.deltaPendAprov ?? undefined}
           deltaKind="inverse"
@@ -603,32 +646,36 @@ export default async function DashboardPage({
           metaLabel="SLA MÉDIO"
           mono
         />
-        {/* Pedidos de compra emitidos no mês corrente */}
+        {/* Pedidos de compra emitidos no período selecionado */}
         <KpiCard
-          label="PEDIDOS NO MÊS"
+          label="PEDIDOS NO PERÍODO"
           value={kpis.pedidosNoMes.toString()}
           mono
         />
-        {/* Total Insumos — gasto real vs orçamento de produtos da planilha */}
+        {/*
+          Total Insumos — gasto real vs orçamento da planilha. Fica no MÊS
+          propositalmente: o orçado do Google Sheets é mensal, e comparar um
+          realizado de 12 meses com um orçado de 1 mês daria um número sem sentido.
+        */}
         <KpiCard
-          label="TOTAL INSUMOS MÊS"
+          label="TOTAL INSUMOS · MÊS ATUAL"
           value={formatBRL(cmv.totalReal)}
           meta={cmv.temOrcamento ? formatBRL(cmv.cmvOrcado) : undefined}
           metaLabel="ORÇADO"
           accent={cmv.temOrcamento && cmv.totalReal > cmv.cmvOrcado ? "negative" : "neutral"}
           mono
         />
-        {/* Total de cotações já feitas (qualquer status) */}
+        {/* Cotações criadas no período (qualquer status) */}
         <KpiCard
-          label="COTAÇÕES FEITAS"
+          label="COTAÇÕES NO PERÍODO"
           value={kpis.totalCotacoes.toString()}
           meta={kpis.abertas.toString()}
-          metaLabel="ABERTAS"
+          metaLabel="ABERTAS AGORA"
           mono
         />
-        {/* Total de produtos cotados (itens) */}
+        {/* Itens cotados nas cotações do período */}
         <KpiCard
-          label="PRODUTOS COTADOS"
+          label="PRODUTOS COTADOS · PERÍODO"
           value={kpis.produtosCotados.toString()}
           mono
         />
