@@ -39,3 +39,36 @@ export function pontuarSemelhanca(a: string, b: string): number {
   const uniao = pa.size + pb.size - comuns;
   return uniao === 0 ? 0 : comuns / uniao;
 }
+
+export interface CandidatoNome {
+  id:   string;
+  nome: string;
+}
+
+export interface Sugestao extends CandidatoNome {
+  score: number;
+}
+
+interface OpcoesSugestao {
+  limite?:      number;
+  scoreMinimo?: number;
+}
+
+/**
+ * Ordena o catálogo pela semelhança com `alvo`.
+ *
+ * O desempate por nome existe para a ordem ser estável: sem ele, dois candidatos
+ * de mesmo score sairiam em ordem imprevisível e a sugestão mudaria entre
+ * carregamentos da tela.
+ */
+export function sugerirCandidatos(
+  alvo: string,
+  catalogo: CandidatoNome[],
+  { limite = 5, scoreMinimo = 0.1 }: OpcoesSugestao = {},
+): Sugestao[] {
+  return catalogo
+    .map(c => ({ ...c, score: pontuarSemelhanca(alvo, c.nome) }))
+    .filter(c => c.score >= scoreMinimo)
+    .sort((a, b) => (b.score - a.score) || a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, limite);
+}
