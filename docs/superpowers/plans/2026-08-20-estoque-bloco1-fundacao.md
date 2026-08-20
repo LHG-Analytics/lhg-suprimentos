@@ -378,7 +378,10 @@ describe("sugerirCandidatos", () => {
   });
 
   it("respeita o limite de resultados", () => {
-    expect(sugerirCandidatos("cerveja", catalogo, { limite: 2 })).toHaveLength(2);
+    // scoreMinimo: 0 isola o parâmetro sob teste. Com o mínimo padrão os quatro
+    // produtos do catálogo não compartilham palavra com "cerveja" exceto p1, e o
+    // filtro comeria a amostra antes de `limite` ter chance de agir.
+    expect(sugerirCandidatos("cerveja", catalogo, { limite: 2, scoreMinimo: 0 })).toHaveLength(2);
   });
 
   it("descarta score abaixo do mínimo", () => {
