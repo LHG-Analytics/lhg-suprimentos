@@ -20,3 +20,22 @@ export function normalizarNome(nome: string): string {
     .trim()
     .replace(/\s+/g, " ");
 }
+
+/**
+ * Semelhança entre dois nomes: índice de Jaccard sobre o conjunto de palavras.
+ *
+ * Conjunto, não sequência, de propósito — os catálogos divergem na ordem e em
+ * complementos ("330ml", "UN", "CX"), e Jaccard tolera isso sem penalizar por
+ * posição. Retorna 0..1.
+ */
+export function pontuarSemelhanca(a: string, b: string): number {
+  const pa = new Set(normalizarNome(a).split(" ").filter(Boolean));
+  const pb = new Set(normalizarNome(b).split(" ").filter(Boolean));
+  if (pa.size === 0 || pb.size === 0) return 0;
+
+  let comuns = 0;
+  for (const p of pa) if (pb.has(p)) comuns++;
+
+  const uniao = pa.size + pb.size - comuns;
+  return uniao === 0 ? 0 : comuns / uniao;
+}
