@@ -119,6 +119,32 @@ Só entram itens cadastrados explicitamente (~15, como na planilha). Justificati
 não é mais o rate limit (resolvido por `ListarMovimentos`), é que **`consumivel` não é
 confiável** (achado 4) e **ninguém conta 3.426 itens à mão**. A lista cresce sob demanda.
 
+### D6b — A contagem é feita no celular, no estoque (20/08)
+
+A equipe conta andando pelo estoque com o celular na mão. Isso não é detalhe de
+apresentação, é requisito estrutural da tela de contagem:
+
+- **Lista vertical, um item por linha** — não a tabela larga de 6 colunas do cadastro,
+  que é desenhada para desktop.
+- **Campo numérico grande, com teclado numérico** (`inputMode="decimal"`).
+- **Salva item a item, não em lote.** Um "salvar tudo" no fim perde 40 contagens se a
+  conexão cair no corredor do estoque.
+- **Registra quem contou e quando, por item** (`contado_por`, `contado_em`). Num controle
+  cujo objetivo é achar furo, divergência anônima não fecha conversa: saber que o item com
+  −8 foi contado por alguém às 22h muda a investigação.
+
+### D6c — `entradas` e `saidas` são NULL até serem importadas
+
+Como a contagem vem antes das integrações (ver Decomposição), as colunas de movimento
+nascem vazias. Elas são **nullable**, nunca `DEFAULT 0`.
+
+Com `0`, o teórico viraria `contagem_anterior − 0 = contagem_anterior` e a divergência
+acusaria um furo inventado: a equipe conta 109 num item que recebeu 60 de entrada, e o
+sistema aponta −51 de perda inexistente. Com `NULL`, teórico e divergência exibem `—`.
+
+**Divergência errada é pior que divergência ausente** — uma manda investigar o nada, a
+outra só informa que falta dado.
+
 ### D6 — Fator de conversão por item, default 1
 
 1 venda no Automo = N unidades de compra no Omie. Default `1` cobre bebidas e bomboniere;
@@ -164,8 +190,13 @@ estoque_ciclos               -- período de contagem
 
 estoque_ciclo_itens          -- a planilha em tela
   ciclo_id, estoque_item_id
-  contagem_anterior, entradas, saidas, contagem_atual
-  -- teorico, divergencia, a_repor: calculados
+  contagem_anterior  numeric      -- do contagem_atual do ciclo anterior
+  entradas           numeric NULL -- NULL = ainda não importado do Omie (D6c)
+  saidas             numeric NULL -- NULL = ainda não importado do Automo (D6c)
+  contagem_atual     numeric NULL -- NULL = ainda não contado
+  contado_por        uuid    NULL -- quem contou este item (D6b)
+  contado_em         timestamptz NULL
+  -- teorico, divergencia, a_repor: calculados; exibem "—" quando falta insumo
 ```
 
 `contagem_anterior` encadeia do `contagem_atual` do ciclo anterior do mesmo item, o que dá
@@ -192,12 +223,23 @@ Contagem física digitada no LHG ───────────────�
 
 | # | Bloco | Entrega | Risco |
 |---|---|---|---|
-| **1** | Fundação | `locais_estoque`, `local_unidade`, `estoque_itens` + tela de cadastro com sugestão de mapeamento por nome | Baixo |
-| **2** | Saídas (Automo) | leitor Postgres, agregação da árvore por período, aplicação do fator | **Alto** — conversão e qualidade do dado |
-| **3** | Entradas (Omie) | `ListarMovimentos` paginado por unidade fiscal, somando os CNPJs do local | Médio |
-| **4** | Ciclos e tela | abrir/fechar ciclo, digitar contagem, ver teórico/divergência/a repor, CSV | Baixo |
+| **1** ✅ | Fundação | `locais_estoque`, `local_unidade`, `estoque_itens` + tela de cadastro com sugestão de mapeamento por nome | Baixo |
+| **2** | Ciclos e contagem | abrir/fechar ciclo, contar no celular, ver `a repor`, CSV | Baixo |
+| **3** | Saídas (Automo) | leitor Postgres, agregação da árvore por período, aplicação do fator | **Alto** — conversão e qualidade do dado |
+| **4** | Entradas (Omie) | `ListarMovimentos` paginado por unidade fiscal, somando os CNPJs do local | Médio |
 
-Ordem **1 → 2 → 3 → 4**: saídas antes de entradas porque a conversão é o maior risco.
+**Ordem revisada em 20/08: 1 → 2 → 3 → 4**, com a contagem promovida do último para o
+segundo lugar.
+
+A ordem anterior (saídas → entradas → contagem) priorizava **de-risking**: atacar a
+conversão porção↔quilo primeiro, porque é a maior incógnita. Mas a contagem entrega valor
+**sozinha, sem nenhuma integração**: `contagem_atual` é digitada pela equipe,
+`contagem_anterior` vem do ciclo anterior, `estoque_ideal` já existe do bloco 1, e
+`a_repor` sai desses dois. A equipe troca a planilha por tela imediatamente.
+
+As colunas que dependem de integração (`entradas`, `saidas`, `teorico`, `divergencia`)
+exibem `—` até os blocos 3 e 4 chegarem, e então preenchem sozinhas (ver D6c). O risco da
+conversão continua existindo — só deixa de bloquear a entrega de valor.
 
 ## Riscos
 
@@ -208,7 +250,7 @@ Ordem **1 → 2 → 3 → 4**: saídas antes de entradas porque a conversão é 
   ajuste explícito, não ignorar em silêncio.
 - **Sem TLS no Automo** (achado 7).
 - **`registros_por_pagina` do `ListarMovimentos`** e comportamento com catálogo grande ainda
-  não medidos — validar na implementação do bloco 3.
+  não medidos — validar na implementação do bloco 4 (entradas Omie).
 
 ## Fora de escopo
 
