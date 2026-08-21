@@ -7,23 +7,30 @@
  * item salva sozinho no blur/Enter — nada de "salvar tudo" no fim, que
  * perderia a contagem inteira se o sinal caísse no meio do corredor.
  *
- * Teórico e divergência ainda não aparecem aqui: `entradas` só existe a
- * partir do bloco 4 (importação), então o teórico continua sempre "—" mesmo
- * depois de importar as saídas do Automo (bloco 3).
+ * Teórico e divergência aparecem quando entradas e saídas já foram
+ * importadas (blocos 3 e 4) — `calcularTeorico`/`calcularDivergencia`
+ * devolvem `null` enquanto qualquer uma das duas ainda não existe, e o card
+ * mostra "—" nesse caso.
  *
  * `CicloAbertoView` é remontada via `key` a cada ciclo novo ou a cada
- * reimportação de saídas — é assim que o estado local (itens, rascunhos)
- * resincroniza com o servidor depois de abrir/fechar/importar, sem precisar
- * de setState dentro de useEffect (regra de lint do projeto proíbe: cascata
- * de renders desnecessária). Ver `chaveCiclo`.
+ * reimportação de entradas/saídas — é assim que o estado local (itens,
+ * rascunhos) resincroniza com o servidor depois de abrir/fechar/importar,
+ * sem precisar de setState dentro de useEffect (regra de lint do projeto
+ * proíbe: cascata de renders desnecessária). Ver `chaveCiclo`.
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Check, AlertCircle, Boxes, Download } from "lucide-react";
 import { toast } from "sonner";
-import { calcularARepor, rotuloMes } from "@/lib/estoque/ciclo";
-import { abrirCiclo, registrarContagem, fecharCiclo, importarSaidasDoAutomo } from "../actions";
+import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
+import {
+  abrirCiclo,
+  registrarContagem,
+  fecharCiclo,
+  importarSaidasDoAutomo,
+  importarEntradasDoOmie,
+} from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
 
 interface Props {
@@ -41,15 +48,15 @@ function mesAtualIsoClient(): string {
 }
 
 /**
- * Chave de remount de `CicloAbertoView`. Inclui `saidas` de cada item de
- * propósito: é o único jeito de o `useState(itensIniciais)` reler o valor
- * fresco depois de "Importar saídas do Automo" sem precisar de setState em
- * useEffect (proibido pelo lint do projeto) — muda só quando o dado em si
- * muda, então um clique em "salvar contagem" (que não toca `saidas`) não
- * força remontagem à toa.
+ * Chave de remount de `CicloAbertoView`. Inclui `saidas` e `entradas` de
+ * cada item de propósito: é o único jeito de o `useState(itensIniciais)`
+ * reler o valor fresco depois de "Importar saídas do Automo" ou "Importar
+ * entradas do Omie" sem precisar de setState em useEffect (proibido pelo
+ * lint do projeto) — muda só quando o dado em si muda, então um clique em
+ * "salvar contagem" (que não toca nenhum dos dois) não força remontagem à toa.
  */
 function chaveCiclo(cicloId: string, itens: CicloItemView[]): string {
-  return `${cicloId}:${itens.map((it) => `${it.id}=${it.saidas ?? ""}`).join(",")}`;
+  return `${cicloId}:${itens.map((it) => `${it.id}=${it.saidas ?? ""}:${it.entradas ?? ""}`).join(",")}`;
 }
 
 export function ContagemClient({ local, temItensControlados, ciclo, itens }: Props) {
@@ -130,6 +137,7 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
   const [itensLocal, setItensLocal] = useState(itensIniciais);
   const [fechando, setFechando] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [importandoEntradas, setImportandoEntradas] = useState(false);
 
   function handleItemSalvo(id: string, patch: Partial<CicloItemView>) {
     setItensLocal((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -138,7 +146,6 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
   const total = itensLocal.length;
   const contados = itensLocal.filter((it) => it.contagemAtual != null).length;
   const faltam = total - contados;
-  const todasSaidasImportadas = total > 0 && itensLocal.every((it) => it.saidas != null);
 
   async function handleFechar() {
     setFechando(true);
@@ -175,6 +182,34 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
     }
   }
 
+  async function handleImportarEntradas() {
+    setImportandoEntradas(true);
+    try {
+      const res = await importarEntradasDoOmie(ciclo.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      const rotuloItens = res.itensAtualizados === 1 ? "item atualizado" : "itens atualizados";
+      toast.success(`${res.itensAtualizados} ${rotuloItens}`);
+      if (res.itensParciais > 0) {
+        toast.warning(
+          `${res.itensParciais} ${res.itensParciais === 1 ? "item" : "itens"} ` +
+            `${res.itensParciais === 1 ? "recebeu" : "receberam"} entrada de apenas parte dos CNPJs do local`,
+        );
+      }
+      if (res.ajustesDetectados > 0) {
+        toast.info(
+          `${res.ajustesDetectados} ${res.ajustesDetectados === 1 ? "ajuste" : "ajustes"} de inventário ` +
+            `${res.ajustesDetectados === 1 ? "lançado" : "lançados"} no Omie no período`,
+        );
+      }
+      router.refresh();
+    } finally {
+      setImportandoEntradas(false);
+    }
+  }
+
   return (
     <div className="flex flex-col -m-4 sm:-m-6">
       <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3 space-y-2">
@@ -197,6 +232,19 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
               )}
               <span className="hidden sm:inline">Importar saídas do Automo</span>
             </button>
+            <button
+              onClick={handleImportarEntradas}
+              disabled={importandoEntradas}
+              title="Importar entradas do Omie"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              {importandoEntradas ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+              <span className="hidden sm:inline">Importar entradas do Omie</span>
+            </button>
             <p className="text-xs font-medium text-muted-foreground">
               {contados} de {total} contados
             </p>
@@ -217,11 +265,6 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
       </main>
 
       <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
-        <p className="text-[11px] text-muted-foreground/70 text-center">
-          {todasSaidasImportadas
-            ? "Falta só a importação de entradas (bloco 4) para o teórico e a divergência aparecerem."
-            : "Teórico e divergência aparecem quando a importação de entradas e saídas estiver ligada."}
-        </p>
         <button
           onClick={handleFechar}
           disabled={fechando || faltam > 0}
@@ -291,6 +334,12 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
   }
 
   const aRepor = calcularARepor(item.estoqueIdeal, item.contagemAtual);
+  const teorico = calcularTeorico({
+    contagem_anterior: item.contagemAnterior,
+    entradas: item.entradas,
+    saidas: item.saidas,
+  });
+  const divergencia = calcularDivergencia(item.contagemAtual, teorico);
   const horaContado = item.contadoEm
     ? new Date(item.contadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : null;
@@ -311,6 +360,7 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span>Anterior: {item.contagemAnterior != null ? item.contagemAnterior : "—"}</span>
         <span>Ideal: {item.estoqueIdeal}</span>
+        <span>Entradas: {item.entradas != null ? item.entradas : "—"}</span>
         <span>Vendas: {item.saidas != null ? item.saidas : "—"}</span>
       </div>
 
@@ -329,6 +379,36 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
         }}
         className="w-full h-14 rounded-lg border border-border bg-background px-4 text-lg font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
       />
+
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span>Teórico: {teorico != null ? teorico : "—"}</span>
+        {divergencia == null ? (
+          <span>Divergência: —</span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                divergencia < 0
+                  ? "bg-destructive"
+                  : divergencia > 0
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+              }`}
+            />
+            <span
+              className={
+                divergencia < 0
+                  ? "text-destructive"
+                  : divergencia > 0
+                    ? "text-amber-500"
+                    : "text-emerald-500"
+              }
+            >
+              Divergência: {divergencia > 0 ? `+${divergencia}` : divergencia}
+            </span>
+          </span>
+        )}
+      </div>
 
       {aRepor != null && (
         <p className="text-xs text-muted-foreground">

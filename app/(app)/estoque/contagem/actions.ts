@@ -13,6 +13,9 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { somarSaidasPorProduto, AutomoIndisponivelError } from "@/lib/automo/client";
 import { converterSaidas, type ItemMapeado } from "@/lib/estoque/saidas";
+import { resolverChavesOmie, somarEntradasPorItem, type ProdutoRef } from "@/lib/estoque/entradas";
+import { somarEntradasOmie } from "@/lib/omie/client";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 function mesAtualIso(): string {
   const agora = new Date();
@@ -289,4 +292,224 @@ export async function importarSaidasDoAutomo(
 
   revalidatePath("/estoque/contagem");
   return { ok: true, itensAtualizados: sucessos, produtosIgnorados };
+}
+
+// ── Importação de entradas do Omie (bloco 4) ────────────────────────────────
+
+/**
+ * Env vars com BOM (U+FEFF) na frente quebram silenciosamente a autenticação
+ * (ver §8 do CLAUDE.md) — mesmo cuidado se aplica às credenciais Omie
+ * cadastradas em `unidades`, que às vezes são coladas de editores Windows.
+ */
+function stripBom(valor: string): string {
+  return valor.replace(/^﻿/, "");
+}
+
+function ehBissexto(ano: number): boolean {
+  return (ano % 4 === 0 && ano % 100 !== 0) || ano % 400 === 0;
+}
+
+const DIAS_POR_MES = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function diasNoMes(ano: number, mes: number): number {
+  if (mes === 2 && ehBissexto(ano)) return 29;
+  return DIAS_POR_MES[mes - 1];
+}
+
+/**
+ * Período do ciclo no formato do Omie (dd/mm/aaaa): do dia 1 ao último dia do
+ * mês do ciclo. Aritmética pura sobre a string ISO — nunca `new Date(mesIso)`,
+ * que interpretaria a data como UTC meia-noite e voltaria um dia em fuso
+ * negativo (mesmo cuidado de `rotuloMes` em lib/estoque/ciclo.ts).
+ */
+function periodoOmieDoMes(mesIso: string): { dataInicial: string; dataFinal: string } {
+  const [anoStr, mesStr] = mesIso.split("-");
+  const ultimoDia = diasNoMes(Number(anoStr), Number(mesStr));
+  return {
+    dataInicial: `01/${mesStr}/${anoStr}`,
+    dataFinal: `${String(ultimoDia).padStart(2, "0")}/${mesStr}/${anoStr}`,
+  };
+}
+
+type UnidadeLocalRow = {
+  unidade_id: string;
+  unidades: {
+    id: string;
+    nome: string;
+    omie_app_key: string | null;
+    omie_app_secret: string | null;
+  } | null;
+};
+
+type CicloItemComProdutoRow = {
+  id: string;
+  estoque_itens: {
+    id: string;
+    produto_id: string;
+    produtos: { codigo: string; nome: string } | null;
+  } | null;
+};
+
+/**
+ * Importa as entradas do Omie do mês do ciclo e grava em
+ * `estoque_ciclo_itens.entradas`.
+ *
+ * Um local físico pode ter mais de uma unidade fiscal (CNPJ) — ex.: Lush
+ * Ipiranga tem RCC e CONCAVO — e cada CNPJ tem sua própria conta Omie, então
+ * o mesmo produto físico aparece com um `omie_codigo` diferente em cada uma.
+ * Por isso a busca é feita CNPJ a CNPJ e as entradas somadas por item via
+ * `resolverChavesOmie`/`somarEntradasPorItem` (ver lib/estoque/entradas.ts),
+ * em vez de casar direto `produto_id → omie_codigo` (que capturaria só um
+ * CNPJ e perderia o outro em silêncio).
+ *
+ * Idempotente pela mesma razão de `importarSaidasDoAutomo`: recalcula do zero
+ * a partir do período, então reimportar sobrescreve em vez de somar em cima.
+ */
+export async function importarEntradasDoOmie(
+  cicloId: string,
+): Promise<
+  | { ok: true; itensAtualizados: number; itensParciais: number; ajustesDetectados: number }
+  | { erro: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const { data: ciclo, error: errCiclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, local_id, mes, status")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (errCiclo) return { erro: errCiclo.message };
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") {
+    return { erro: "Ciclo já fechado — não é possível reimportar." };
+  }
+
+  const { data: unidadesLocal, error: errUnidades } = await supabase
+    .from("local_unidade")
+    .select("unidade_id, unidades(id, nome, omie_app_key, omie_app_secret)")
+    .eq("local_id", ciclo.local_id);
+  if (errUnidades) return { erro: errUnidades.message };
+
+  const linhasUnidades = (unidadesLocal ?? []) as UnidadeLocalRow[];
+  const totalUnidadesFiscais = linhasUnidades.length;
+  if (totalUnidadesFiscais === 0) {
+    return { erro: "Este local não tem nenhuma unidade fiscal vinculada." };
+  }
+
+  const unidadesComCredencial = linhasUnidades
+    .map((linha) => linha.unidades)
+    .filter((u): u is NonNullable<typeof u> => u != null)
+    .map((u) => ({
+      id: u.id,
+      nome: u.nome,
+      appKey: u.omie_app_key ? stripBom(u.omie_app_key) : "",
+      appSecret: u.omie_app_secret ? stripBom(u.omie_app_secret) : "",
+    }))
+    .filter((u) => u.appKey && u.appSecret);
+
+  if (unidadesComCredencial.length === 0) {
+    return { erro: "Nenhuma unidade fiscal deste local tem credenciais Omie configuradas." };
+  }
+
+  const { dataInicial, dataFinal } = periodoOmieDoMes(ciclo.mes);
+
+  const entradasMerged = new Map<string, number>();
+  const ajustesMerged = new Map<string, number>();
+  let falhasBusca = 0;
+
+  for (const unidade of unidadesComCredencial) {
+    try {
+      const { entradas, ajustes } = await somarEntradasOmie(
+        { appKey: unidade.appKey, appSecret: unidade.appSecret },
+        dataInicial,
+        dataFinal,
+      );
+      for (const [chave, valor] of entradas) {
+        entradasMerged.set(chave, (entradasMerged.get(chave) ?? 0) + valor);
+      }
+      for (const [chave, valor] of ajustes) {
+        ajustesMerged.set(chave, (ajustesMerged.get(chave) ?? 0) + valor);
+      }
+    } catch (err) {
+      falhasBusca++;
+      console.error(
+        `[importarEntradasDoOmie] falha ao buscar entradas da unidade ${unidade.nome} (${unidade.id}):`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  if (falhasBusca === unidadesComCredencial.length) {
+    return { erro: "Não foi possível consultar o Omie em nenhuma unidade fiscal deste local." };
+  }
+
+  const { data: cicloItens, error: errItens } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, estoque_itens(id, produto_id, produtos(codigo, nome))")
+    .eq("ciclo_id", cicloId);
+  if (errItens) return { erro: errItens.message };
+
+  const linhas = (cicloItens ?? []) as CicloItemComProdutoRow[];
+
+  // Catálogo completo das unidades fiscais do local — passa de 1.000 linhas
+  // e o PostgREST corta em silêncio sem paginar manualmente.
+  const unidadeIds = linhasUnidades.map((linha) => linha.unidade_id);
+  const catalogo = await fetchAllRows<ProdutoRef>((from, to) =>
+    supabase
+      .from("produtos")
+      .select("id, codigo, nome, omie_codigo, omie_unidade_id")
+      .in("omie_unidade_id", unidadeIds)
+      .eq("ativo", true)
+      .order("id")
+      .range(from, to),
+  );
+
+  let itensParciais = 0;
+
+  const resultados = await Promise.all(
+    linhas.map(async (linha) => {
+      const produto = linha.estoque_itens?.produtos;
+      if (!produto) return { atualizado: false, ok: true as const };
+
+      const chaves = resolverChavesOmie(
+        { codigo: produto.codigo, nome: produto.nome },
+        catalogo,
+      );
+      const { quantidade, cnpjsComEntrada } = somarEntradasPorItem(chaves, entradasMerged);
+
+      // Produto existe em mais de um CNPJ mas não recebeu entrada de todas
+      // as unidades fiscais do local — pode ser legítimo (compra concentrada
+      // em um CNPJ), mas o usuário precisa ver para não confiar num teórico
+      // que só reflete parte da compra.
+      if (chaves.length > 1 && cnpjsComEntrada < totalUnidadesFiscais) {
+        itensParciais++;
+      }
+
+      const { error } = await supabase
+        .from("estoque_ciclo_itens")
+        .update({ entradas: quantidade })
+        .eq("id", linha.id);
+      return { atualizado: true, ok: !error, erro: error?.message };
+    }),
+  );
+
+  const sucessos = resultados.filter((r) => r.atualizado && r.ok).length;
+  const falhasSalvar = resultados.filter((r) => r.atualizado && !r.ok);
+  if (falhasSalvar.length > 0) {
+    return {
+      erro:
+        `Falha ao salvar ${falhasSalvar.length} ${falhasSalvar.length === 1 ? "item" : "itens"} ` +
+        `(${sucessos} atualizados antes da falha): ${falhasSalvar[0]?.erro ?? "erro desconhecido"}`,
+    };
+  }
+
+  revalidatePath("/estoque/contagem");
+  return {
+    ok: true,
+    itensAtualizados: sucessos,
+    itensParciais,
+    ajustesDetectados: ajustesMerged.size,
+  };
 }
