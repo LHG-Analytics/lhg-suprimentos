@@ -14,6 +14,7 @@ import {
   Sparkles,
   BarChart2,
   Settings,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "estoque",      label: "Estoque",              href: "/estoque",      icon: Boxes,           section: "Cadastros" },
   { id: "chat",         label: "Assistente IA",        href: "/chat",         icon: Sparkles,        section: "Inteligência", badge: "novo" },
   { id: "relatorios",   label: "Relatórios",           href: "/relatorios",   icon: BarChart2,       section: "Inteligência" },
+  { id: "estoque-historico", label: "Histórico de estoque", href: "/estoque/historico", icon: History, section: "Inteligência" },
   { id: "config",       label: "Configurações",        href: "/admin",        icon: Settings,        section: "Administração", adminOnly: true },
 ];
 
@@ -62,6 +64,7 @@ export const BREADCRUMB_MAP: Record<string, string[]> = {
   "/estoque":      ["Cadastros", "Estoque"],
   "/chat":         ["Inteligência", "Assistente IA"],
   "/relatorios":   ["Inteligência", "Relatórios"],
+  "/estoque/historico": ["Inteligência", "Histórico de estoque"],
   "/admin":        ["Administração", "Configurações"],
   "/perfil":       ["Conta", "Meu Perfil"],
   "/auditoria":    ["Administração", "Auditoria"],
