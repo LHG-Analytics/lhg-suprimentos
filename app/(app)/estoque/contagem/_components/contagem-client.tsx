@@ -39,8 +39,8 @@ interface Props {
   temItensControlados:         boolean;
   ciclo:                       CicloView | null;
   itens:                       CicloItemView[];
-  /** True só no primeiro ciclo de um local — modo "saldo de abertura" (ver bloco 6). */
-  ehPrimeiroCiclo:             boolean;
+  /** True enquanto sobrar item sem saldo de abertura (`contagem_anterior` null) no primeiro ciclo do local — modo "saldo de abertura" (ver bloco 6). Vira false sozinho quando o último saldo é registrado. */
+  faltaSaldoAbertura:          boolean;
   /** True quando o local tem mais de uma unidade fiscal (CNPJ) — controla se o rateio por CNPJ aparece nos cards. */
   temMultiplasUnidadesFiscais: boolean;
 }
@@ -69,7 +69,7 @@ export function ContagemClient({
   temItensControlados,
   ciclo,
   itens,
-  ehPrimeiroCiclo,
+  faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
 }: Props) {
   const router = useRouter();
@@ -135,7 +135,7 @@ export function ContagemClient({
       local={local}
       ciclo={ciclo}
       itensIniciais={itens}
-      ehPrimeiroCiclo={ehPrimeiroCiclo}
+      faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
     />
   );
@@ -145,7 +145,7 @@ interface CicloAbertoViewProps {
   local:                       { id: string; nome: string };
   ciclo:                       CicloView;
   itensIniciais:               CicloItemView[];
-  ehPrimeiroCiclo:             boolean;
+  faltaSaldoAbertura:          boolean;
   temMultiplasUnidadesFiscais: boolean;
 }
 
@@ -159,7 +159,7 @@ function CicloAbertoView({
   local,
   ciclo,
   itensIniciais,
-  ehPrimeiroCiclo,
+  faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
 }: CicloAbertoViewProps) {
   const router = useRouter();
@@ -173,11 +173,12 @@ function CicloAbertoView({
   }
 
   const total = itensLocal.length;
-  // No modo "primeiro ciclo" o que se registra é o saldo de abertura
-  // (contagem_anterior) — a contagem de fechamento (contagem_atual) só entra
-  // em cena no fim do período, quando este modo já não se aplica.
+  // Enquanto faltar saldo de abertura, o progresso conta contagem_anterior
+  // (o que está sendo registrado agora); depois que o último item ganha esse
+  // valor, `faltaSaldoAbertura` vira false e o progresso passa a contar
+  // contagem_atual — a contagem de fechamento normal.
   const contados = itensLocal.filter((it) =>
-    ehPrimeiroCiclo ? it.contagemAnterior != null : it.contagemAtual != null,
+    faltaSaldoAbertura ? it.contagemAnterior != null : it.contagemAtual != null,
   ).length;
   const faltam = total - contados;
 
@@ -293,7 +294,7 @@ function CicloAbertoView({
       </header>
 
       <main className="flex-1 px-4 py-4 space-y-3">
-        {ehPrimeiroCiclo && (
+        {faltaSaldoAbertura && (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex gap-3">
             <Info size={16} className="text-emerald-500 shrink-0 mt-0.5" />
             <div className="space-y-1">
@@ -311,7 +312,7 @@ function CicloAbertoView({
           <ItemCard
             key={item.id}
             item={item}
-            ehPrimeiroCiclo={ehPrimeiroCiclo}
+            faltaSaldoAbertura={faltaSaldoAbertura}
             temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
             onSalvo={handleItemSalvo}
           />
@@ -319,9 +320,11 @@ function CicloAbertoView({
       </main>
 
       <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
-        {ehPrimeiroCiclo ? (
+        {faltaSaldoAbertura ? (
           <p className="text-xs text-center text-muted-foreground py-2.5">
-            A contagem de fechamento deste ciclo fica disponível no fim do período.
+            {faltam > 0
+              ? `Faltam ${faltam} ${faltam === 1 ? "item" : "itens"} sem saldo de abertura. Assim que todos estiverem preenchidos, esta tela passa a mostrar a contagem de fechamento.`
+              : "Saldo de abertura completo. Atualize a página para ver a contagem de fechamento."}
           </p>
         ) : (
           <button
@@ -342,7 +345,7 @@ type EstadoSalvar = "idle" | "salvando" | "salvo" | "erro";
 
 interface ItemCardProps {
   item:                        CicloItemView;
-  ehPrimeiroCiclo:             boolean;
+  faltaSaldoAbertura:          boolean;
   temMultiplasUnidadesFiscais: boolean;
   onSalvo:                     (id: string, patch: Partial<CicloItemView>) => void;
 }
@@ -356,12 +359,15 @@ interface ItemCardProps {
  * useEffect para "seguir" o prop porque o pai (`CicloAbertoView`) já foi
  * remontado do zero sempre que o ciclo muda.
  *
- * No primeiro ciclo de um local (`ehPrimeiroCiclo`), o campo grava
- * `contagem_anterior` (saldo de abertura) via `registrarInventarioInicial`
- * em vez de `contagem_atual` via `registrarContagem` — ver bloco 6.
+ * Enquanto faltar saldo de abertura (`faltaSaldoAbertura`), o campo grava
+ * `contagem_anterior` via `registrarInventarioInicial` em vez de
+ * `contagem_atual` via `registrarContagem` — ver bloco 6. O flag some por
+ * conta própria assim que o último item do ciclo tiver `contagem_anterior`
+ * preenchido, então o mesmo card volta a gravar `contagem_atual` sem
+ * precisar de nenhuma ação explícita de "encerrar abertura".
  */
-function ItemCard({ item, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo }: ItemCardProps) {
-  const valorSalvo = ehPrimeiroCiclo ? item.contagemAnterior : item.contagemAtual;
+function ItemCard({ item, faltaSaldoAbertura, temMultiplasUnidadesFiscais, onSalvo }: ItemCardProps) {
+  const valorSalvo = faltaSaldoAbertura ? item.contagemAnterior : item.contagemAtual;
   const [valor, setValor] = useState(valorSalvo != null ? String(valorSalvo) : "");
   const [estado, setEstado] = useState<EstadoSalvar>("idle");
   const [erroMsg, setErroMsg] = useState<string | null>(null);
@@ -375,7 +381,7 @@ function ItemCard({ item, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo 
     }
     setEstado("salvando");
     setErroMsg(null);
-    const res = ehPrimeiroCiclo
+    const res = faltaSaldoAbertura
       ? await registrarInventarioInicial({ cicloItemId: item.id, quantidade })
       : await registrarContagem({ cicloItemId: item.id, quantidade });
     if ("erro" in res) {
@@ -386,7 +392,7 @@ function ItemCard({ item, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo 
     setEstado("salvo");
     onSalvo(
       item.id,
-      ehPrimeiroCiclo
+      faltaSaldoAbertura
         ? { contagemAnterior: quantidade, contadoPorNome: "você", contadoEm: new Date().toISOString() }
         : { contagemAtual: quantidade, contadoPorNome: "você", contadoEm: new Date().toISOString() },
     );
@@ -440,7 +446,7 @@ function ItemCard({ item, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo 
         </p>
       )}
 
-      {ehPrimeiroCiclo && (
+      {faltaSaldoAbertura && (
         <p className="text-xs font-medium text-muted-foreground">Saldo de abertura</p>
       )}
 

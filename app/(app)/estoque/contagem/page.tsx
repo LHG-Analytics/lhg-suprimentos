@@ -61,9 +61,10 @@ export default async function ContagemPage() {
     .maybeSingle();
 
   // Verdadeiro só quando não existe nenhum ciclo deste local com `mes` menor
-  // que o do ciclo aberto — ou seja, este é o primeiro ciclo do local, e o
-  // que se registra agora é o saldo de ABERTURA (contagem_anterior), não a
-  // contagem de fechamento (contagem_atual) que os demais meses usam.
+  // que o do ciclo aberto — ou seja, este é o primeiro ciclo do local, o
+  // único que pode ter itens sem saldo de abertura ainda. Sozinho isso não
+  // basta: ver `faltaSaldoAbertura` mais abaixo, depois que os itens são
+  // carregados.
   let ehPrimeiroCiclo = false;
   if (cicloAberto) {
     const { count: ciclosAnteriores } = await supabase
@@ -116,13 +117,20 @@ export default async function ContagemPage() {
       .sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
   }
 
+  // O modo "saldo de abertura" depende do que falta preencher, não de qual
+  // ciclo é: só faz sentido enquanto sobra item sem contagem_anterior. Assim
+  // que o último saldo de abertura é registrado, este flag vira false por
+  // conta própria (sem condição de data) e a tela passa para o fechamento
+  // normal — inclusive dentro do primeiro ciclo, no mesmo mês.
+  const faltaSaldoAbertura = ehPrimeiroCiclo && itens.some((item) => item.contagemAnterior == null);
+
   return (
     <ContagemClient
       local={{ id: local.id, nome: local.nome }}
       temItensControlados={(totalItensAtivos ?? 0) > 0}
       ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
       itens={itens}
-      ehPrimeiroCiclo={ehPrimeiroCiclo}
+      faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
     />
   );
