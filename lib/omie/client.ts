@@ -1085,6 +1085,97 @@ export function extractCMC(pos: OmiePosicaoEstoqueResponse): number | null {
   return cmc > 0 ? cmc : null;
 }
 
+// ── ListarMovimentos (estoque) ─────────────────────────────────────────────────
+
+/**
+ * Resposta real do ListarMovimentos, confirmada contra a API de produção em
+ * 20/08/2026 (Lush Ipiranga RCC: 138 registros em 3 páginas).
+ * Endpoint: POST /estoque/movestoque/ — call: ListarMovimentos
+ */
+export interface OmieMovimentoDia {
+  dDataMovimento: string;   // dd/mm/aaaa
+  nQtdeEntradas:  number;
+  nQtdeSaidas:    number;
+}
+
+export interface OmieMovimentoProduto {
+  nCodProd:    number;
+  cCodigo:     string;
+  cDescricao:  string;
+  cCodIntProd: string;
+  movimentos:  OmieMovimentoDia[];
+}
+
+export interface OmieListarMovimentosResponse {
+  pagina:             number;
+  total_de_paginas:   number;
+  registros:          number;
+  total_de_registros: number;
+  cadastros:          OmieMovimentoProduto[];
+}
+
+/**
+ * Lista os movimentos de estoque de um período, paginado.
+ *
+ * `codigo_local_estoque` é omitido de propósito: queremos o agregado de todos os
+ * locais do Omie. O estoque é do LHG e não espelha a estrutura deles.
+ *
+ * As datas vão no formato do Omie (dd/mm/aaaa).
+ */
+export async function listarMovimentosEstoque(
+  creds: OmieCredentials,
+  dataInicial: string,
+  dataFinal: string,
+  pagina = 1,
+  registrosPorPagina = 100,
+): Promise<OmieListarMovimentosResponse> {
+  return omiePost<
+    { pagina: number; registros_por_pagina: number; data_inicial: string; data_final: string },
+    OmieListarMovimentosResponse
+  >(
+    "/estoque/movestoque/",
+    "ListarMovimentos",
+    creds,
+    { pagina, registros_por_pagina: registrosPorPagina, data_inicial: dataInicial, data_final: dataFinal },
+  );
+}
+
+/**
+ * Percorre todas as páginas e devolve as entradas somadas por produto.
+ *
+ * Só entradas: no Omie não há venda (ela acontece no Automo), então
+ * `nQtdeSaidas > 0` ali é ajuste de inventário — devolvido em separado para a
+ * tela poder avisar, em vez de somar como se fosse compra.
+ */
+export async function somarEntradasOmie(
+  creds: OmieCredentials,
+  dataInicial: string,
+  dataFinal: string,
+): Promise<{
+  entradas: Map<string, number>;   // omie_codigo (string) → quantidade
+  ajustes:  Map<string, number>;   // omie_codigo → saídas lançadas no Omie
+  produtos: number;
+}> {
+  const entradas = new Map<string, number>();
+  const ajustes  = new Map<string, number>();
+  let produtos = 0;
+
+  for (let pagina = 1; ; pagina++) {
+    const r = await listarMovimentosEstoque(creds, dataInicial, dataFinal, pagina);
+    for (const p of r.cadastros ?? []) {
+      produtos++;
+      const chave = String(p.nCodProd);
+      for (const m of p.movimentos ?? []) {
+        if (m.nQtdeEntradas) entradas.set(chave, (entradas.get(chave) ?? 0) + m.nQtdeEntradas);
+        if (m.nQtdeSaidas)   ajustes.set(chave,  (ajustes.get(chave)  ?? 0) + m.nQtdeSaidas);
+      }
+    }
+    if (pagina >= (r.total_de_paginas ?? 1)) break;
+  }
+
+  return { entradas, ajustes, produtos };
+}
+
 // ── ObterResumoCompras ─────────────────────────────────────────────────────────
 
 /**
