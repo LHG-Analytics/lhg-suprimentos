@@ -413,6 +413,42 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_ciclo_item_entradas: {
+        Row: {
+          ciclo_item_id: string
+          importado_em: string
+          quantidade: number
+          unidade_id: string
+        }
+        Insert: {
+          ciclo_item_id: string
+          importado_em?: string
+          quantidade?: number
+          unidade_id: string
+        }
+        Update: {
+          ciclo_item_id?: string
+          importado_em?: string
+          quantidade?: number
+          unidade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_ciclo_item_entradas_ciclo_item_id_fkey"
+            columns: ["ciclo_item_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_ciclo_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_ciclo_item_entradas_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estoque_ciclo_itens: {
         Row: {
           ciclo_id: string

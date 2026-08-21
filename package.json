@@ -26,6 +26,7 @@
     "clsx": "latest",
     "cmdk": "^1.1.1",
     "date-fns": "latest",
+    "exceljs": "^4.4.0",
     "fast-xml-parser": "latest",
     "geist": "latest",
     "lucide-react": "latest",
