@@ -413,6 +413,54 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_itens: {
+        Row: {
+          ativo: boolean
+          automo_produto_id: number | null
+          created_at: string
+          estoque_ideal: number
+          fator_conversao: number
+          id: string
+          local_id: string
+          produto_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          automo_produto_id?: number | null
+          created_at?: string
+          estoque_ideal?: number
+          fator_conversao?: number
+          id?: string
+          local_id: string
+          produto_id: string
+        }
+        Update: {
+          ativo?: boolean
+          automo_produto_id?: number | null
+          created_at?: string
+          estoque_ideal?: number
+          fator_conversao?: number
+          id?: string
+          local_id?: string
+          produto_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_itens_local_id_fkey"
+            columns: ["local_id"]
+            isOneToOne: false
+            referencedRelation: "locais_estoque"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fornecedor_unidade: {
         Row: {
           fornecedor_id: string
@@ -608,6 +656,63 @@ export type Database = {
           used_at?: string | null
         }
         Relationships: []
+      }
+      locais_estoque: {
+        Row: {
+          ativo: boolean
+          automo_conn_key: string | null
+          created_at: string
+          id: string
+          nome: string
+          slug: string
+        }
+        Insert: {
+          ativo?: boolean
+          automo_conn_key?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          slug: string
+        }
+        Update: {
+          ativo?: boolean
+          automo_conn_key?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          slug?: string
+        }
+        Relationships: []
+      }
+      local_unidade: {
+        Row: {
+          local_id: string
+          unidade_id: string
+        }
+        Insert: {
+          local_id: string
+          unidade_id: string
+        }
+        Update: {
+          local_id?: string
+          unidade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "local_unidade_local_id_fkey"
+            columns: ["local_id"]
+            isOneToOne: false
+            referencedRelation: "locais_estoque"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "local_unidade_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       omie_pedido_itens: {
         Row: {
