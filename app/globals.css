@@ -242,9 +242,12 @@
 }
 
 /* ============================================================
-   Impressão do Mapa de Cotação (PDF via window.print)
-   Escopado por body.cotacao-print-mode para não afetar outras
-   telas: só o #cotacao-print-doc é impresso.
+   Impressão de documentos (PDF via window.print)
+   Dois escopos, um por módulo, para não afetar o resto do app:
+     · body.cotacao-print-mode + [data-cotacao-print] → Mapa de Cotação
+     · body.estoque-print-mode + [data-estoque-print] → Contagem de estoque
+   Cada seletor é escrito por inteiro de propósito: agrupar por vírgula
+   perdendo o sufixo (ex: `.no-print`) esconderia o documento todo.
    ============================================================ */
 @media print {
   /* O documento é renderizado via portal como filho direto do <body> com
@@ -252,23 +255,29 @@
      FLUIR no fluxo normal (sem position fixed/absolute) — assim ele pagina
      naturalmente, sem repetir cabeçalho nem produtos entre páginas. */
   body.cotacao-print-mode > *:not([data-cotacao-print]) { display: none !important; }
+  body.estoque-print-mode > *:not([data-estoque-print]) { display: none !important; }
 
-  body.cotacao-print-mode [data-cotacao-print] {
+  body.cotacao-print-mode [data-cotacao-print],
+  body.estoque-print-mode [data-estoque-print] {
     position: static !important;
     inset: auto !important;
     display: block !important;
     background: #fff !important;
     backdrop-filter: none !important;
   }
-  body.cotacao-print-mode [data-cotacao-print] .no-print { display: none !important; }
-  body.cotacao-print-mode [data-cotacao-print] .print-scroll {
+  body.cotacao-print-mode [data-cotacao-print] .no-print,
+  body.estoque-print-mode [data-estoque-print] .no-print { display: none !important; }
+
+  body.cotacao-print-mode [data-cotacao-print] .print-scroll,
+  body.estoque-print-mode [data-estoque-print] .print-scroll {
     position: static !important;
     overflow: visible !important;
     height: auto !important;
     padding: 0 !important;
     background: #fff !important;
   }
-  body.cotacao-print-mode [data-cotacao-print] .print-paper {
+  body.cotacao-print-mode [data-cotacao-print] .print-paper,
+  body.estoque-print-mode [data-estoque-print] .print-paper {
     max-width: 100% !important;
     margin: 0 !important;
     box-shadow: none !important;
@@ -279,14 +288,20 @@
 
   /* Evita cortar linhas/blocos no meio entre páginas */
   #cotacao-print-doc tr,
-  #cotacao-print-doc .avoid-break { break-inside: avoid; }
-  #cotacao-print-doc thead { display: table-header-group; }
+  #cotacao-print-doc .avoid-break,
+  #estoque-print-doc tr,
+  #estoque-print-doc .avoid-break { break-inside: avoid; }
+
+  #cotacao-print-doc thead,
+  #estoque-print-doc thead { display: table-header-group; }
 
   /* Força a impressão das cores de fundo (header escuro, faixa verde, zebra,
      célula selecionada). Sem isto o navegador descarta os backgrounds e o
      texto branco do cabeçalho fica invisível sobre o papel. */
   #cotacao-print-doc,
-  #cotacao-print-doc * {
+  #cotacao-print-doc *,
+  #estoque-print-doc,
+  #estoque-print-doc * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
