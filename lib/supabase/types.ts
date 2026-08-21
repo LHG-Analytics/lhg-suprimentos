@@ -413,6 +413,119 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_ciclo_itens: {
+        Row: {
+          ciclo_id: string
+          contado_em: string | null
+          contado_por: string | null
+          contagem_anterior: number | null
+          contagem_atual: number | null
+          entradas: number | null
+          estoque_item_id: string
+          id: string
+          saidas: number | null
+        }
+        Insert: {
+          ciclo_id: string
+          contado_em?: string | null
+          contado_por?: string | null
+          contagem_anterior?: number | null
+          contagem_atual?: number | null
+          entradas?: number | null
+          estoque_item_id: string
+          id?: string
+          saidas?: number | null
+        }
+        Update: {
+          ciclo_id?: string
+          contado_em?: string | null
+          contado_por?: string | null
+          contagem_anterior?: number | null
+          contagem_atual?: number | null
+          entradas?: number | null
+          estoque_item_id?: string
+          id?: string
+          saidas?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_ciclo_itens_ciclo_id_fkey"
+            columns: ["ciclo_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_ciclos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_ciclo_itens_contado_por_fkey"
+            columns: ["contado_por"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_ciclo_itens_estoque_item_id_fkey"
+            columns: ["estoque_item_id"]
+            isOneToOne: false
+            referencedRelation: "estoque_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estoque_ciclos: {
+        Row: {
+          aberto_em: string
+          aberto_por: string | null
+          fechado_em: string | null
+          fechado_por: string | null
+          id: string
+          local_id: string
+          mes: string
+          status: string
+        }
+        Insert: {
+          aberto_em?: string
+          aberto_por?: string | null
+          fechado_em?: string | null
+          fechado_por?: string | null
+          id?: string
+          local_id: string
+          mes: string
+          status?: string
+        }
+        Update: {
+          aberto_em?: string
+          aberto_por?: string | null
+          fechado_em?: string | null
+          fechado_por?: string | null
+          id?: string
+          local_id?: string
+          mes?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_ciclos_aberto_por_fkey"
+            columns: ["aberto_por"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_ciclos_fechado_por_fkey"
+            columns: ["fechado_por"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_ciclos_local_id_fkey"
+            columns: ["local_id"]
+            isOneToOne: false
+            referencedRelation: "locais_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estoque_itens: {
         Row: {
           ativo: boolean
