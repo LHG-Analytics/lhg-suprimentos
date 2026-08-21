@@ -132,6 +132,7 @@ export default async function ContagemPage() {
       itens={itens}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
+      unidadesFiscais={Array.from(nomePorUnidade.values()).sort((a, b) => a.localeCompare(b, "pt-BR"))}
     />
   );
 }

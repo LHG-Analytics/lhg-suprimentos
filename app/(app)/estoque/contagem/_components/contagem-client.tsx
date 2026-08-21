@@ -18,10 +18,11 @@
  * sem precisar de setState dentro de useEffect (regra de lint do projeto
  * proíbe: cascata de renders desnecessária). Ver `chaveCiclo`.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Check, AlertCircle, Boxes, Download, Info } from "lucide-react";
+import { Loader2, Check, AlertCircle, Boxes, Download, Info, Printer, FileSpreadsheet, X } from "lucide-react";
 import { toast } from "sonner";
 import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
 import {
@@ -33,6 +34,7 @@ import {
   importarEntradasDoOmie,
 } from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
+import { EstoquePrintDoc } from "./estoque-print-doc";
 
 interface Props {
   local:                        { id: string; nome: string };
@@ -43,6 +45,8 @@ interface Props {
   faltaSaldoAbertura:          boolean;
   /** True quando o local tem mais de uma unidade fiscal (CNPJ) — controla se o rateio por CNPJ aparece nos cards. */
   temMultiplasUnidadesFiscais: boolean;
+  /** Nomes dos CNPJs que abastecem o local — usado no cabeçalho do PDF. */
+  unidadesFiscais:             string[];
 }
 
 /** Mês corrente em ISO (dia 1), só para o rótulo do botão "Abrir contagem" — a
@@ -71,6 +75,7 @@ export function ContagemClient({
   itens,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
+  unidadesFiscais,
 }: Props) {
   const router = useRouter();
   const [abrindo, setAbrindo] = useState(false);
@@ -137,6 +142,7 @@ export function ContagemClient({
       itensIniciais={itens}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
+      unidadesFiscais={unidadesFiscais}
     />
   );
 }
@@ -147,6 +153,7 @@ interface CicloAbertoViewProps {
   itensIniciais:               CicloItemView[];
   faltaSaldoAbertura:          boolean;
   temMultiplasUnidadesFiscais: boolean;
+  unidadesFiscais:             string[];
 }
 
 /**
@@ -161,12 +168,26 @@ function CicloAbertoView({
   itensIniciais,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
+  unidadesFiscais,
 }: CicloAbertoViewProps) {
   const router = useRouter();
   const [itensLocal, setItensLocal] = useState(itensIniciais);
   const [fechando, setFechando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [importandoEntradas, setImportandoEntradas] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+
+  // Sem guard de "montado": `printOpen` nasce false, então o portal nunca é
+  // renderizado no servidor. Ele só vira true por clique, que já é client-side.
+  // (O jeito comum — `useEffect(() => setMounted(true), [])` — é proibido pelo
+  //  lint do projeto: setState direto dentro de effect.)
+
+  // Liga o modo de impressão escopado (CSS em globals.css) enquanto o overlay
+  // está aberto — assim window.print() imprime só o documento, não a tela.
+  useEffect(() => {
+    document.body.classList.toggle("estoque-print-mode", printOpen);
+    return () => document.body.classList.remove("estoque-print-mode");
+  }, [printOpen]);
 
   function handleItemSalvo(id: string, patch: Partial<CicloItemView>) {
     setItensLocal((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -280,6 +301,26 @@ function CicloAbertoView({
               )}
               <span className="hidden sm:inline">Importar entradas do Omie</span>
             </button>
+
+            {/* Exportações — a planilha atual circula por e-mail e é discutida em
+                reunião, então a tela precisa ter saída para os dois formatos. */}
+            <button
+              onClick={() => setPrintOpen(true)}
+              title="Exportar PDF"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Printer size={14} />
+              <span className="hidden lg:inline">PDF</span>
+            </button>
+            <a
+              href={`/api/estoque/ciclo/${ciclo.id}/xlsx`}
+              title="Exportar Excel"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <FileSpreadsheet size={14} />
+              <span className="hidden lg:inline">Excel</span>
+            </a>
+
             <p className="text-xs font-medium text-muted-foreground">
               {contados} de {total} contados
             </p>
@@ -337,6 +378,48 @@ function CicloAbertoView({
           </button>
         )}
       </footer>
+
+      {/* Overlay de impressão — portal como filho direto do <body> para o CSS de
+          print poder esconder todo o resto do app pelo seletor de irmãos. */}
+      {printOpen && createPortal(
+        <div
+          data-estoque-print
+          className="fixed inset-0 z-[200] flex flex-col bg-zinc-200/95 backdrop-blur-sm"
+        >
+          <div className="no-print flex items-center justify-between gap-3 border-b border-zinc-300 bg-white px-4 py-3">
+            <div className="text-sm font-semibold text-zinc-800">
+              Contagem de estoque · {local.nome}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                <Printer size={13} />
+                Imprimir / Salvar PDF
+              </button>
+              <button
+                onClick={() => setPrintOpen(false)}
+                className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 transition-colors"
+                aria-label="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+          <div className="print-scroll flex-1 overflow-auto p-4 sm:p-8">
+            <EstoquePrintDoc
+              localNome={local.nome}
+              mesIso={ciclo.mes}
+              status="aberto"
+              itens={itensLocal}
+              dataEmissao={new Date().toLocaleDateString("pt-BR")}
+              unidadesFiscais={unidadesFiscais}
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
