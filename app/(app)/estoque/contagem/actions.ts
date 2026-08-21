@@ -13,7 +13,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { somarSaidasPorProduto, AutomoIndisponivelError } from "@/lib/automo/client";
 import { converterSaidas, type ItemMapeado } from "@/lib/estoque/saidas";
-import { resolverChavesOmie, somarEntradasPorItem, type ProdutoRef } from "@/lib/estoque/entradas";
+import { resolverChavesOmiePorUnidade, somarEntradasPorItem, type ProdutoRef } from "@/lib/estoque/entradas";
 import { somarEntradasOmie } from "@/lib/omie/client";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
@@ -490,6 +490,11 @@ export async function importarEntradasDoOmie(
 
   const entradasMerged = new Map<string, number>();
   const ajustesMerged = new Map<string, number>();
+  // Resultado bruto por unidade fiscal, guardado ANTES do merge — sem isso
+  // não haveria como saber depois de onde veio cada quantidade somada em
+  // `entradasMerged`. É o que permite gravar o rateio por CNPJ em
+  // `estoque_ciclo_item_entradas` (bloco 5) além do total.
+  const entradasPorUnidade = new Map<string, Map<string, number>>();
   let falhasBusca = 0;
 
   for (const unidade of unidadesComCredencial) {
@@ -499,6 +504,7 @@ export async function importarEntradasDoOmie(
         dataInicial,
         dataFinal,
       );
+      entradasPorUnidade.set(unidade.id, entradas);
       for (const [chave, valor] of entradas) {
         entradasMerged.set(chave, (entradasMerged.get(chave) ?? 0) + valor);
       }
@@ -540,16 +546,20 @@ export async function importarEntradasDoOmie(
   );
 
   let itensParciais = 0;
+  // Rateio por CNPJ acumulado aqui e gravado num único upsert em lote no
+  // final, em vez de uma escrita por item — mesmo padrão de `linhas` acima.
+  const detalheRows: { ciclo_item_id: string; unidade_id: string; quantidade: number }[] = [];
 
   const resultados = await Promise.all(
     linhas.map(async (linha) => {
       const produto = linha.estoque_itens?.produtos;
       if (!produto) return { atualizado: false, ok: true as const };
 
-      const chaves = resolverChavesOmie(
+      const pares = resolverChavesOmiePorUnidade(
         { codigo: produto.codigo, nome: produto.nome },
         catalogo,
       );
+      const chaves = pares.map((par) => par.omie_codigo);
       const { quantidade, cnpjsComEntrada } = somarEntradasPorItem(chaves, entradasMerged);
 
       // Produto existe em mais de um CNPJ mas não recebeu entrada de todas
@@ -558,6 +568,20 @@ export async function importarEntradasDoOmie(
       // que só reflete parte da compra.
       if (chaves.length > 1 && cnpjsComEntrada < totalUnidadesFiscais) {
         itensParciais++;
+      }
+
+      // Uma linha de detalhe por CNPJ onde o produto existe — só quando a
+      // busca daquela unidade teve sucesso (ver `entradasPorUnidade` acima).
+      // Se a busca falhou, não sabemos a quantidade daquele CNPJ: gravar 0
+      // aqui seria confundir "não sei" com "não comprou".
+      for (const par of pares) {
+        const mapaUnidade = entradasPorUnidade.get(par.unidade_id);
+        if (!mapaUnidade) continue;
+        detalheRows.push({
+          ciclo_item_id: linha.id,
+          unidade_id: par.unidade_id,
+          quantidade: mapaUnidade.get(par.omie_codigo) ?? 0,
+        });
       }
 
       const { error } = await supabase
@@ -576,6 +600,13 @@ export async function importarEntradasDoOmie(
         `Falha ao salvar ${falhasSalvar.length} ${falhasSalvar.length === 1 ? "item" : "itens"} ` +
         `(${sucessos} atualizados antes da falha): ${falhasSalvar[0]?.erro ?? "erro desconhecido"}`,
     };
+  }
+
+  if (detalheRows.length > 0) {
+    const { error: errDetalhe } = await supabase
+      .from("estoque_ciclo_item_entradas")
+      .upsert(detalheRows, { onConflict: "ciclo_item_id,unidade_id" });
+    if (errDetalhe) return { erro: errDetalhe.message };
   }
 
   revalidatePath("/estoque/contagem");

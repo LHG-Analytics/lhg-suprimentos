@@ -22,9 +22,16 @@ export interface ProdutoRef {
 
 import { normalizarNome } from "@/lib/estoque/mapeamento";
 
+export interface ChaveOmiePorUnidade {
+  omie_codigo: string;
+  unidade_id:  string;
+}
+
 /**
- * Resolve os `omie_codigo` (um por CNPJ) que representam o mesmo produto que
- * `alvo`, dentro do catálogo completo do local (todas as unidades fiscais).
+ * Como `resolverChavesOmie`, mas devolve também de qual unidade fiscal (CNPJ)
+ * cada chave vem — é o que permite gravar o rateio por CNPJ em
+ * `estoque_ciclo_item_entradas` (bloco 5, ver actions.ts) em vez de só o
+ * total.
  *
  * Casa por `codigo` **e** por `normalizarNome(nome)` — não só por `codigo`.
  * Medido em produção nos dois CNPJs do Ipiranga: de 1.393 códigos distintos,
@@ -32,19 +39,32 @@ import { normalizarNome } from "@/lib/estoque/mapeamento";
  * para produtos diferentes em cada conta Omie). Casar só por `codigo` somaria
  * as entradas desses 27 produtos não relacionados.
  */
+export function resolverChavesOmiePorUnidade(
+  alvo: { codigo: string; nome: string },
+  catalogo: ProdutoRef[],
+): ChaveOmiePorUnidade[] {
+  const nomeAlvo = normalizarNome(alvo.nome);
+  const pares: ChaveOmiePorUnidade[] = [];
+  for (const produto of catalogo) {
+    if (produto.codigo !== alvo.codigo) continue;
+    if (normalizarNome(produto.nome) !== nomeAlvo) continue;
+    if (!produto.omie_codigo || !produto.omie_unidade_id) continue;
+    pares.push({ omie_codigo: produto.omie_codigo, unidade_id: produto.omie_unidade_id });
+  }
+  return pares;
+}
+
+/**
+ * Resolve os `omie_codigo` (um por CNPJ) que representam o mesmo produto que
+ * `alvo`, dentro do catálogo completo do local (todas as unidades fiscais).
+ * Ver `resolverChavesOmiePorUnidade` quando também for preciso saber de qual
+ * unidade cada chave vem.
+ */
 export function resolverChavesOmie(
   alvo: { codigo: string; nome: string },
   catalogo: ProdutoRef[],
 ): string[] {
-  const nomeAlvo = normalizarNome(alvo.nome);
-  const chaves: string[] = [];
-  for (const produto of catalogo) {
-    if (produto.codigo !== alvo.codigo) continue;
-    if (normalizarNome(produto.nome) !== nomeAlvo) continue;
-    if (!produto.omie_codigo) continue;
-    chaves.push(produto.omie_codigo);
-  }
-  return chaves;
+  return resolverChavesOmiePorUnidade(alvo, catalogo).map((par) => par.omie_codigo);
 }
 
 /**

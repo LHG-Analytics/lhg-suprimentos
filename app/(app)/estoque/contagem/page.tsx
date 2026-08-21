@@ -74,11 +74,22 @@ export default async function ContagemPage() {
     ehPrimeiroCiclo = (ciclosAnteriores ?? 0) === 0;
   }
 
+  // Nomes das unidades fiscais (CNPJs) do local, indexados por unidade_id —
+  // usado só para rotular o rateio de entradas por CNPJ (bloco 5).
+  const nomePorUnidade = new Map<string, string>(
+    local.local_unidade
+      .map((lu) => [lu.unidade_id, lu.unidades?.nome ?? null] as const)
+      .filter((par): par is [string, string] => par[1] != null),
+  );
+  const temMultiplasUnidadesFiscais = local.local_unidade.length > 1;
+
   let itens: CicloItemView[] = [];
   if (cicloAberto) {
     const { data: itensCiclo } = await supabase
       .from("estoque_ciclo_itens")
-      .select("id, contagem_anterior, entradas, saidas, contagem_atual, contado_em, estoque_itens(estoque_ideal, produtos(nome, unidade_med)), user_profiles(nome)")
+      .select(
+        "id, contagem_anterior, entradas, saidas, contagem_atual, contado_em, estoque_itens(estoque_ideal, produtos(nome, unidade_med)), user_profiles(nome), estoque_ciclo_item_entradas(unidade_id, quantidade)",
+      )
       .eq("ciclo_id", cicloAberto.id);
 
     type ItemCicloRow = NonNullable<typeof itensCiclo>[number];
@@ -95,6 +106,12 @@ export default async function ContagemPage() {
         contagemAtual: row.contagem_atual,
         contadoPorNome: row.user_profiles?.nome ?? null,
         contadoEm: row.contado_em,
+        entradasDetalhe: (row.estoque_ciclo_item_entradas ?? [])
+          .map((d) => ({
+            unidadeNome: nomePorUnidade.get(d.unidade_id) ?? "—",
+            quantidade: d.quantidade,
+          }))
+          .sort((a, b) => a.unidadeNome.localeCompare(b.unidadeNome, "pt-BR")),
       }))
       .sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
   }
@@ -106,6 +123,7 @@ export default async function ContagemPage() {
       ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
       itens={itens}
       ehPrimeiroCiclo={ehPrimeiroCiclo}
+      temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
     />
   );
 }

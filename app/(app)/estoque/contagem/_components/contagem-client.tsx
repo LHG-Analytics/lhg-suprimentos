@@ -35,12 +35,14 @@ import {
 import type { CicloView, CicloItemView } from "./tipos";
 
 interface Props {
-  local:               { id: string; nome: string };
-  temItensControlados: boolean;
-  ciclo:               CicloView | null;
-  itens:               CicloItemView[];
+  local:                        { id: string; nome: string };
+  temItensControlados:         boolean;
+  ciclo:                       CicloView | null;
+  itens:                       CicloItemView[];
   /** True só no primeiro ciclo de um local — modo "saldo de abertura" (ver bloco 6). */
-  ehPrimeiroCiclo:     boolean;
+  ehPrimeiroCiclo:             boolean;
+  /** True quando o local tem mais de uma unidade fiscal (CNPJ) — controla se o rateio por CNPJ aparece nos cards. */
+  temMultiplasUnidadesFiscais: boolean;
 }
 
 /** Mês corrente em ISO (dia 1), só para o rótulo do botão "Abrir contagem" — a
@@ -68,6 +70,7 @@ export function ContagemClient({
   ciclo,
   itens,
   ehPrimeiroCiclo,
+  temMultiplasUnidadesFiscais,
 }: Props) {
   const router = useRouter();
   const [abrindo, setAbrindo] = useState(false);
@@ -133,15 +136,17 @@ export function ContagemClient({
       ciclo={ciclo}
       itensIniciais={itens}
       ehPrimeiroCiclo={ehPrimeiroCiclo}
+      temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
     />
   );
 }
 
 interface CicloAbertoViewProps {
-  local:          { id: string; nome: string };
-  ciclo:          CicloView;
-  itensIniciais:  CicloItemView[];
-  ehPrimeiroCiclo: boolean;
+  local:                       { id: string; nome: string };
+  ciclo:                       CicloView;
+  itensIniciais:               CicloItemView[];
+  ehPrimeiroCiclo:             boolean;
+  temMultiplasUnidadesFiscais: boolean;
 }
 
 /**
@@ -155,6 +160,7 @@ function CicloAbertoView({
   ciclo,
   itensIniciais,
   ehPrimeiroCiclo,
+  temMultiplasUnidadesFiscais,
 }: CicloAbertoViewProps) {
   const router = useRouter();
   const [itensLocal, setItensLocal] = useState(itensIniciais);
@@ -306,6 +312,7 @@ function CicloAbertoView({
             key={item.id}
             item={item}
             ehPrimeiroCiclo={ehPrimeiroCiclo}
+            temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
             onSalvo={handleItemSalvo}
           />
         ))}
@@ -334,9 +341,10 @@ function CicloAbertoView({
 type EstadoSalvar = "idle" | "salvando" | "salvo" | "erro";
 
 interface ItemCardProps {
-  item:            CicloItemView;
-  ehPrimeiroCiclo: boolean;
-  onSalvo:         (id: string, patch: Partial<CicloItemView>) => void;
+  item:                        CicloItemView;
+  ehPrimeiroCiclo:             boolean;
+  temMultiplasUnidadesFiscais: boolean;
+  onSalvo:                     (id: string, patch: Partial<CicloItemView>) => void;
 }
 
 /**
@@ -352,7 +360,7 @@ interface ItemCardProps {
  * `contagem_anterior` (saldo de abertura) via `registrarInventarioInicial`
  * em vez de `contagem_atual` via `registrarContagem` — ver bloco 6.
  */
-function ItemCard({ item, ehPrimeiroCiclo, onSalvo }: ItemCardProps) {
+function ItemCard({ item, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo }: ItemCardProps) {
   const valorSalvo = ehPrimeiroCiclo ? item.contagemAnterior : item.contagemAtual;
   const [valor, setValor] = useState(valorSalvo != null ? String(valorSalvo) : "");
   const [estado, setEstado] = useState<EstadoSalvar>("idle");
@@ -425,6 +433,12 @@ function ItemCard({ item, ehPrimeiroCiclo, onSalvo }: ItemCardProps) {
         <span>Entradas: {item.entradas != null ? item.entradas : "—"}</span>
         <span>Vendas: {item.saidas != null ? item.saidas : "—"}</span>
       </div>
+
+      {temMultiplasUnidadesFiscais && item.entradasDetalhe.length > 0 && (
+        <p className="text-[11px] text-muted-foreground/70 -mt-2">
+          {item.entradasDetalhe.map((d) => `${d.unidadeNome} ${d.quantidade}`).join(" · ")}
+        </p>
+      )}
 
       {ehPrimeiroCiclo && (
         <p className="text-xs font-medium text-muted-foreground">Saldo de abertura</p>
