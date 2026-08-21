@@ -1,0 +1,298 @@
+"use client";
+
+/**
+ * contagem-client.tsx — módulo de Estoque (bloco 2, contagem mensal)
+ *
+ * Tela mobile-first: a pessoa está de pé no estoque, celular na mão. Cada
+ * item salva sozinho no blur/Enter — nada de "salvar tudo" no fim, que
+ * perderia a contagem inteira se o sinal caísse no meio do corredor.
+ *
+ * Teórico e divergência não aparecem aqui: `entradas`/`saidas` só existem a
+ * partir dos blocos 3/4 (importação), então hoje seriam sempre "—".
+ *
+ * `CicloAbertoView` é remontada via `key={ciclo.id}` a cada ciclo novo — é
+ * assim que o estado local (itens, rascunhos) resincroniza com o servidor
+ * depois de abrir/fechar, sem precisar de setState dentro de useEffect (regra
+ * de lint do projeto proíbe: cascata de renders desnecessária).
+ */
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Loader2, Check, AlertCircle, Boxes } from "lucide-react";
+import { toast } from "sonner";
+import { calcularARepor, rotuloMes } from "@/lib/estoque/ciclo";
+import { abrirCiclo, registrarContagem, fecharCiclo } from "../actions";
+import type { CicloView, CicloItemView } from "./tipos";
+
+interface Props {
+  local:               { id: string; nome: string };
+  temItensControlados: boolean;
+  ciclo:               CicloView | null;
+  itens:               CicloItemView[];
+}
+
+/** Mês corrente em ISO (dia 1), só para o rótulo do botão "Abrir contagem" — a
+ *  fonte da verdade é sempre o mês calculado no servidor por `abrirCiclo`. */
+function mesAtualIsoClient(): string {
+  const agora = new Date();
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+export function ContagemClient({ local, temItensControlados, ciclo, itens }: Props) {
+  const router = useRouter();
+  const [abrindo, setAbrindo] = useState(false);
+
+  async function handleAbrir() {
+    setAbrindo(true);
+    try {
+      const res = await abrirCiclo(local.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      toast.success("Contagem aberta");
+      router.refresh();
+    } finally {
+      setAbrindo(false);
+    }
+  }
+
+  if (!temItensControlados) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center gap-3">
+        <Boxes size={28} className="text-muted-foreground/30" />
+        <div className="space-y-1">
+          <p className="text-sm text-foreground font-medium">Nenhum item controlado em {local.nome}</p>
+          <p className="text-xs text-muted-foreground">
+            Cadastre os itens em{" "}
+            <Link href="/estoque" className="text-emerald-500 underline underline-offset-2">
+              Estoque
+            </Link>{" "}
+            antes de abrir a contagem.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ciclo) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] px-6">
+        <div className="rounded-xl border border-border bg-card p-6 w-full max-w-sm space-y-4 text-center">
+          <div>
+            <h1 className="text-base font-semibold text-foreground">{local.nome}</h1>
+            <p className="text-sm text-muted-foreground mt-1">Nenhuma contagem aberta neste mês.</p>
+          </div>
+          <button
+            onClick={handleAbrir}
+            disabled={abrindo}
+            className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors disabled:opacity-60"
+          >
+            {abrindo && <Loader2 size={16} className="animate-spin" />}
+            Abrir contagem de {rotuloMes(mesAtualIsoClient())}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return <CicloAbertoView key={ciclo.id} local={local} ciclo={ciclo} itensIniciais={itens} />;
+}
+
+interface CicloAbertoViewProps {
+  local:          { id: string; nome: string };
+  ciclo:          CicloView;
+  itensIniciais:  CicloItemView[];
+}
+
+/**
+ * Corpo da tela com o ciclo já aberto. Componente próprio (não inline em
+ * `ContagemClient`) para que o `key={ciclo.id}` do pai force uma montagem
+ * nova — e portanto um `useState(itensIniciais)` fresco — a cada ciclo.
+ */
+function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) {
+  const router = useRouter();
+  const [itensLocal, setItensLocal] = useState(itensIniciais);
+  const [fechando, setFechando] = useState(false);
+
+  function handleItemSalvo(id: string, patch: Partial<CicloItemView>) {
+    setItensLocal((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+
+  const total = itensLocal.length;
+  const contados = itensLocal.filter((it) => it.contagemAtual != null).length;
+  const faltam = total - contados;
+
+  async function handleFechar() {
+    setFechando(true);
+    try {
+      const res = await fecharCiclo(ciclo.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      toast.success("Contagem fechada");
+      router.refresh();
+    } finally {
+      setFechando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col -m-4 sm:-m-6">
+      <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-sm font-semibold text-foreground">{local.nome}</h1>
+            <p className="text-xs text-muted-foreground">{rotuloMes(ciclo.mes)}</p>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground shrink-0">
+            {contados} de {total} contados
+          </p>
+        </div>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 transition-all duration-300"
+            style={{ width: `${total > 0 ? (contados / total) * 100 : 0}%` }}
+          />
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 py-4 space-y-3">
+        {itensLocal.map((item) => (
+          <ItemCard key={item.id} item={item} onSalvo={handleItemSalvo} />
+        ))}
+      </main>
+
+      <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
+        <p className="text-[11px] text-muted-foreground/70 text-center">
+          Teórico e divergência aparecem quando a importação de entradas e saídas estiver ligada.
+        </p>
+        <button
+          onClick={handleFechar}
+          disabled={fechando || faltam > 0}
+          className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {fechando && <Loader2 size={16} className="animate-spin" />}
+          {faltam > 0 ? `Fechar contagem (faltam ${faltam})` : "Fechar contagem"}
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+type EstadoSalvar = "idle" | "salvando" | "salvo" | "erro";
+
+interface ItemCardProps {
+  item:    CicloItemView;
+  onSalvo: (id: string, patch: Partial<CicloItemView>) => void;
+}
+
+/**
+ * Card de item, definido no nível do módulo (não aninhado nos componentes
+ * acima) para não recriar a função a cada render do pai.
+ *
+ * O rascunho (`valor`) nasce do `item` no momento da montagem e depois só é
+ * tocado pelas próprias ações do usuário (digitar, salvar) — não precisa de
+ * useEffect para "seguir" o prop porque o pai (`CicloAbertoView`) já foi
+ * remontado do zero sempre que o ciclo muda.
+ */
+function ItemCard({ item, onSalvo }: ItemCardProps) {
+  const [valor, setValor] = useState(item.contagemAtual != null ? String(item.contagemAtual) : "");
+  const [estado, setEstado] = useState<EstadoSalvar>("idle");
+  const [erroMsg, setErroMsg] = useState<string | null>(null);
+
+  async function salvar(raw: string) {
+    const quantidade = parseFloat(raw.replace(",", "."));
+    if (!Number.isFinite(quantidade) || quantidade < 0) {
+      setEstado("erro");
+      setErroMsg("Valor inválido");
+      return;
+    }
+    setEstado("salvando");
+    setErroMsg(null);
+    const res = await registrarContagem({ cicloItemId: item.id, quantidade });
+    if ("erro" in res) {
+      setEstado("erro");
+      setErroMsg(res.erro);
+      return;
+    }
+    setEstado("salvo");
+    onSalvo(item.id, {
+      contagemAtual: quantidade,
+      contadoPorNome: "você",
+      contadoEm: new Date().toISOString(),
+    });
+    setTimeout(() => setEstado((atual) => (atual === "salvo" ? "idle" : atual)), 1500);
+  }
+
+  function handleBlur() {
+    const raw = valor.trim();
+    if (raw === "") {
+      // Campo limpo sem querer: não apaga uma contagem já salva.
+      setValor(item.contagemAtual != null ? String(item.contagemAtual) : "");
+      return;
+    }
+    void salvar(raw);
+  }
+
+  const aRepor = calcularARepor(item.estoqueIdeal, item.contagemAtual);
+  const horaContado = item.contadoEm
+    ? new Date(item.contadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">{item.produtoNome}</p>
+          <p className="text-xs text-muted-foreground">{item.produtoUnidadeMed}</p>
+        </div>
+        <div className="shrink-0 h-4 flex items-center">
+          {estado === "salvando" && <Loader2 size={16} className="text-muted-foreground animate-spin" />}
+          {estado === "salvo" && <Check size={16} className="text-emerald-500" />}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span>Anterior: {item.contagemAnterior != null ? item.contagemAnterior : "—"}</span>
+        <span>Ideal: {item.estoqueIdeal}</span>
+      </div>
+
+      <input
+        type="text"
+        inputMode="decimal"
+        value={valor}
+        placeholder="0"
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-full h-14 rounded-lg border border-border bg-background px-4 text-lg font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+      />
+
+      {aRepor != null && (
+        <p className="text-xs text-muted-foreground">
+          A repor: <span className="font-medium text-foreground">{aRepor}</span>
+        </p>
+      )}
+
+      {estado === "erro" && erroMsg && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle size={12} /> {erroMsg}
+        </p>
+      )}
+
+      {item.contagemAtual != null && item.contadoPorNome && (
+        <p className="text-[11px] text-muted-foreground/60">
+          contado por {item.contadoPorNome}
+          {horaContado ? ` · ${horaContado}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
