@@ -67,6 +67,60 @@ async function comCliente<T>(connKey: string, fn: (c: Client) => Promise<T>): Pr
  * `SERVICOS` estão marcados como consumíveis no Automo, então a decisão de
  * incluir ou não é humana, na tela, e não automática por flag.
  */
+export interface SaidaAgregada {
+  automo_produto_id: number;
+  descricao:         string;
+  quantidade:        number;
+  /** Quantas linhas de saída somaram — útil para desconfiar de número redondo demais. */
+  linhas:            number;
+}
+
+/**
+ * Soma as saídas de um período por produto, agregando a ÁRVORE INTEIRA de estoque.
+ *
+ * Não filtra por depósito de propósito: a árvore do Automo é frigobar por
+ * apartamento (61 no Ipiranga), não almoxarifado — "AGUA SEM GAS" sai de 59
+ * depósitos distintos no mesmo mês. O estoque é do LHG e é um por local físico.
+ *
+ * `cancelado IS NULL` descarta saída cancelada (816 num único mês no Ipiranga).
+ * `fim` é exclusivo, então passe o primeiro dia do mês seguinte.
+ *
+ * Verificado contra o banco de produção: a soma do agregado bate exatamente com a
+ * soma crua sem GROUP BY (19.800 em julho/2026, Ipiranga).
+ */
+export async function somarSaidasPorProduto(
+  connKey: string,
+  inicioIso: string,
+  fimIso: string,
+): Promise<SaidaAgregada[]> {
+  return comCliente(connKey, async (client) => {
+    const { rows } = await client.query<{
+      produto_id: number; descricao: string; quantidade: string; linhas: string;
+    }>(
+      `SELECT pe.id_produto       AS produto_id,
+              p.descricao         AS descricao,
+              sum(sei.quantidade) AS quantidade,
+              count(*)            AS linhas
+       FROM saidaestoqueitem sei
+       JOIN produtoestoque pe ON pe.id = sei.id_produtoestoque
+       JOIN produto p         ON p.id  = pe.id_produto
+       WHERE sei.cancelado IS NULL
+         AND sei.datasaidaitem >= $1
+         AND sei.datasaidaitem <  $2
+       GROUP BY 1, 2`,
+      [inicioIso, fimIso],
+    );
+
+    // `pg` devolve numeric e bigint como string para não perder precisão.
+    return rows.map(r => ({
+      automo_produto_id: Number(r.produto_id),
+      descricao:         r.descricao,
+      quantidade:        Number(r.quantidade),
+      linhas:            Number(r.linhas),
+    }));
+  });
+}
+
 export async function listarProdutosAutomo(connKey: string): Promise<ProdutoAutomo[]> {
   return comCliente(connKey, async (client) => {
     const { rows } = await client.query<{
