@@ -164,6 +164,79 @@ export async function registrarContagem(
   return { ok: true };
 }
 
+const RegistrarInventarioInicialSchema = z.object({
+  cicloItemId: z.string().uuid(),
+  quantidade: z.number().min(0, "Quantidade não pode ser negativa"),
+});
+
+type CicloItemComCicloRow = {
+  id: string;
+  contagem_anterior: number | null;
+  estoque_ciclos: { id: string; local_id: string; mes: string } | null;
+};
+
+/**
+ * Grava o saldo de ABERTURA (`contagem_anterior`) de um item — usado só no
+ * primeiro ciclo de um local, no dia em que o time começa a contar do zero.
+ *
+ * Gravar essa contagem em `contagem_atual` (como `registrarContagem` faz)
+ * compararia a contagem do dia 1 contra as entradas e saídas do mês inteiro,
+ * e a divergência do primeiro mês sairia errada — daí a action separada.
+ *
+ * Só permite quando `contagem_anterior` ainda está null E não existe ciclo
+ * anterior deste local (`mes` menor): nos demais casos o valor já foi (ou já
+ * deveria ter sido) herdado do ciclo anterior por `abrirCiclo`, e sobrescrever
+ * aqui destruiria essa herança.
+ */
+export async function registrarInventarioInicial(
+  input: z.infer<typeof RegistrarInventarioInicialSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const parsed = RegistrarInventarioInicialSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const { data: cicloItemRaw, error: errItem } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, contagem_anterior, estoque_ciclos(id, local_id, mes)")
+    .eq("id", parsed.data.cicloItemId)
+    .maybeSingle();
+  if (errItem) return { erro: errItem.message };
+
+  const cicloItem = cicloItemRaw as CicloItemComCicloRow | null;
+  if (!cicloItem || !cicloItem.estoque_ciclos) {
+    return { erro: "Item de ciclo não encontrado" };
+  }
+
+  const jaTemSaldoAbertura = cicloItem.contagem_anterior != null;
+
+  const { count: ciclosAnteriores, error: errAnt } = await supabase
+    .from("estoque_ciclos")
+    .select("id", { count: "exact", head: true })
+    .eq("local_id", cicloItem.estoque_ciclos.local_id)
+    .lt("mes", cicloItem.estoque_ciclos.mes);
+  if (errAnt) return { erro: errAnt.message };
+
+  if (jaTemSaldoAbertura || (ciclosAnteriores ?? 0) > 0) {
+    return { erro: "Este ciclo já tem saldo de abertura herdado do ciclo anterior." };
+  }
+
+  const { error } = await supabase
+    .from("estoque_ciclo_itens")
+    .update({
+      contagem_anterior: parsed.data.quantidade,
+      contado_por: user.id,
+      contado_em: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.cicloItemId);
+  if (error) return { erro: error.message };
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true };
+}
+
 export async function fecharCiclo(
   cicloId: string,
 ): Promise<{ ok: true } | { erro: string }> {

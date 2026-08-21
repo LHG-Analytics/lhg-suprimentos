@@ -60,6 +60,20 @@ export default async function ContagemPage() {
     .eq("status", "aberto")
     .maybeSingle();
 
+  // Verdadeiro só quando não existe nenhum ciclo deste local com `mes` menor
+  // que o do ciclo aberto — ou seja, este é o primeiro ciclo do local, e o
+  // que se registra agora é o saldo de ABERTURA (contagem_anterior), não a
+  // contagem de fechamento (contagem_atual) que os demais meses usam.
+  let ehPrimeiroCiclo = false;
+  if (cicloAberto) {
+    const { count: ciclosAnteriores } = await supabase
+      .from("estoque_ciclos")
+      .select("id", { count: "exact", head: true })
+      .eq("local_id", local.id)
+      .lt("mes", cicloAberto.mes);
+    ehPrimeiroCiclo = (ciclosAnteriores ?? 0) === 0;
+  }
+
   let itens: CicloItemView[] = [];
   if (cicloAberto) {
     const { data: itensCiclo } = await supabase
@@ -91,6 +105,7 @@ export default async function ContagemPage() {
       temItensControlados={(totalItensAtivos ?? 0) > 0}
       ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
       itens={itens}
+      ehPrimeiroCiclo={ehPrimeiroCiclo}
     />
   );
 }

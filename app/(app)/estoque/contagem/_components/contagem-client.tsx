@@ -21,12 +21,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Check, AlertCircle, Boxes, Download } from "lucide-react";
+import { Loader2, Check, AlertCircle, Boxes, Download, Info } from "lucide-react";
 import { toast } from "sonner";
 import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
 import {
   abrirCiclo,
   registrarContagem,
+  registrarInventarioInicial,
   fecharCiclo,
   importarSaidasDoAutomo,
   importarEntradasDoOmie,
@@ -38,6 +39,8 @@ interface Props {
   temItensControlados: boolean;
   ciclo:               CicloView | null;
   itens:               CicloItemView[];
+  /** True só no primeiro ciclo de um local — modo "saldo de abertura" (ver bloco 6). */
+  ehPrimeiroCiclo:     boolean;
 }
 
 /** Mês corrente em ISO (dia 1), só para o rótulo do botão "Abrir contagem" — a
@@ -59,7 +62,13 @@ function chaveCiclo(cicloId: string, itens: CicloItemView[]): string {
   return `${cicloId}:${itens.map((it) => `${it.id}=${it.saidas ?? ""}:${it.entradas ?? ""}`).join(",")}`;
 }
 
-export function ContagemClient({ local, temItensControlados, ciclo, itens }: Props) {
+export function ContagemClient({
+  local,
+  temItensControlados,
+  ciclo,
+  itens,
+  ehPrimeiroCiclo,
+}: Props) {
   const router = useRouter();
   const [abrindo, setAbrindo] = useState(false);
 
@@ -117,13 +126,22 @@ export function ContagemClient({ local, temItensControlados, ciclo, itens }: Pro
     );
   }
 
-  return <CicloAbertoView key={chaveCiclo(ciclo.id, itens)} local={local} ciclo={ciclo} itensIniciais={itens} />;
+  return (
+    <CicloAbertoView
+      key={chaveCiclo(ciclo.id, itens)}
+      local={local}
+      ciclo={ciclo}
+      itensIniciais={itens}
+      ehPrimeiroCiclo={ehPrimeiroCiclo}
+    />
+  );
 }
 
 interface CicloAbertoViewProps {
   local:          { id: string; nome: string };
   ciclo:          CicloView;
   itensIniciais:  CicloItemView[];
+  ehPrimeiroCiclo: boolean;
 }
 
 /**
@@ -132,7 +150,12 @@ interface CicloAbertoViewProps {
  * montagem nova — e portanto um `useState(itensIniciais)` fresco — a cada
  * ciclo novo ou reimportação de saídas.
  */
-function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) {
+function CicloAbertoView({
+  local,
+  ciclo,
+  itensIniciais,
+  ehPrimeiroCiclo,
+}: CicloAbertoViewProps) {
   const router = useRouter();
   const [itensLocal, setItensLocal] = useState(itensIniciais);
   const [fechando, setFechando] = useState(false);
@@ -144,7 +167,12 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
   }
 
   const total = itensLocal.length;
-  const contados = itensLocal.filter((it) => it.contagemAtual != null).length;
+  // No modo "primeiro ciclo" o que se registra é o saldo de abertura
+  // (contagem_anterior) — a contagem de fechamento (contagem_atual) só entra
+  // em cena no fim do período, quando este modo já não se aplica.
+  const contados = itensLocal.filter((it) =>
+    ehPrimeiroCiclo ? it.contagemAnterior != null : it.contagemAtual != null,
+  ).length;
   const faltam = total - contados;
 
   async function handleFechar() {
@@ -259,20 +287,45 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
       </header>
 
       <main className="flex-1 px-4 py-4 space-y-3">
+        {ehPrimeiroCiclo && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex gap-3">
+            <Info size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Primeiro ciclo deste local</p>
+              <p className="text-xs text-muted-foreground">
+                O número que você lança agora é o saldo de abertura: o que já tem em cada item
+                hoje, antes de entrar qualquer entrada ou saída deste mês. A contagem de
+                fechamento — para apurar o que sobrou no fim do período — fica disponível
+                separadamente, mais adiante.
+              </p>
+            </div>
+          </div>
+        )}
         {itensLocal.map((item) => (
-          <ItemCard key={item.id} item={item} onSalvo={handleItemSalvo} />
+          <ItemCard
+            key={item.id}
+            item={item}
+            ehPrimeiroCiclo={ehPrimeiroCiclo}
+            onSalvo={handleItemSalvo}
+          />
         ))}
       </main>
 
       <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
-        <button
-          onClick={handleFechar}
-          disabled={fechando || faltam > 0}
-          className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {fechando && <Loader2 size={16} className="animate-spin" />}
-          {faltam > 0 ? `Fechar contagem (faltam ${faltam})` : "Fechar contagem"}
-        </button>
+        {ehPrimeiroCiclo ? (
+          <p className="text-xs text-center text-muted-foreground py-2.5">
+            A contagem de fechamento deste ciclo fica disponível no fim do período.
+          </p>
+        ) : (
+          <button
+            onClick={handleFechar}
+            disabled={fechando || faltam > 0}
+            className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {fechando && <Loader2 size={16} className="animate-spin" />}
+            {faltam > 0 ? `Fechar contagem (faltam ${faltam})` : "Fechar contagem"}
+          </button>
+        )}
       </footer>
     </div>
   );
@@ -281,8 +334,9 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
 type EstadoSalvar = "idle" | "salvando" | "salvo" | "erro";
 
 interface ItemCardProps {
-  item:    CicloItemView;
-  onSalvo: (id: string, patch: Partial<CicloItemView>) => void;
+  item:            CicloItemView;
+  ehPrimeiroCiclo: boolean;
+  onSalvo:         (id: string, patch: Partial<CicloItemView>) => void;
 }
 
 /**
@@ -293,9 +347,14 @@ interface ItemCardProps {
  * tocado pelas próprias ações do usuário (digitar, salvar) — não precisa de
  * useEffect para "seguir" o prop porque o pai (`CicloAbertoView`) já foi
  * remontado do zero sempre que o ciclo muda.
+ *
+ * No primeiro ciclo de um local (`ehPrimeiroCiclo`), o campo grava
+ * `contagem_anterior` (saldo de abertura) via `registrarInventarioInicial`
+ * em vez de `contagem_atual` via `registrarContagem` — ver bloco 6.
  */
-function ItemCard({ item, onSalvo }: ItemCardProps) {
-  const [valor, setValor] = useState(item.contagemAtual != null ? String(item.contagemAtual) : "");
+function ItemCard({ item, ehPrimeiroCiclo, onSalvo }: ItemCardProps) {
+  const valorSalvo = ehPrimeiroCiclo ? item.contagemAnterior : item.contagemAtual;
+  const [valor, setValor] = useState(valorSalvo != null ? String(valorSalvo) : "");
   const [estado, setEstado] = useState<EstadoSalvar>("idle");
   const [erroMsg, setErroMsg] = useState<string | null>(null);
 
@@ -308,18 +367,21 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
     }
     setEstado("salvando");
     setErroMsg(null);
-    const res = await registrarContagem({ cicloItemId: item.id, quantidade });
+    const res = ehPrimeiroCiclo
+      ? await registrarInventarioInicial({ cicloItemId: item.id, quantidade })
+      : await registrarContagem({ cicloItemId: item.id, quantidade });
     if ("erro" in res) {
       setEstado("erro");
       setErroMsg(res.erro);
       return;
     }
     setEstado("salvo");
-    onSalvo(item.id, {
-      contagemAtual: quantidade,
-      contadoPorNome: "você",
-      contadoEm: new Date().toISOString(),
-    });
+    onSalvo(
+      item.id,
+      ehPrimeiroCiclo
+        ? { contagemAnterior: quantidade, contadoPorNome: "você", contadoEm: new Date().toISOString() }
+        : { contagemAtual: quantidade, contadoPorNome: "você", contadoEm: new Date().toISOString() },
+    );
     setTimeout(() => setEstado((atual) => (atual === "salvo" ? "idle" : atual)), 1500);
   }
 
@@ -327,7 +389,7 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
     const raw = valor.trim();
     if (raw === "") {
       // Campo limpo sem querer: não apaga uma contagem já salva.
-      setValor(item.contagemAtual != null ? String(item.contagemAtual) : "");
+      setValor(valorSalvo != null ? String(valorSalvo) : "");
       return;
     }
     void salvar(raw);
@@ -363,6 +425,10 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
         <span>Entradas: {item.entradas != null ? item.entradas : "—"}</span>
         <span>Vendas: {item.saidas != null ? item.saidas : "—"}</span>
       </div>
+
+      {ehPrimeiroCiclo && (
+        <p className="text-xs font-medium text-muted-foreground">Saldo de abertura</p>
+      )}
 
       <input
         type="text"
@@ -422,7 +488,7 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
         </p>
       )}
 
-      {item.contagemAtual != null && item.contadoPorNome && (
+      {valorSalvo != null && item.contadoPorNome && (
         <p className="text-[11px] text-muted-foreground/60">
           contado por {item.contadoPorNome}
           {horaContado ? ` · ${horaContado}` : ""}
