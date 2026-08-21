@@ -11,12 +11,31 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { somarSaidasPorProduto, AutomoIndisponivelError } from "@/lib/automo/client";
+import { converterSaidas, type ItemMapeado } from "@/lib/estoque/saidas";
 
 function mesAtualIso(): string {
   const agora = new Date();
   const ano = agora.getFullYear();
   const mes = String(agora.getMonth() + 1).padStart(2, "0");
   return `${ano}-${mes}-01`;
+}
+
+/**
+ * Primeiro dia do mês seguinte a `mesIso` ("YYYY-MM-01"), em string — sem
+ * passar por `Date`, que interpretaria a data como UTC meia-noite e correria
+ * risco de voltar um dia em fuso negativo. `somarSaidasPorProduto` trata o
+ * fim do período como exclusivo, então este é o valor certo para `fimIso`.
+ */
+function proximoMesIso(mesIso: string): string {
+  const [anoStr, mesStr] = mesIso.split("-");
+  let ano = Number(anoStr);
+  let mes = Number(mesStr) + 1;
+  if (mes > 12) {
+    mes = 1;
+    ano += 1;
+  }
+  return `${ano}-${String(mes).padStart(2, "0")}-01`;
 }
 
 export async function abrirCiclo(
@@ -167,4 +186,107 @@ export async function fecharCiclo(
 
   revalidatePath("/estoque/contagem");
   return { ok: true };
+}
+
+/**
+ * Importa as saídas do Automo do mês do ciclo e grava em `estoque_ciclo_itens.saidas`.
+ *
+ * Idempotente por natureza: `converterSaidas` recalcula do zero a partir do
+ * período, então reimportar sobrescreve em vez de somar em cima do que já
+ * estava lá.
+ */
+export async function importarSaidasDoAutomo(
+  cicloId: string,
+): Promise<{ ok: true; itensAtualizados: number; produtosIgnorados: number } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const { data: ciclo, error: errCiclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, local_id, mes, status, locais_estoque(automo_conn_key)")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (errCiclo) return { erro: errCiclo.message };
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") {
+    return { erro: "Ciclo já fechado — não é possível reimportar." };
+  }
+
+  const connKey = ciclo.locais_estoque?.automo_conn_key;
+  if (!connKey) return { erro: "Este local não tem banco do Automo configurado." };
+
+  const inicioIso = ciclo.mes;
+  const fimIso = proximoMesIso(ciclo.mes);
+
+  let saidasAutomo;
+  try {
+    saidasAutomo = await somarSaidasPorProduto(connKey, inicioIso, fimIso);
+  } catch (err) {
+    if (err instanceof AutomoIndisponivelError) {
+      return {
+        erro:
+          "Banco do Automo desta unidade está indisponível agora (o do Andar de Cima cai com frequência) — tente novamente em alguns minutos.",
+      };
+    }
+    return { erro: "Erro inesperado ao importar saídas do Automo." };
+  }
+
+  const { data: cicloItens, error: errItens } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, estoque_itens(id, automo_produto_id, fator_conversao)")
+    .eq("ciclo_id", cicloId);
+  if (errItens) return { erro: errItens.message };
+
+  type CicloItemRow = NonNullable<typeof cicloItens>[number];
+  const linhas = (cicloItens ?? []) as CicloItemRow[];
+
+  // Chave do mapa é o id da própria linha de estoque_ciclo_itens — é nela
+  // que o UPDATE roda, e evita um segundo lookup por estoque_item_id.
+  const itensMapeados: ItemMapeado[] = linhas
+    .filter((linha) => linha.estoque_itens != null)
+    .map((linha) => ({
+      estoque_item_id: linha.id,
+      automo_produto_id: linha.estoque_itens!.automo_produto_id,
+      fator_conversao: linha.estoque_itens!.fator_conversao,
+    }));
+
+  const mapa = converterSaidas(itensMapeados, saidasAutomo);
+
+  const automoIdsMapeados = new Set(
+    itensMapeados
+      .map((item) => item.automo_produto_id)
+      .filter((id): id is number => id != null),
+  );
+  const produtosIgnorados = new Set(
+    saidasAutomo
+      .map((s) => s.automo_produto_id)
+      .filter((id) => !automoIdsMapeados.has(id)),
+  ).size;
+
+  const resultados = await Promise.all(
+    linhas.map(async (linha) => {
+      const quantidade = mapa.get(linha.id);
+      if (quantidade === undefined) return { atualizado: false, ok: true as const };
+
+      const { error } = await supabase
+        .from("estoque_ciclo_itens")
+        .update({ saidas: quantidade })
+        .eq("id", linha.id);
+      return { atualizado: true, ok: !error, erro: error?.message };
+    }),
+  );
+
+  const sucessos = resultados.filter((r) => r.atualizado && r.ok).length;
+  const falhas = resultados.filter((r) => r.atualizado && !r.ok);
+  if (falhas.length > 0) {
+    return {
+      erro:
+        `Falha ao salvar ${falhas.length} ${falhas.length === 1 ? "item" : "itens"} ` +
+        `(${sucessos} atualizados antes da falha): ${falhas[0]?.erro ?? "erro desconhecido"}`,
+    };
+  }
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true, itensAtualizados: sucessos, produtosIgnorados };
 }

@@ -7,21 +7,23 @@
  * item salva sozinho no blur/Enter — nada de "salvar tudo" no fim, que
  * perderia a contagem inteira se o sinal caísse no meio do corredor.
  *
- * Teórico e divergência não aparecem aqui: `entradas`/`saidas` só existem a
- * partir dos blocos 3/4 (importação), então hoje seriam sempre "—".
+ * Teórico e divergência ainda não aparecem aqui: `entradas` só existe a
+ * partir do bloco 4 (importação), então o teórico continua sempre "—" mesmo
+ * depois de importar as saídas do Automo (bloco 3).
  *
- * `CicloAbertoView` é remontada via `key={ciclo.id}` a cada ciclo novo — é
- * assim que o estado local (itens, rascunhos) resincroniza com o servidor
- * depois de abrir/fechar, sem precisar de setState dentro de useEffect (regra
- * de lint do projeto proíbe: cascata de renders desnecessária).
+ * `CicloAbertoView` é remontada via `key` a cada ciclo novo ou a cada
+ * reimportação de saídas — é assim que o estado local (itens, rascunhos)
+ * resincroniza com o servidor depois de abrir/fechar/importar, sem precisar
+ * de setState dentro de useEffect (regra de lint do projeto proíbe: cascata
+ * de renders desnecessária). Ver `chaveCiclo`.
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Check, AlertCircle, Boxes } from "lucide-react";
+import { Loader2, Check, AlertCircle, Boxes, Download } from "lucide-react";
 import { toast } from "sonner";
 import { calcularARepor, rotuloMes } from "@/lib/estoque/ciclo";
-import { abrirCiclo, registrarContagem, fecharCiclo } from "../actions";
+import { abrirCiclo, registrarContagem, fecharCiclo, importarSaidasDoAutomo } from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
 
 interface Props {
@@ -36,6 +38,18 @@ interface Props {
 function mesAtualIsoClient(): string {
   const agora = new Date();
   return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Chave de remount de `CicloAbertoView`. Inclui `saidas` de cada item de
+ * propósito: é o único jeito de o `useState(itensIniciais)` reler o valor
+ * fresco depois de "Importar saídas do Automo" sem precisar de setState em
+ * useEffect (proibido pelo lint do projeto) — muda só quando o dado em si
+ * muda, então um clique em "salvar contagem" (que não toca `saidas`) não
+ * força remontagem à toa.
+ */
+function chaveCiclo(cicloId: string, itens: CicloItemView[]): string {
+  return `${cicloId}:${itens.map((it) => `${it.id}=${it.saidas ?? ""}`).join(",")}`;
 }
 
 export function ContagemClient({ local, temItensControlados, ciclo, itens }: Props) {
@@ -96,7 +110,7 @@ export function ContagemClient({ local, temItensControlados, ciclo, itens }: Pro
     );
   }
 
-  return <CicloAbertoView key={ciclo.id} local={local} ciclo={ciclo} itensIniciais={itens} />;
+  return <CicloAbertoView key={chaveCiclo(ciclo.id, itens)} local={local} ciclo={ciclo} itensIniciais={itens} />;
 }
 
 interface CicloAbertoViewProps {
@@ -107,13 +121,15 @@ interface CicloAbertoViewProps {
 
 /**
  * Corpo da tela com o ciclo já aberto. Componente próprio (não inline em
- * `ContagemClient`) para que o `key={ciclo.id}` do pai force uma montagem
- * nova — e portanto um `useState(itensIniciais)` fresco — a cada ciclo.
+ * `ContagemClient`) para que a `key` do pai (`chaveCiclo`) force uma
+ * montagem nova — e portanto um `useState(itensIniciais)` fresco — a cada
+ * ciclo novo ou reimportação de saídas.
  */
 function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) {
   const router = useRouter();
   const [itensLocal, setItensLocal] = useState(itensIniciais);
   const [fechando, setFechando] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   function handleItemSalvo(id: string, patch: Partial<CicloItemView>) {
     setItensLocal((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -122,6 +138,7 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
   const total = itensLocal.length;
   const contados = itensLocal.filter((it) => it.contagemAtual != null).length;
   const faltam = total - contados;
+  const todasSaidasImportadas = total > 0 && itensLocal.every((it) => it.saidas != null);
 
   async function handleFechar() {
     setFechando(true);
@@ -138,6 +155,26 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
     }
   }
 
+  async function handleImportar() {
+    setImportando(true);
+    try {
+      const res = await importarSaidasDoAutomo(ciclo.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      const rotuloItens = res.itensAtualizados === 1 ? "item atualizado" : "itens atualizados";
+      const complemento =
+        res.produtosIgnorados > 0
+          ? ` · ${res.produtosIgnorados} ${res.produtosIgnorados === 1 ? "produto" : "produtos"} do Automo sem mapeamento foram ignorados`
+          : "";
+      toast.success(`${res.itensAtualizados} ${rotuloItens}${complemento}`);
+      router.refresh();
+    } finally {
+      setImportando(false);
+    }
+  }
+
   return (
     <div className="flex flex-col -m-4 sm:-m-6">
       <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3 space-y-2">
@@ -146,9 +183,24 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
             <h1 className="text-sm font-semibold text-foreground">{local.nome}</h1>
             <p className="text-xs text-muted-foreground">{rotuloMes(ciclo.mes)}</p>
           </div>
-          <p className="text-xs font-medium text-muted-foreground shrink-0">
-            {contados} de {total} contados
-          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleImportar}
+              disabled={importando}
+              title="Importar saídas do Automo"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              {importando ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+              <span className="hidden sm:inline">Importar saídas do Automo</span>
+            </button>
+            <p className="text-xs font-medium text-muted-foreground">
+              {contados} de {total} contados
+            </p>
+          </div>
         </div>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
@@ -166,7 +218,9 @@ function CicloAbertoView({ local, ciclo, itensIniciais }: CicloAbertoViewProps) 
 
       <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
         <p className="text-[11px] text-muted-foreground/70 text-center">
-          Teórico e divergência aparecem quando a importação de entradas e saídas estiver ligada.
+          {todasSaidasImportadas
+            ? "Falta só a importação de entradas (bloco 4) para o teórico e a divergência aparecerem."
+            : "Teórico e divergência aparecem quando a importação de entradas e saídas estiver ligada."}
         </p>
         <button
           onClick={handleFechar}
@@ -257,6 +311,7 @@ function ItemCard({ item, onSalvo }: ItemCardProps) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span>Anterior: {item.contagemAnterior != null ? item.contagemAnterior : "—"}</span>
         <span>Ideal: {item.estoqueIdeal}</span>
+        <span>Vendas: {item.saidas != null ? item.saidas : "—"}</span>
       </div>
 
       <input
