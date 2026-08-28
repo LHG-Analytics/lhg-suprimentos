@@ -34,6 +34,7 @@ export function MapearItemModal({
 }: Props) {
   const router = useRouter();
   const [busca, setBusca]       = useState("");
+  const [buscaAutomo, setBuscaAutomo] = useState("");
   const [produto, setProduto]   = useState<ProdutoLhg | null>(null);
   const [automoId, setAutomoId] = useState<number | null>(null);
   const [fator, setFator]       = useState("1");
@@ -62,10 +63,37 @@ export function MapearItemModal({
     );
   }, [produto, produtosAutomo]);
 
+  /**
+   * O que aparece na lista do passo 2: sugestões quando a busca está vazia,
+   * resultado da busca quando não está.
+   *
+   * O `score` vem junto só nas sugestões. Num resultado de busca ele seria
+   * ruído — ela digitou o nome, já sabe o que procurou; o percentual ali só
+   * confundiria ("por que 30% se é exatamente o que eu quero?").
+   */
+  const listaAutomo = useMemo<{ item: ProdutoAutomo; score: number | null }[]>(() => {
+    const q = buscaAutomo.toLowerCase().trim();
+
+    if (q) {
+      return produtosAutomo
+        .filter((p) => p.descricao.toLowerCase().includes(q) || (p.codigo ?? "").toLowerCase().includes(q))
+        .slice(0, MAX_LISTA)
+        .map((item) => ({ item, score: null }));
+    }
+
+    return sugestoes
+      .map((s) => {
+        const item = produtosAutomo.find((p) => p.id === Number(s.id));
+        return item ? { item, score: s.score } : null;
+      })
+      .filter((v): v is { item: ProdutoAutomo; score: number } => v != null);
+  }, [buscaAutomo, produtosAutomo, sugestoes]);
+
   if (!open) return null;
 
   function fechar() {
     setBusca("");
+    setBuscaAutomo("");
     setProduto(null);
     setAutomoId(null);
     setFator("1");
@@ -145,7 +173,7 @@ export function MapearItemModal({
                   </div>
                 </div>
                 <button
-                  onClick={() => { setProduto(null); setAutomoId(null); }}
+                  onClick={() => { setProduto(null); setAutomoId(null); setBuscaAutomo(""); }}
                   className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
                 >
                   trocar
@@ -198,45 +226,83 @@ export function MapearItemModal({
                   Catálogo do Automo indisponível. Você pode salvar sem vínculo e completar
                   depois — sem ele as vendas deste item não serão importadas.
                 </p>
-              ) : sugestoes.length === 0 ? (
-                <p className="text-xs text-muted-foreground/60 rounded-lg border border-border/60 px-3 py-2">
-                  Nenhum nome parecido no Automo. Salve sem vínculo e ajuste depois.
-                </p>
               ) : (
-                <div className="space-y-1">
-                  {sugestoes.map((s) => {
-                    const id = Number(s.id);
-                    const item = produtosAutomo.find((p) => p.id === id);
-                    const escolhido = automoId === id;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => setAutomoId(escolhido ? null : id)}
-                        className={cn(
-                          "w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
-                          escolhido
-                            ? "border-emerald-500/50 bg-emerald-500/10"
-                            : "border-border/60 hover:bg-muted/50",
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-sm text-foreground truncate flex items-center gap-1.5">
-                            {escolhido && <Check size={12} className="text-emerald-400 shrink-0" />}
-                            {item?.descricao ?? s.nome}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground/60">
-                            {item?.tipo ?? "sem tipo"} · Automo #{id}
-                          </div>
-                        </div>
-                        <span
-                          title="Semelhança entre os nomes"
-                          className="text-[10px] font-mono text-muted-foreground/60 shrink-0"
-                        >
-                          {(s.score * 100).toFixed(0)}%
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="space-y-2">
+                  {/*
+                    Busca no catálogo completo do Automo.
+                    A sugestão por semelhança acerta a grande maioria (14 de 15 nos
+                    mais vendidos), mas quando erra ela erra silenciosamente: o
+                    "OLLA GEL" do Automo não existe no Omie com esse nome, e o
+                    melhor par sugerido era um produto diferente com 20%. Sem uma
+                    busca manual a compradora ficaria sem saída justo nesse caso.
+                  */}
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+                    <input
+                      value={buscaAutomo}
+                      onChange={(e) => setBuscaAutomo(e.target.value)}
+                      placeholder="Buscar no catálogo do Automo…"
+                      className="w-full h-9 rounded-lg border border-border bg-muted/30 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground/60">
+                    {buscaAutomo.trim()
+                      ? `${listaAutomo.length} de ${produtosAutomo.length} produtos`
+                      : sugestoes.length > 0
+                        ? "Sugestões por semelhança de nome — confira antes de aceitar"
+                        : "Nenhum nome parecido. Use a busca para achar o produto."}
+                  </p>
+
+                  {listaAutomo.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/60 rounded-lg border border-border/60 px-3 py-2">
+                      Nada encontrado. Você pode salvar sem vínculo e completar depois —
+                      sem ele as vendas deste item não são importadas.
+                    </p>
+                  ) : (
+                    <div className="max-h-[220px] overflow-y-auto space-y-1">
+                      {listaAutomo.map(({ item, score }) => {
+                        const escolhido = automoId === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => setAutomoId(escolhido ? null : item.id)}
+                            className={cn(
+                              "w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                              escolhido
+                                ? "border-emerald-500/50 bg-emerald-500/10"
+                                : "border-border/60 hover:bg-muted/50",
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm text-foreground truncate flex items-center gap-1.5">
+                                {escolhido && <Check size={12} className="text-emerald-400 shrink-0" />}
+                                {item.descricao}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground/60">
+                                {item.tipo ?? "sem tipo"} · Automo #{item.id}
+                              </div>
+                            </div>
+                            {/* Percentual só nas sugestões: num resultado de busca ele
+                                não quer dizer nada — ela já sabe o que procurou. */}
+                            {score != null && (
+                              <span
+                                title="Semelhança entre os nomes — confira antes de aceitar valores baixos"
+                                className={cn(
+                                  "text-[10px] font-mono shrink-0",
+                                  score >= 0.7 ? "text-emerald-400"
+                                    : score >= 0.4 ? "text-muted-foreground/60"
+                                    : "text-amber-400",
+                                )}
+                              >
+                                {(score * 100).toFixed(0)}%
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
