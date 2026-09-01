@@ -237,12 +237,76 @@ export async function registrarInventarioInicial(
   return { ok: true };
 }
 
+/**
+ * Traz para o ciclo aberto os itens controlados cadastrados DEPOIS da abertura.
+ *
+ * `abrirCiclo` materializa as linhas no momento da abertura, então item novo não
+ * entra sozinho. Sem isto o item simplesmente não aparecia na contagem — foi o
+ * que aconteceu com a COCA COLA cadastrada três dias depois de o ciclo de agosto
+ * abrir vazio.
+ *
+ * Idempotente: a `UNIQUE (ciclo_id, estoque_item_id)` impede duplicar, e só os
+ * ausentes são inseridos. `contagem_anterior` sai null porque item novo não tem
+ * histórico neste local; `entradas`/`saidas` também, até a próxima importação.
+ */
+export async function sincronizarItensDoCiclo(
+  cicloId: string,
+): Promise<{ ok: true; adicionados: number } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const { data: ciclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, local_id, status")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") return { erro: "Ciclo já fechado — não é possível incluir itens." };
+
+  const [{ data: controlados }, { data: noCiclo }] = await Promise.all([
+    supabase.from("estoque_itens").select("id").eq("local_id", ciclo.local_id).eq("ativo", true),
+    supabase.from("estoque_ciclo_itens").select("estoque_item_id").eq("ciclo_id", cicloId),
+  ]);
+
+  const jaNoCiclo = new Set((noCiclo ?? []).map((r) => r.estoque_item_id));
+  const faltantes = (controlados ?? []).filter((i) => !jaNoCiclo.has(i.id));
+
+  if (faltantes.length === 0) return { ok: true, adicionados: 0 };
+
+  const { error } = await supabase.from("estoque_ciclo_itens").insert(
+    faltantes.map((i) => ({ ciclo_id: cicloId, estoque_item_id: i.id })),
+  );
+  if (error) return { erro: error.message };
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true, adicionados: faltantes.length };
+}
+
 export async function fecharCiclo(
   cicloId: string,
 ): Promise<{ ok: true } | { erro: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Não autenticado" };
+
+  /*
+   * Ciclo sem nenhum item não pode fechar.
+   *
+   * O guard de "faltam N para contar" passava batido no ciclo vazio: com zero
+   * itens, zero estão sem contagem, então ele liberava. E um ciclo vazio fechado
+   * viraria o `contagem_anterior` do mês seguinte, envenenando o próximo período
+   * com saldo de abertura zerado. Aconteceu de verdade: o ciclo de agosto do Lush
+   * Ipiranga abriu sem item nenhum e o botão de fechar estava habilitado.
+   */
+  const { count: totalItens, error: errTotal } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id", { count: "exact", head: true })
+    .eq("ciclo_id", cicloId);
+  if (errTotal) return { erro: errTotal.message };
+  if (!totalItens) {
+    return { erro: "Este ciclo não tem nenhum item. Sincronize os itens controlados antes de fechar." };
+  }
 
   const { count, error: errCount } = await supabase
     .from("estoque_ciclo_itens")

@@ -11,6 +11,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { listarProdutosAutomo, AutomoIndisponivelError } from "@/lib/automo/client";
+import { normalizarNome } from "@/lib/estoque/mapeamento";
 import { EstoqueClient } from "./_components/estoque-client";
 import type { ProdutoLhg, ItemEstoque } from "./_components/tipos";
 
@@ -50,25 +51,69 @@ export default async function EstoquePage() {
     );
   }
 
-  const [{ data: itens }, produtos] = await Promise.all([
+  // UUID sentinela força catálogo vazio em vez de trazer tudo, caso o local não
+  // tenha unidade fiscal vinculada — `.in()` com array vazio no PostgREST não
+  // filtra nada.
+  const unidadeIdsDoLocal = local.local_unidade.length > 0
+    ? local.local_unidade.map((lu) => lu.unidade_id)
+    : ["00000000-0000-0000-0000-000000000000"];
+
+  const [{ data: itens }, produtosBrutos] = await Promise.all([
     supabase
       .from("estoque_itens")
       .select(
         "id, produto_id, automo_produto_id, fator_conversao, estoque_ideal, ativo, produtos(nome, codigo, unidade_med, categoria)",
       )
       .eq("local_id", local.id)
+      // Item desativado (removido do controle) sai do cadastro, mas a contagem
+      // dele nos ciclos passados continua — ver removerItemEstoque.
+      .eq("ativo", true)
       .order("id"),
 
-    fetchAllRows<ProdutoLhg>((from, to) =>
+    /*
+     * Catálogo restrito às unidades fiscais DESTE local.
+     *
+     * Sem o filtro vinham os produtos de todas as unidades misturados (~3.400),
+     * então a busca oferecia itens que não existem no Omie do local — e o vínculo
+     * criado assim nunca casaria uma entrada.
+     *
+     * O Lush Ipiranga tem dois CNPJs, então o mesmo produto aparece duas vezes
+     * (um `omie_codigo` por conta). A deduplicação por código + nome resolve:
+     * qualquer das duas linhas serve, porque `resolverChavesOmie` encontra os
+     * dois `omie_codigo` na hora de importar a entrada.
+     */
+    fetchAllRows<ProdutoLhg & { omie_unidade_id: string | null }>((from, to) =>
       supabase
         .from("produtos")
-        .select("id, codigo, nome, unidade_med, categoria")
+        .select("id, codigo, nome, unidade_med, categoria, omie_unidade_id")
         .eq("ativo", true)
+        .in("omie_unidade_id", unidadeIdsDoLocal)
         .order("nome")
         .order("id")
         .range(from, to),
     ),
   ]);
+
+  /*
+   * Deduplica o catálogo por (código + nome normalizado).
+   *
+   * Num local com dois CNPJs o mesmo produto vem duas vezes, uma por conta Omie,
+   * com `omie_codigo` diferente. Mostrar as duas faria a compradora escolher
+   * entre duas COCA COLA idênticas sem saber a diferença — e não há diferença
+   * que importe: `resolverChavesOmie` casa por código + nome e encontra os dois
+   * `omie_codigo` na importação, qualquer que seja a linha escolhida.
+   */
+  const vistos = new Set<string>();
+  const produtos: ProdutoLhg[] = [];
+  for (const p of produtosBrutos) {
+    const chave = `${p.codigo}|${normalizarNome(p.nome)}`;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    produtos.push({
+      id: p.id, codigo: p.codigo, nome: p.nome,
+      unidade_med: p.unidade_med, categoria: p.categoria,
+    });
+  }
 
   // O Automo cai com frequência (o banco do Andar de Cima em particular). Uma
   // falha aqui não pode derrubar a tela — ela degrada para cadastro sem sugestão.

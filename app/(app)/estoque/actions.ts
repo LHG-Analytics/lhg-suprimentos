@@ -73,9 +73,22 @@ export async function removerItemEstoque(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Não autenticado" };
 
-  // Delete de verdade: no bloco 1 não há movimento gravado ainda. Quando o ledger
-  // existir (bloco 3), isto vira `ativo = false` para não perder histórico.
-  const { error } = await supabase.from("estoque_itens").delete().eq("id", id);
+  /*
+   * Desativa, não apaga.
+   *
+   * `estoque_ciclo_itens.estoque_item_id` tem ON DELETE CASCADE, então um delete
+   * de verdade levaria embora a contagem daquele item em TODOS os ciclos —
+   * inclusive nos já fechados, destruindo histórico sem aviso. Também foi o que
+   * esvaziou o ciclo de agosto do Lush Ipiranga: item cadastrado, ciclo aberto,
+   * item removido, e a linha da contagem sumiu por cascata.
+   *
+   * Com `ativo = false` o item sai do cadastro e das próximas contagens, mas o
+   * que já foi contado continua de pé.
+   */
+  const { error } = await supabase
+    .from("estoque_itens")
+    .update({ ativo: false })
+    .eq("id", id);
   if (error) return { erro: error.message };
 
   revalidatePath("/estoque");

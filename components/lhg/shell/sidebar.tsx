@@ -7,6 +7,7 @@
  * Tokens semânticos bg-sidebar / text-sidebar-foreground para suporte light/dark.
  */
 
+import { useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -254,10 +255,28 @@ export function Sidebar({
   const router = useRouter();
   const { theme, setTheme } = useTheme();
 
-  const isActive = (href: string) =>
-    href === "/dashboard"
-      ? pathname === "/dashboard"
-      : pathname.startsWith(href);
+  /**
+   * O item ativo é o de href MAIS LONGO que casa com a rota atual.
+   *
+   * `pathname.startsWith(href)` sozinho acendia dois itens ao mesmo tempo:
+   * `/estoque/contagem` começa com `/estoque`, então "Estoque" e "Contagem"
+   * ficavam os dois destacados. Como são irmãos no menu (e não pai/filho),
+   * só o mais específico deve acender.
+   *
+   * Comparar pelo comprimento resolve para qualquer rota aninhada futura, sem
+   * precisar de lista de exceções.
+   */
+  const hrefAtivo = useMemo(() => {
+    const candidatos = NAV_ITEMS
+      .map((i) => i.href)
+      .filter((href) => pathname === href || pathname.startsWith(`${href}/`));
+    return candidatos.reduce<string | null>(
+      (maior, href) => (maior == null || href.length > maior.length ? href : maior),
+      null,
+    );
+  }, [pathname]);
+
+  const isActive = (href: string) => href === hrefAtivo;
 
   async function handleLogout() {
     const supabase = createClient();

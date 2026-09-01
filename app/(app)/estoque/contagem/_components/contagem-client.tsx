@@ -32,6 +32,7 @@ import {
   fecharCiclo,
   importarSaidasDoAutomo,
   importarEntradasDoOmie,
+  sincronizarItensDoCiclo,
 } from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
 import { EstoquePrintDoc } from "./estoque-print-doc";
@@ -41,6 +42,8 @@ interface Props {
   temItensControlados:         boolean;
   ciclo:                       CicloView | null;
   itens:                       CicloItemView[];
+  /** Itens controlados que ficaram fora do ciclo aberto (cadastrados após a abertura). */
+  itensForaDoCiclo:            number;
   /** True enquanto sobrar item sem saldo de abertura (`contagem_anterior` null) no primeiro ciclo do local — modo "saldo de abertura" (ver bloco 6). Vira false sozinho quando o último saldo é registrado. */
   faltaSaldoAbertura:          boolean;
   /** True quando o local tem mais de uma unidade fiscal (CNPJ) — controla se o rateio por CNPJ aparece nos cards. */
@@ -73,6 +76,7 @@ export function ContagemClient({
   temItensControlados,
   ciclo,
   itens,
+  itensForaDoCiclo,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
   unidadesFiscais,
@@ -140,6 +144,7 @@ export function ContagemClient({
       local={local}
       ciclo={ciclo}
       itensIniciais={itens}
+      itensForaDoCiclo={itensForaDoCiclo}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
       unidadesFiscais={unidadesFiscais}
@@ -151,6 +156,7 @@ interface CicloAbertoViewProps {
   local:                       { id: string; nome: string };
   ciclo:                       CicloView;
   itensIniciais:               CicloItemView[];
+  itensForaDoCiclo:            number;
   faltaSaldoAbertura:          boolean;
   temMultiplasUnidadesFiscais: boolean;
   unidadesFiscais:             string[];
@@ -166,6 +172,7 @@ function CicloAbertoView({
   local,
   ciclo,
   itensIniciais,
+  itensForaDoCiclo,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
   unidadesFiscais,
@@ -176,6 +183,26 @@ function CicloAbertoView({
   const [importando, setImportando] = useState(false);
   const [importandoEntradas, setImportandoEntradas] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  async function handleSincronizar() {
+    setSincronizando(true);
+    try {
+      const res = await sincronizarItensDoCiclo(ciclo.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      toast.success(
+        res.adicionados === 0
+          ? "Nenhum item novo a trazer"
+          : `${res.adicionados} ${res.adicionados === 1 ? "item trazido" : "itens trazidos"} para a contagem`,
+      );
+      router.refresh();
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   // Sem guard de "montado": `printOpen` nasce false, então o portal nunca é
   // renderizado no servidor. Ele só vira true por clique, que já é client-side.
@@ -335,6 +362,34 @@ function CicloAbertoView({
       </header>
 
       <main className="flex-1 px-4 py-4 space-y-3">
+        {/*
+          Item cadastrado depois da abertura não entra no ciclo sozinho —
+          `abrirCiclo` materializa as linhas no momento da abertura. Sem este
+          aviso o item simplesmente não aparecia, sem nenhuma pista do porquê.
+        */}
+        {itensForaDoCiclo > 0 && (
+          <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 flex gap-3">
+            <AlertCircle size={16} className="text-sky-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm font-semibold text-foreground">
+                {itensForaDoCiclo} {itensForaDoCiclo === 1 ? "item novo" : "itens novos"} desde a abertura
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {itensForaDoCiclo === 1 ? "Ele foi cadastrado" : "Eles foram cadastrados"} depois
+                que esta contagem abriu, então ainda não {itensForaDoCiclo === 1 ? "aparece" : "aparecem"} na
+                lista. Traga {itensForaDoCiclo === 1 ? "ele" : "eles"} para o ciclo para poder contar.
+              </p>
+              <button
+                onClick={handleSincronizar}
+                disabled={sincronizando}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-sky-500/40 bg-sky-500/10 text-xs font-semibold text-sky-300 hover:bg-sky-500/20 transition-colors disabled:opacity-60"
+              >
+                {sincronizando ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                Trazer para a contagem
+              </button>
+            </div>
+          </div>
+        )}
         {faltaSaldoAbertura && (
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex gap-3">
             <Info size={16} className="text-emerald-500 shrink-0 mt-0.5" />

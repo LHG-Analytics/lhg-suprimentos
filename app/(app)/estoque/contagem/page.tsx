@@ -124,12 +124,25 @@ export default async function ContagemPage() {
   // normal — inclusive dentro do primeiro ciclo, no mesmo mês.
   const faltaSaldoAbertura = ehPrimeiroCiclo && itens.some((item) => item.contagemAnterior == null);
 
+  /*
+   * Itens controlados que ficaram fora do ciclo aberto.
+   *
+   * `abrirCiclo` materializa as linhas no momento da abertura, então item
+   * cadastrado depois não entra sozinho. Sem esse aviso ele simplesmente não
+   * aparecia na contagem — foi o que aconteceu com a COCA COLA cadastrada três
+   * dias depois de o ciclo de agosto abrir vazio.
+   */
+  const itensForaDoCiclo = cicloAberto
+    ? Math.max(0, (totalItensAtivos ?? 0) - itens.length)
+    : 0;
+
   return (
     <ContagemClient
       local={{ id: local.id, nome: local.nome }}
       temItensControlados={(totalItensAtivos ?? 0) > 0}
       ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
       itens={itens}
+      itensForaDoCiclo={itensForaDoCiclo}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
       unidadesFiscais={Array.from(nomePorUnidade.values()).sort((a, b) => a.localeCompare(b, "pt-BR"))}
