@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { removerItemEstoque, atualizarItemEstoque } from "../actions";
 import { MapearItemModal } from "./mapear-item-modal";
+import { VincularAutomoModal } from "./vincular-automo-modal";
 import type { ProdutoLhg, ItemEstoque, ResultadoAutomo } from "./tipos";
 
 interface Props {
@@ -64,27 +65,62 @@ function CarregandoAutomo() {
 }
 
 /**
- * Resolve o catálogo do Automo e renderiza o modal quando aberto.
+ * Resolve o catálogo do Automo e renderiza os modais que dependem dele.
  *
  * Fica montado desde o primeiro render de propósito — ver o comentário na
- * chamada. Só o `aberto` decide se o modal aparece; `use()` já resolveu bem
- * antes disso em qualquer unidade que não seja o Andar de Cima.
+ * chamada. Só as props decidem qual modal aparece; `use()` já resolveu bem antes
+ * disso em qualquer unidade que não seja o Andar de Cima.
+ *
+ * Os dois modais moram aqui porque os dois precisam do catálogo resolvido, e um
+ * segundo gate significaria uma segunda fronteira de Suspense esperando a mesma
+ * promise.
  */
-function ModalComAutomo({
+function ModaisComAutomo({
   promise,
-  aberto,
-  ...resto
+  cadastroAberto,
+  onFecharCadastro,
+  itemVinculando,
+  onFecharVinculo,
+  localId,
+  produtos,
+  jaControlados,
 }: {
   promise: Promise<ResultadoAutomo>;
-  aberto: boolean;
-  onClose: () => void;
+  cadastroAberto: boolean;
+  onFecharCadastro: () => void;
+  itemVinculando: ItemEstoque | null;
+  onFecharVinculo: () => void;
   localId: string;
   produtos: ProdutoLhg[];
   jaControlados: string[];
 }) {
   const { produtos: produtosAutomo } = use(promise);
-  if (!aberto) return null;
-  return <MapearItemModal produtosAutomo={produtosAutomo} {...resto} />;
+
+  if (itemVinculando) {
+    return (
+      <VincularAutomoModal
+        itemId={itemVinculando.id}
+        produtoNome={itemVinculando.produtos?.nome ?? "—"}
+        automoIdAtual={itemVinculando.automo_produto_id}
+        produtosAutomo={produtosAutomo}
+        onClose={onFecharVinculo}
+      />
+    );
+  }
+
+  if (cadastroAberto) {
+    return (
+      <MapearItemModal
+        produtosAutomo={produtosAutomo}
+        onClose={onFecharCadastro}
+        localId={localId}
+        produtos={produtos}
+        jaControlados={jaControlados}
+      />
+    );
+  }
+
+  return null;
 }
 
 /** Nome do produto vinculado no Automo. O fallback já era o comportamento de
@@ -177,6 +213,8 @@ export function EstoqueClient({
   const [modalOpen, setModalOpen] = useState(false);
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [confirmandoRemocao, setConfirmandoRemocao] = useState<string | null>(null);
+  /** Item cujo vínculo com o Automo está sendo corrigido. */
+  const [vinculando, setVinculando] = useState<ItemEstoque | null>(null);
   const [editando, setEditando] = useState<Edicao | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -294,19 +332,28 @@ export function EstoqueClient({
                       <td className="py-3 pr-4 text-muted-foreground text-xs">
                         {item.produtos?.categoria ?? "—"}
                       </td>
+                      {/* Célula clicável: é o caminho para corrigir o vínculo depois
+                          do cadastro, que antes não existia em lugar nenhum — o
+                          modal prometia "ajuste depois" e não havia onde. */}
                       <td className="py-3 pr-4 text-xs">
-                        {item.automo_produto_id == null ? (
-                          <span className="inline-flex items-center gap-1 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
-                            sem vínculo
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground" title={`Automo id ${item.automo_produto_id}`}>
-                            <Suspense fallback={`#${item.automo_produto_id}`}>
-                              <NomeAutomo promise={automoPromise} automoId={item.automo_produto_id} />
-                            </Suspense>
-                          </span>
-                        )}
+                        <button
+                          onClick={() => setVinculando(item)}
+                          title="Alterar o vínculo com o Automo"
+                          className="text-left rounded px-1 -mx-1 hover:bg-muted/60 transition-colors"
+                        >
+                          {item.automo_produto_id == null ? (
+                            <span className="inline-flex items-center gap-1 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                              sem vínculo
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground" title={`Automo id ${item.automo_produto_id}`}>
+                              <Suspense fallback={`#${item.automo_produto_id}`}>
+                                <NomeAutomo promise={automoPromise} automoId={item.automo_produto_id} />
+                              </Suspense>
+                            </span>
+                          )}
+                        </button>
                       </td>
                       <td className="py-3 pr-4 text-right">
                         <CelulaNumero
@@ -383,11 +430,13 @@ export function EstoqueClient({
         Sempre montado, a suspensão acontece no carregamento inicial, onde é
         legítima e vira apenas o fallback. O clique passa a só trocar um booleano.
       */}
-      <Suspense fallback={modalOpen ? <CarregandoAutomo /> : null}>
-        <ModalComAutomo
+      <Suspense fallback={modalOpen || vinculando ? <CarregandoAutomo /> : null}>
+        <ModaisComAutomo
           promise={automoPromise}
-          aberto={modalOpen}
-          onClose={() => setModalOpen(false)}
+          cadastroAberto={modalOpen}
+          onFecharCadastro={() => setModalOpen(false)}
+          itemVinculando={vinculando}
+          onFecharVinculo={() => setVinculando(null)}
           localId={local.id}
           produtos={produtos}
           jaControlados={itens.map((i) => i.produto_id)}
