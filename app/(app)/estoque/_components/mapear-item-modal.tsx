@@ -8,7 +8,7 @@
  * ideal. Os dois catálogos escrevem diferente, então a sugestão é um atalho e
  * a confirmação é sempre humana — nunca vínculo automático.
  */
-import { use, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Search, Loader2, Check, Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,28 +16,29 @@ import { cn } from "@/lib/utils";
 import { sugerirCandidatos } from "@/lib/estoque/mapeamento";
 import { adicionarItemEstoque } from "../actions";
 import type { ProdutoAutomo } from "@/lib/automo/client";
-import type { ProdutoLhg, ResultadoAutomo } from "./tipos";
+import type { ProdutoLhg } from "./tipos";
 
 interface Props {
   onClose:       () => void;
   localId:       string;
   produtos:      ProdutoLhg[];
   /**
-   * Catálogo do Automo, consumido com `use()`. Chega como promise porque a
-   * página não a aguarda no servidor (o banco do Andar de Cima leva ~8,8s só
-   * para conectar). O pai renderiza este modal dentro de um <Suspense>, então
-   * suspender aqui mostra o overlay de carregamento, não trava a tela.
+   * Catálogo do Automo já resolvido.
+   *
+   * Quem espera a promise é `ModalComAutomo`, no pai — e ele fica montado desde
+   * o primeiro render justamente para que a suspensão não aconteça em resposta
+   * ao clique que abre este modal (o React trata isso como erro). Aqui dentro,
+   * portanto, o dado sempre chega pronto.
    */
-  automoPromise: Promise<ResultadoAutomo>;
+  produtosAutomo: ProdutoAutomo[];
   jaControlados: string[];
 }
 
 const MAX_LISTA = 40;
 
 export function MapearItemModal({
-  onClose, localId, produtos, automoPromise, jaControlados,
+  onClose, localId, produtos, produtosAutomo, jaControlados,
 }: Props) {
-  const { produtos: produtosAutomo } = use(automoPromise);
   const router = useRouter();
   const [busca, setBusca]       = useState("");
   const [buscaAutomo, setBuscaAutomo] = useState("");

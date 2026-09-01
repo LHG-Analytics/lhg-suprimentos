@@ -63,6 +63,30 @@ function CarregandoAutomo() {
   );
 }
 
+/**
+ * Resolve o catálogo do Automo e renderiza o modal quando aberto.
+ *
+ * Fica montado desde o primeiro render de propósito — ver o comentário na
+ * chamada. Só o `aberto` decide se o modal aparece; `use()` já resolveu bem
+ * antes disso em qualquer unidade que não seja o Andar de Cima.
+ */
+function ModalComAutomo({
+  promise,
+  aberto,
+  ...resto
+}: {
+  promise: Promise<ResultadoAutomo>;
+  aberto: boolean;
+  onClose: () => void;
+  localId: string;
+  produtos: ProdutoLhg[];
+  jaControlados: string[];
+}) {
+  const { produtos: produtosAutomo } = use(promise);
+  if (!aberto) return null;
+  return <MapearItemModal produtosAutomo={produtosAutomo} {...resto} />;
+}
+
 /** Nome do produto vinculado no Automo. O fallback já era o comportamento de
  *  degradação existente (`#id`), então a espera não introduz estado novo. */
 function NomeAutomo({
@@ -346,21 +370,29 @@ export function EstoqueClient({
         )}
       </div>
 
-      {/* Renderizado só quando aberto (antes ficava montado sempre, retornando
-          null): é o que permite ao modal consumir `automoPromise` com `use()`
-          sem suspender a tela toda, e faz o wizard de 3 passos recomeçar do
-          passo 1 a cada abertura. */}
-      {modalOpen && (
-        <Suspense fallback={<CarregandoAutomo />}>
-          <MapearItemModal
-            onClose={() => setModalOpen(false)}
-            localId={local.id}
-            produtos={produtos}
-            automoPromise={automoPromise}
-            jaControlados={itens.map((i) => i.produto_id)}
-          />
-        </Suspense>
-      )}
+      {/*
+        `ModalComAutomo` fica SEMPRE montado, mesmo com o modal fechado.
+
+        ⚠️ Isto não é detalhe de estilo: a versão anterior montava o subtree que
+        chama `use()` a partir do clique, e `setModalOpen(true)` é atualização
+        SÍNCRONA. O React trata "subtree novo suspendeu em resposta a input
+        síncrono" como ERRO, não como carregamento ("updates that suspend should
+        be wrapped with startTransition") — e o erro subia até o error.tsx,
+        derrubando a página inteira no clique de "Adicionar item".
+
+        Sempre montado, a suspensão acontece no carregamento inicial, onde é
+        legítima e vira apenas o fallback. O clique passa a só trocar um booleano.
+      */}
+      <Suspense fallback={modalOpen ? <CarregandoAutomo /> : null}>
+        <ModalComAutomo
+          promise={automoPromise}
+          aberto={modalOpen}
+          onClose={() => setModalOpen(false)}
+          localId={local.id}
+          produtos={produtos}
+          jaControlados={itens.map((i) => i.produto_id)}
+        />
+      </Suspense>
     </div>
   );
 }
