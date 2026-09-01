@@ -121,17 +121,48 @@ export async function somarSaidasPorProduto(
   });
 }
 
+/** Linha crua de `listarProdutosAutomo`, com os tipos que o driver DE FATO devolve. */
+export interface ProdutoAutomoRow {
+  id:        number | string;
+  /** `produto.codigo` é `integer` nos 4 bancos — chega como NUMBER, não string. */
+  codigo:    number | string | null;
+  descricao: string | null;
+  tipo:      string | null;
+}
+
+/**
+ * Converte a linha crua no tipo público.
+ *
+ * ⚠️ Existe por causa de um bug em produção: a interface declarava
+ * `codigo: string | null`, mas a coluna é `integer` nos quatro bancos e o `pg`
+ * devolve number. A busca no catálogo fazia `(p.codigo ?? "").toLowerCase()` —
+ * `??` protege de null, não de tipo — e estourava
+ * `p.codigo.toLowerCase is not a function` a cada tecla digitada, derrubando a
+ * tela no error.tsx.
+ *
+ * O TypeScript não pegou porque o tipo vinha de `client.query<{...}>()`:
+ * genérico escrito à mão é AFIRMAÇÃO, não validação. Declarei uma mentira e o
+ * compilador acreditou. A conversão fica aqui, na fronteira, para o tipo público
+ * passar a ser verdade — e é função exportada para ter teste.
+ */
+export function normalizarProdutoAutomo(row: ProdutoAutomoRow): ProdutoAutomo {
+  return {
+    id:        Number(row.id),
+    codigo:    row.codigo == null ? null : String(row.codigo),
+    descricao: row.descricao ?? "",
+    tipo:      row.tipo,
+  };
+}
+
 export async function listarProdutosAutomo(connKey: string): Promise<ProdutoAutomo[]> {
   return comCliente(connKey, async (client) => {
-    const { rows } = await client.query<{
-      id: number; codigo: string | null; descricao: string; tipo: string | null;
-    }>(`
+    const { rows } = await client.query<ProdutoAutomoRow>(`
       SELECT p.id, p.codigo, p.descricao, tp.descricao AS tipo
       FROM produto p
       LEFT JOIN tipoproduto tp ON tp.id = p.id_tipoproduto
       WHERE p.dataexclusao IS NULL
       ORDER BY p.descricao
     `);
-    return rows.map(r => ({ ...r, id: Number(r.id) }));
+    return rows.map(normalizarProdutoAutomo);
   });
 }
