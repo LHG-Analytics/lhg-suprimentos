@@ -22,7 +22,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Check, AlertCircle, Boxes, Download, Info, Printer, FileSpreadsheet, X } from "lucide-react";
+import { Loader2, Check, AlertCircle, Boxes, Download, Info, Printer, FileSpreadsheet, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
 import {
@@ -37,6 +37,7 @@ import {
 } from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
 import { EstoquePrintDoc } from "./estoque-print-doc";
+import { ImportarContagemModal } from "./importar-contagem-modal";
 
 interface Props {
   local:                        { id: string; nome: string };
@@ -184,6 +185,7 @@ function CicloAbertoView({
   const [importando, setImportando] = useState(false);
   const [importandoEntradas, setImportandoEntradas] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [virandoMes, setVirandoMes] = useState(false);
   const [descartando, setDescartando] = useState(false);
@@ -396,6 +398,17 @@ function CicloAbertoView({
               <FileSpreadsheet size={14} />
               <span className="hidden lg:inline">Excel</span>
             </a>
+            {/* Caminho inverso da exportação: a equipe preenche a coluna de
+                contagem na planilha e sobe o mesmo arquivo de volta. É o que
+                torna viável o saldo de abertura, com centenas de itens. */}
+            <button
+              onClick={() => setImportOpen(true)}
+              title="Importar contagem do Excel"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Upload size={14} />
+              <span className="hidden lg:inline">Importar Excel</span>
+            </button>
 
             <p className="text-xs font-medium text-muted-foreground">
               {contados} de {total} contados
@@ -549,6 +562,14 @@ function CicloAbertoView({
           </button>
         )}
       </footer>
+
+      {importOpen && (
+        <ImportarContagemModal
+          cicloId={ciclo.id}
+          mesRotulo={`${local.nome} · ${rotuloMes(ciclo.mes)}`}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
 
       {/* Overlay de impressão — portal como filho direto do <body> para o CSS de
           print poder esconder todo o resto do app pelo seletor de irmãos. */}

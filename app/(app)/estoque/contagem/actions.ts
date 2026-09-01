@@ -14,6 +14,13 @@ import { createClient } from "@/lib/supabase/server";
 import { somarSaidasPorProduto, AutomoIndisponivelError } from "@/lib/automo/client";
 import { converterSaidas, type ItemMapeado } from "@/lib/estoque/saidas";
 import { resolverChavesOmiePorUnidade, somarEntradasPorItem, type ProdutoRef } from "@/lib/estoque/entradas";
+import {
+  montarPrevia,
+  type ItemDoCiclo,
+  type ModoContagem,
+  type Previa,
+} from "@/lib/estoque/import-contagem";
+import { lerLinhasDaPlanilha } from "@/lib/estoque/planilha-contagem";
 import { somarEntradasOmie } from "@/lib/omie/client";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
@@ -741,4 +748,237 @@ export async function descartarCiclo(
 
   revalidatePath("/estoque/contagem");
   return { ok: true };
+}
+
+// ── Importação da contagem por planilha ─────────────────────────────────────
+
+/**
+ * Decide se o ciclo está lançando saldo de abertura ou contagem de fechamento.
+ *
+ * Mesma regra da tela (`faltaSaldoAbertura` em contagem/page.tsx) e da
+ * exportação, recalculada aqui no servidor: é ela que determina em QUAL COLUNA
+ * do banco o import escreve, e isso não pode vir do cliente.
+ */
+async function resolverModoCiclo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ciclo: { id: string; local_id: string; mes: string },
+): Promise<ModoContagem> {
+  const { count: ciclosAnteriores } = await supabase
+    .from("estoque_ciclos")
+    .select("id", { count: "exact", head: true })
+    .eq("local_id", ciclo.local_id)
+    .lt("mes", ciclo.mes);
+  if ((ciclosAnteriores ?? 0) > 0) return "fechamento";
+
+  const { count: semAbertura } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id", { count: "exact", head: true })
+    .eq("ciclo_id", ciclo.id)
+    .is("contagem_anterior", null);
+  return (semAbertura ?? 0) > 0 ? "abertura" : "fechamento";
+}
+
+type ItemCicloParaImport = {
+  id: string;
+  contagem_anterior: number | null;
+  contagem_atual: number | null;
+  estoque_itens: { produtos: { nome: string; codigo: string } | null } | null;
+};
+
+export type ResultadoAnalise =
+  | {
+      ok: true;
+      modo: ModoContagem;
+      previa: Previa;
+      linhasLidas: number;
+      /** Linhas com contagem preenchida descartadas por não vir da exportação. */
+      linhasSemVinculo: number;
+    }
+  | { erro: string };
+
+/**
+ * Lê a planilha enviada e devolve o que MUDARIA, sem gravar nada.
+ *
+ * Analisar e aplicar são separados porque um import de contagem sobrescreve o mês
+ * inteiro de uma vez: sem ver o diff antes, um arquivo errado (mês trocado,
+ * coluna trocada, meia planilha preenchida) só apareceria depois de o dano estar
+ * gravado.
+ */
+export async function analisarPlanilhaContagem(
+  formData: FormData,
+): Promise<ResultadoAnalise> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const cicloId = formData.get("cicloId");
+  const arquivo = formData.get("arquivo");
+  if (typeof cicloId !== "string" || !z.string().uuid().safeParse(cicloId).success) {
+    return { erro: "Ciclo inválido" };
+  }
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { erro: "Nenhum arquivo enviado." };
+  }
+
+  const { data: ciclo, error: errCiclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, local_id, mes, status")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (errCiclo) return { erro: errCiclo.message };
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") {
+    return { erro: "Ciclo já fechado — não é possível importar contagem." };
+  }
+
+  const modo = await resolverModoCiclo(supabase, ciclo);
+
+  // Carregado sob demanda: `exceljs` pesa ~1 MB e este mesmo arquivo exporta
+  // `registrarContagem`, chamada a cada item salvo na contagem pelo celular.
+  const { default: ExcelJS } = await import("exceljs");
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.load(await arquivo.arrayBuffer());
+  } catch {
+    return { erro: "Não foi possível ler este arquivo. Ele é um .xlsx válido?" };
+  }
+
+  const ws = wb.worksheets[0];
+  if (!ws) return { erro: "A planilha está vazia." };
+
+  // Leitura da planilha em módulo próprio e testado (lib/estoque/planilha-contagem)
+  // — é a parte que só um .xlsx de verdade exercita.
+  const leitura = lerLinhasDaPlanilha(ws, modo);
+  if ("erro" in leitura) return { erro: leitura.erro };
+  const linhasPlanilha = leitura.linhas;
+
+  const { data: itensRaw, error: errItens } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, contagem_anterior, contagem_atual, estoque_itens(produtos(nome, codigo))")
+    .eq("ciclo_id", cicloId);
+  if (errItens) return { erro: errItens.message };
+
+  const itensCiclo: ItemDoCiclo[] = ((itensRaw ?? []) as unknown as ItemCicloParaImport[]).map((row) => ({
+    cicloItemId: row.id,
+    codigo: row.estoque_itens?.produtos?.codigo ?? "",
+    nome: row.estoque_itens?.produtos?.nome ?? "",
+    // "Valor atual" é o do campo que ESTE import preenche — comparar com o outro
+    // faria a prévia dizer "novo" onde vai substituir.
+    valorAtual: modo === "abertura" ? row.contagem_anterior : row.contagem_atual,
+  }));
+
+  return {
+    ok: true,
+    modo,
+    previa: montarPrevia(linhasPlanilha, itensCiclo),
+    linhasLidas: linhasPlanilha.length,
+    linhasSemVinculo: leitura.linhasSemVinculo,
+  };
+}
+
+const AplicarSchema = z.object({
+  cicloId: z.string().uuid(),
+  linhas: z
+    .array(z.object({ cicloItemId: z.string().uuid(), valor: z.number().min(0) }))
+    .min(1, "Nada para aplicar"),
+});
+
+/** Lotes do upsert — corpo de request grande demais falha sem mensagem útil. */
+const LOTE_UPSERT = 200;
+
+/**
+ * Grava as linhas confirmadas na prévia.
+ *
+ * Revalida tudo do zero: o modo (que define a COLUNA gravada) e a lista de itens
+ * do ciclo são resolvidos aqui no servidor, nunca aceitos do cliente. A prévia é
+ * conveniência de UI; a autoridade é esta função.
+ */
+export async function aplicarContagemImportada(
+  input: z.infer<typeof AplicarSchema>,
+): Promise<{ ok: true; gravados: number } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const parsed = AplicarSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+  const { cicloId, linhas } = parsed.data;
+
+  const { data: ciclo, error: errCiclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, local_id, mes, status")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (errCiclo) return { erro: errCiclo.message };
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") {
+    return { erro: "Ciclo já fechado — não é possível importar contagem." };
+  }
+
+  const modo = await resolverModoCiclo(supabase, ciclo);
+
+  const { data: itensCiclo, error: errItens } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, estoque_item_id")
+    .eq("ciclo_id", cicloId);
+  if (errItens) return { erro: errItens.message };
+
+  const itemPorId = new Map((itensCiclo ?? []).map((i) => [i.id, i.estoque_item_id]));
+  const forasteiras = linhas.filter((l) => !itemPorId.has(l.cicloItemId));
+  if (forasteiras.length > 0) {
+    return {
+      erro:
+        `${forasteiras.length} ${forasteiras.length === 1 ? "linha não pertence" : "linhas não pertencem"} ` +
+        `a esta contagem.`,
+    };
+  }
+
+  const agora = new Date().toISOString();
+
+  /*
+   * Upsert por `id` em lotes, não um UPDATE por linha: uma contagem de abertura
+   * pode passar de mil itens, e mil requests sequenciais estouram o tempo da
+   * action. `ciclo_id`/`estoque_item_id` vão no payload porque são NOT NULL e o
+   * upsert precisa deles no caminho de insert — que na prática nunca ocorre, já
+   * que toda linha foi validada como pertencente ao ciclo logo acima.
+   *
+   * ⚠️ Diferente de `registrarInventarioInicial`, aqui sobrescrever um saldo de
+   * abertura já preenchido é permitido: a prévia mostrou "substitui X → Y" e a
+   * pessoa confirmou. O guard de lá protege valor HERDADO de ciclo anterior, que
+   * no modo abertura (primeiro ciclo do local) não existe.
+   */
+  let gravados = 0;
+
+  for (let i = 0; i < linhas.length; i += LOTE_UPSERT) {
+    // Ramo explícito em vez de chave computada (`[campo]: valor`): a chave
+    // dinâmica vira índice de string no tipo e os tipos gerados do Supabase a
+    // recusam — além de esconder, na leitura, qual coluna está sendo escrita.
+    const lote = linhas.slice(i, i + LOTE_UPSERT).map((l) => {
+      const base = {
+        id: l.cicloItemId,
+        ciclo_id: cicloId,
+        estoque_item_id: itemPorId.get(l.cicloItemId)!,
+        contado_por: user.id,
+        contado_em: agora,
+      };
+      return modo === "abertura"
+        ? { ...base, contagem_anterior: l.valor }
+        : { ...base, contagem_atual: l.valor };
+    });
+
+    const { error } = await supabase
+      .from("estoque_ciclo_itens")
+      .upsert(lote, { onConflict: "id" });
+    if (error) {
+      return {
+        erro:
+          `Falha ao gravar (${gravados} ${gravados === 1 ? "item gravado" : "itens gravados"} antes): ` +
+          `${error.message}`,
+      };
+    }
+    gravados += lote.length;
+  }
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true, gravados };
 }
