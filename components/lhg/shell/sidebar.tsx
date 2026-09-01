@@ -8,12 +8,12 @@
  */
 
 import { useMemo } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  Sun, Moon, LogOut, PanelLeftClose, PanelLeftOpen, ChevronDown, Check,
+  Sun, Moon, LogOut, PanelLeftClose, PanelLeftOpen, ChevronDown, Check, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -78,7 +78,20 @@ function UserAvatar({ name, avatarUrl, size = 30 }: { name: string; avatarUrl?: 
 }
 
 // ── Item de navegação ──────────────────────────────────────────────────────────
-function NavLink({
+
+/**
+ * Corpo do item, renderizado DENTRO do `<Link>`.
+ *
+ * Existe separado por exigência do `useLinkStatus`: o hook só funciona em
+ * componente descendente do `<Link>`, então o corpo inteiro (fundo, ícone,
+ * rótulo) desce para cá em vez de ficar nas classes do próprio Link.
+ *
+ * O que ele resolve: mesmo com `loading.tsx` em toda rota, o clique no menu não
+ * dizia QUAL item foi clicado — o skeleton aparece na área de conteúdo, e em
+ * tela grande o olho está no menu. Trocar o ícone por um spinner e acender o
+ * item responde na hora, no lugar onde a pessoa clicou.
+ */
+function NavLinkCorpo({
   item,
   active,
   collapsed,
@@ -87,28 +100,36 @@ function NavLink({
   active: boolean;
   collapsed: boolean;
 }) {
+  const { pending } = useLinkStatus();
   const Icon = item.icon;
+
+  // Item em trânsito recebe o mesmo destaque do ativo: a navegação já começou,
+  // e esperar a rota trocar para acender deixaria o clique sem resposta.
+  const destacado = active || pending;
+
   return (
-    <Link
-      href={item.href}
-      title={collapsed ? item.label : undefined}
+    <div
       className={cn(
         "w-full flex items-center gap-2.5 rounded-md transition-colors group",
         collapsed ? "h-10 justify-center" : "h-9 px-2.5",
-        active
+        destacado
           ? "bg-sidebar-accent text-sidebar-foreground"
           : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
       )}
     >
-      <Icon
-        size={16}
-        className={cn(
-          "shrink-0",
-          active
-            ? "text-lhg-500"
-            : "text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70",
-        )}
-      />
+      {pending ? (
+        <Loader2 size={16} className="shrink-0 animate-spin text-lhg-500" />
+      ) : (
+        <Icon
+          size={16}
+          className={cn(
+            "shrink-0",
+            active
+              ? "text-lhg-500"
+              : "text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70",
+          )}
+        />
+      )}
       {!collapsed && (
         <>
           <span className="text-sm flex-1 text-left leading-none">{item.label}</span>
@@ -124,6 +145,26 @@ function NavLink({
             ))}
         </>
       )}
+    </div>
+  );
+}
+
+function NavLink({
+  item,
+  active,
+  collapsed,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+}) {
+  return (
+    <Link
+      href={item.href}
+      title={collapsed ? item.label : undefined}
+      className="block w-full rounded-md"
+    >
+      <NavLinkCorpo item={item} active={active} collapsed={collapsed} />
     </Link>
   );
 }

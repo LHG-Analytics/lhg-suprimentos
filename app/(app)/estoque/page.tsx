@@ -13,7 +13,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { listarProdutosAutomo, AutomoIndisponivelError } from "@/lib/automo/client";
 import { normalizarNome } from "@/lib/estoque/mapeamento";
 import { EstoqueClient } from "./_components/estoque-client";
-import type { ProdutoLhg, ItemEstoque } from "./_components/tipos";
+import type { ProdutoLhg, ItemEstoque, ResultadoAutomo } from "./_components/tipos";
 
 export const metadata = { title: "Estoque" };
 
@@ -115,21 +115,18 @@ export default async function EstoquePage() {
     });
   }
 
-  // O Automo cai com frequência (o banco do Andar de Cima em particular). Uma
-  // falha aqui não pode derrubar a tela — ela degrada para cadastro sem sugestão.
-  let produtosAutomo: Awaited<ReturnType<typeof listarProdutosAutomo>> = [];
-  let automoErro: string | null = null;
-  if (local.automo_conn_key) {
-    try {
-      produtosAutomo = await listarProdutosAutomo(local.automo_conn_key);
-    } catch (err) {
-      automoErro =
-        err instanceof AutomoIndisponivelError
-          ? "Banco do Automo indisponível — o cadastro funciona, mas sem sugestão de mapeamento."
-          : "Erro inesperado ao ler o Automo.";
-      console.error("[estoque] Automo:", err);
-    }
-  }
+  /*
+   * O catálogo do Automo NÃO é aguardado aqui — a promise vai para o cliente e é
+   * consumida com `use()` dentro de fronteiras de Suspense.
+   *
+   * Medido em 01/09/2026: Ipiranga 193ms, Lapa 254ms, Altana 352ms e
+   * **Andar de Cima 8.847ms** — 8,8s só no handshake da conexão (a query em si
+   * leva 23ms). Com `await` aqui, essa unidade esperava 9 segundos antes de
+   * pintar qualquer coisa, e o `connectionTimeoutMillis` de 10s ficava a 1,2s de
+   * estourar. E o dado do Automo serve apenas para sugerir mapeamento e mostrar
+   * o nome do item vinculado: nada disso é necessário na primeira pintura.
+   */
+  const automoPromise = carregarAutomo(local.automo_conn_key);
 
   return (
     <EstoqueClient
@@ -137,8 +134,31 @@ export default async function EstoquePage() {
       unidadesFiscais={local.local_unidade.map((lu) => lu.unidades?.nome ?? "—")}
       itens={(itens ?? []) as ItemEstoque[]}
       produtos={produtos}
-      produtosAutomo={produtosAutomo}
-      automoErro={automoErro}
+      automoPromise={automoPromise}
     />
   );
+}
+
+/**
+ * Lê o catálogo do Automo e **nunca rejeita**.
+ *
+ * Rejeição importa aqui porque a promise atravessa a fronteira servidor→cliente:
+ * uma promise rejeitada que ninguém consumiu (o usuário fecha a página antes de
+ * ela resolver) vira unhandled rejection no servidor. Devolver o erro como valor
+ * mantém o tratamento explícito no componente que o exibe.
+ */
+async function carregarAutomo(connKey: string | null): Promise<ResultadoAutomo> {
+  if (!connKey) return { produtos: [], erro: null };
+  try {
+    return { produtos: await listarProdutosAutomo(connKey), erro: null };
+  } catch (err) {
+    console.error("[estoque] Automo:", err);
+    return {
+      produtos: [],
+      erro:
+        err instanceof AutomoIndisponivelError
+          ? "Banco do Automo indisponível — o cadastro funciona, mas sem sugestão de mapeamento."
+          : "Erro inesperado ao ler o Automo.",
+    };
+  }
 }

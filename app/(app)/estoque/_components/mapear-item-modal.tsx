@@ -8,7 +8,7 @@
  * ideal. Os dois catálogos escrevem diferente, então a sugestão é um atalho e
  * a confirmação é sempre humana — nunca vínculo automático.
  */
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Search, Loader2, Check, Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,22 +16,28 @@ import { cn } from "@/lib/utils";
 import { sugerirCandidatos } from "@/lib/estoque/mapeamento";
 import { adicionarItemEstoque } from "../actions";
 import type { ProdutoAutomo } from "@/lib/automo/client";
-import type { ProdutoLhg } from "./tipos";
+import type { ProdutoLhg, ResultadoAutomo } from "./tipos";
 
 interface Props {
-  open:           boolean;
-  onClose:        () => void;
-  localId:        string;
-  produtos:       ProdutoLhg[];
-  produtosAutomo: ProdutoAutomo[];
-  jaControlados:  string[];
+  onClose:       () => void;
+  localId:       string;
+  produtos:      ProdutoLhg[];
+  /**
+   * Catálogo do Automo, consumido com `use()`. Chega como promise porque a
+   * página não a aguarda no servidor (o banco do Andar de Cima leva ~8,8s só
+   * para conectar). O pai renderiza este modal dentro de um <Suspense>, então
+   * suspender aqui mostra o overlay de carregamento, não trava a tela.
+   */
+  automoPromise: Promise<ResultadoAutomo>;
+  jaControlados: string[];
 }
 
 const MAX_LISTA = 40;
 
 export function MapearItemModal({
-  open, onClose, localId, produtos, produtosAutomo, jaControlados,
+  onClose, localId, produtos, automoPromise, jaControlados,
 }: Props) {
+  const { produtos: produtosAutomo } = use(automoPromise);
   const router = useRouter();
   const [busca, setBusca]       = useState("");
   const [buscaAutomo, setBuscaAutomo] = useState("");
@@ -88,8 +94,6 @@ export function MapearItemModal({
       })
       .filter((v): v is { item: ProdutoAutomo; score: number } => v != null);
   }, [buscaAutomo, produtosAutomo, sugestoes]);
-
-  if (!open) return null;
 
   function fechar() {
     setBusca("");

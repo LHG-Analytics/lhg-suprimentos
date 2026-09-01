@@ -18,33 +18,34 @@ export default async function AppLayout({
 }) {
   const supabase = await createClient();
 
-  // ── Valida autenticação ────────────────────────────────────────────────────
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /*
+   * Este layout roda antes de QUALQUER página do app, então cada ida ao banco
+   * aqui é latência somada a toda navegação que precise revalidá-lo. Antes eram
+   * 4 idas EM SÉRIE: getUser → unidades → cotacao_unidades → (perfil ‖ badge).
+   * Agora são 2, em duas rodadas paralelas.
+   */
+  const slug = (await cookies()).get("lhg-unidade-slug")?.value ?? "todas";
+
+  // ── Rodada 1: autenticação e unidade ativa, em paralelo ────────────────────
+  // A consulta de unidade não depende do usuário, então esperar o `getUser()`
+  // para começá-la era desperdício. Ela roda sob RLS com a sessão do próprio
+  // usuário — sem sessão válida não retorna nada, e o redirect abaixo corta o
+  // fluxo antes de qualquer coisa chegar ao cliente.
+  const [
+    { data: { user } },
+    { data: unidade },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    slug && slug !== "todas"
+      ? supabase.from("unidades").select("id").eq("slug", slug).maybeSingle()
+      : Promise.resolve({ data: null as { id: string } | null }),
+  ]);
 
   if (!user) redirect("/login");
 
-  // ── Unidade ativa (cookie) — o badge de cotações segue o seletor ────────────
-  const cookieStore = await cookies();
-  const slug = cookieStore.get("lhg-unidade-slug")?.value ?? "todas";
-  let unidadeId: string | null = null;
-  if (slug && slug !== "todas") {
-    const { data: u } = await supabase.from("unidades").select("id").eq("slug", slug).single();
-    unidadeId = u?.id ?? null;
-  }
+  const unidadeId = unidade?.id ?? null;
 
-  // IDs das cotações da unidade ativa (null = todas as unidades, sem filtro)
-  let cotIds: string[] | null = null;
-  if (unidadeId) {
-    const { data: cu } = await supabase
-      .from("cotacao_unidades")
-      .select("cotacao_id")
-      .eq("unidade_id", unidadeId);
-    cotIds = (cu ?? []).map((r) => r.cotacao_id);
-  }
-
-  // ── Busca perfil e badge em paralelo ───────────────────────────────────────
+  // ── Rodada 2: perfil e badge, em paralelo ──────────────────────────────────
   const [
     { data: profile },
     { count: cotacoesBadge },
@@ -54,18 +55,30 @@ export default async function AppLayout({
       .select("nome, email, role, avatar_url")
       .eq("id", user.id)
       .single(),
+    /*
+     * Badge em UMA consulta, com join embutido, em vez de buscar os ids das
+     * cotações da unidade e depois contá-los. Conferido contra a abordagem
+     * antiga nas 6 unidades (via supabase-js, no banco de produção): contagens
+     * idênticas. O filtro por unidade continua sendo o do seletor.
+     *
+     * `unidadeId` nulo (unidade "todas", ou slug de cookie que não existe) conta
+     * o consolidado — mesmo comportamento de antes, preservado de propósito para
+     * esta mudança ser só de latência.
+     */
     (() => {
-      // Unidade específica sem nenhuma cotação → badge 0 (sem consulta extra)
-      if (cotIds !== null && cotIds.length === 0) {
-        return Promise.resolve({ count: 0 });
+      if (unidadeId == null) {
+        return supabase
+          .from("cotacoes")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["rascunho", "cotacao", "pendente"])
+          .is("deleted_at", null);
       }
-      let q = supabase
+      return supabase
         .from("cotacoes")
-        .select("*", { count: "exact", head: true })
+        .select("id, cotacao_unidades!inner(unidade_id)", { count: "exact", head: true })
         .in("status", ["rascunho", "cotacao", "pendente"])
-        .is("deleted_at", null);
-      if (cotIds !== null) q = q.in("id", cotIds);
-      return q;
+        .is("deleted_at", null)
+        .eq("cotacao_unidades.unidade_id", unidadeId);
     })(),
   ]);
 

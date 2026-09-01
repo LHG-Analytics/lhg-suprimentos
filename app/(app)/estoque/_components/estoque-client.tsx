@@ -8,23 +8,72 @@
  * calibrado com o uso (a gramagem de uma porção muda), então precisa ser
  * ajustável sem remover e recadastrar o item.
  */
-import { useState } from "react";
+import { Suspense, use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, AlertTriangle, Boxes, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { removerItemEstoque, atualizarItemEstoque } from "../actions";
 import { MapearItemModal } from "./mapear-item-modal";
-import type { ProdutoAutomo } from "@/lib/automo/client";
-import type { ProdutoLhg, ItemEstoque } from "./tipos";
+import type { ProdutoLhg, ItemEstoque, ResultadoAutomo } from "./tipos";
 
 interface Props {
   local:           { id: string; nome: string };
   unidadesFiscais: string[];
   itens:           ItemEstoque[];
   produtos:        ProdutoLhg[];
-  produtosAutomo:  ProdutoAutomo[];
-  automoErro:      string | null;
+  /**
+   * Catálogo do Automo ainda em voo. Não é aguardado no servidor porque o banco
+   * do Andar de Cima leva ~8,8s só para conectar — esperar por ele atrasava a
+   * primeira pintura da tela inteira por dado que só serve a duas coisas
+   * secundárias (sugestão de mapeamento e nome do item vinculado).
+   */
+  automoPromise:   Promise<ResultadoAutomo>;
+}
+
+/** Aviso de Automo indisponível. Em Suspense com fallback nulo: enquanto o
+ *  catálogo carrega não há erro a mostrar, e um placeholder aqui só piscaria. */
+function AvisoAutomo({ promise }: { promise: Promise<ResultadoAutomo> }) {
+  const { erro } = use(promise);
+  if (!erro) return null;
+  return (
+    <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.08] px-4 py-3 flex items-start gap-2">
+      <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+      <p className="text-xs text-amber-300/90">{erro}</p>
+    </div>
+  );
+}
+
+/**
+ * Overlay enquanto o catálogo do Automo não chegou.
+ *
+ * Só aparece se a pessoa abrir o modal antes de a promise resolver — o que na
+ * prática acontece apenas no Andar de Cima (8,8s de conexão). Nas outras
+ * unidades o catálogo já está pronto (< 400ms) e este estado nunca é visto.
+ */
+function CarregandoAutomo() {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[8vh] px-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="relative w-full max-w-[620px] rounded-xl border border-border bg-background shadow-2xl px-5 py-8 flex items-center justify-center gap-2.5">
+        <Loader2 size={15} className="animate-spin text-emerald-500" />
+        <p className="text-sm text-muted-foreground">Carregando o catálogo do Automo…</p>
+      </div>
+    </div>
+  );
+}
+
+/** Nome do produto vinculado no Automo. O fallback já era o comportamento de
+ *  degradação existente (`#id`), então a espera não introduz estado novo. */
+function NomeAutomo({
+  promise,
+  automoId,
+}: {
+  promise: Promise<ResultadoAutomo>;
+  automoId: number;
+}) {
+  const { produtos } = use(promise);
+  return <>{produtos.find((p) => p.id === automoId)?.descricao ?? `#${automoId}`}</>;
 }
 
 type Campo = "fator" | "ideal";
@@ -98,7 +147,7 @@ function CelulaNumero({
 }
 
 export function EstoqueClient({
-  local, unidadesFiscais, itens, produtos, produtosAutomo, automoErro,
+  local, unidadesFiscais, itens, produtos, automoPromise,
 }: Props) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
@@ -171,12 +220,9 @@ export function EstoqueClient({
         </button>
       </div>
 
-      {automoErro && (
-        <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.08] px-4 py-3 flex items-start gap-2">
-          <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-300/90">{automoErro}</p>
-        </div>
-      )}
+      <Suspense fallback={null}>
+        <AvisoAutomo promise={automoPromise} />
+      </Suspense>
 
       {semMapeamento > 0 && (
         <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-4 py-3 flex items-start gap-2">
@@ -213,7 +259,6 @@ export function EstoqueClient({
               <tbody>
                 {itens.map((item) => {
                   const nome = item.produtos?.nome ?? "—";
-                  const noAutomo = produtosAutomo.find((p) => p.id === item.automo_produto_id);
                   return (
                     <tr key={item.id} className="border-b border-border/40 hover:bg-muted/50 transition-colors">
                       <td className="py-3 pr-4">
@@ -233,7 +278,9 @@ export function EstoqueClient({
                           </span>
                         ) : (
                           <span className="text-muted-foreground" title={`Automo id ${item.automo_produto_id}`}>
-                            {noAutomo?.descricao ?? `#${item.automo_produto_id}`}
+                            <Suspense fallback={`#${item.automo_produto_id}`}>
+                              <NomeAutomo promise={automoPromise} automoId={item.automo_produto_id} />
+                            </Suspense>
                           </span>
                         )}
                       </td>
@@ -299,14 +346,21 @@ export function EstoqueClient({
         )}
       </div>
 
-      <MapearItemModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        localId={local.id}
-        produtos={produtos}
-        produtosAutomo={produtosAutomo}
-        jaControlados={itens.map((i) => i.produto_id)}
-      />
+      {/* Renderizado só quando aberto (antes ficava montado sempre, retornando
+          null): é o que permite ao modal consumir `automoPromise` com `use()`
+          sem suspender a tela toda, e faz o wizard de 3 passos recomeçar do
+          passo 1 a cada abertura. */}
+      {modalOpen && (
+        <Suspense fallback={<CarregandoAutomo />}>
+          <MapearItemModal
+            onClose={() => setModalOpen(false)}
+            localId={local.id}
+            produtos={produtos}
+            automoPromise={automoPromise}
+            jaControlados={itens.map((i) => i.produto_id)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
