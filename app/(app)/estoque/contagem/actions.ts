@@ -681,3 +681,64 @@ export async function importarEntradasDoOmie(
     ajustesDetectados: ajustesMerged.size,
   };
 }
+
+/**
+ * Apaga um ciclo aberto em que ninguém registrou nada — ciclo de teste, ou
+ * aberto por engano num mês que a equipe acabou não contando.
+ *
+ * Existe porque `fecharCiclo` exige todos os itens contados: um ciclo de mês
+ * passado com item não contado não fechava, e como o botão "Abrir contagem" só
+ * aparece quando NÃO há ciclo aberto, o módulo ficava trancado — nem fechava o
+ * mês velho, nem abria o novo. Foi o que aconteceu com o ciclo de agosto/2026 do
+ * Lush Ipiranga, aberto num teste e deixado para trás.
+ *
+ * Só apaga quando nenhum item tem `contado_em` — ou seja, quando não existe
+ * número digitado por ninguém para perder. Ciclo com contagem de verdade tem que
+ * ser FECHADO (o que preserva o histórico e alimenta o `contagem_anterior` do mês
+ * seguinte), nunca apagado: `estoque_ciclo_itens` cai por CASCATA junto.
+ */
+export async function descartarCiclo(
+  cicloId: string,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const { data: ciclo, error: errCiclo } = await supabase
+    .from("estoque_ciclos")
+    .select("id, status")
+    .eq("id", cicloId)
+    .maybeSingle();
+  if (errCiclo) return { erro: errCiclo.message };
+  if (!ciclo) return { erro: "Ciclo não encontrado" };
+  if (ciclo.status === "fechado") {
+    return { erro: "Ciclo já fechado — o histórico não pode ser apagado." };
+  }
+
+  /*
+   * `contado_em` é o único campo que distingue número DIGITADO de número
+   * HERDADO: `abrirCiclo` copia `contagem_anterior` do ciclo passado sem tocar
+   * em `contado_em`, então checar `contagem_anterior IS NOT NULL` bloquearia o
+   * descarte de todo ciclo que apenas herdou saldo, sem ninguém ter contado nada.
+   */
+  const { count: comContagem, error: errCount } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id", { count: "exact", head: true })
+    .eq("ciclo_id", cicloId)
+    .not("contado_em", "is", null);
+  if (errCount) return { erro: errCount.message };
+
+  if (comContagem && comContagem > 0) {
+    return {
+      erro:
+        `Esta contagem já tem ${comContagem} ${comContagem === 1 ? "item preenchido" : "itens preenchidos"} — ` +
+        `feche-a em vez de descartar, para não perder o histórico.`,
+    };
+  }
+
+  const { error } = await supabase.from("estoque_ciclos").delete().eq("id", cicloId);
+  if (error) return { erro: error.message };
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true };
+}

@@ -30,6 +30,7 @@ import {
   registrarContagem,
   registrarInventarioInicial,
   fecharCiclo,
+  descartarCiclo,
   importarSaidasDoAutomo,
   importarEntradasDoOmie,
   sincronizarItensDoCiclo,
@@ -184,6 +185,54 @@ function CicloAbertoView({
   const [importandoEntradas, setImportandoEntradas] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [virandoMes, setVirandoMes] = useState(false);
+  const [descartando, setDescartando] = useState(false);
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
+
+  /*
+   * O ciclo aberto é de um mês que já passou.
+   *
+   * Comparar as strings "YYYY-MM-01" direto equivale a comparar as datas e evita
+   * `new Date(ciclo.mes)`, que leria a string como UTC meia-noite e voltaria um
+   * dia em fuso negativo (mesmo cuidado de `rotuloMes` em lib/estoque/ciclo.ts).
+   */
+  const cicloAtrasado = ciclo.mes < mesAtualIsoClient();
+  // Nenhum número digitado por ninguém — é a mesma condição que `descartarCiclo`
+  // exige no servidor. Repetida aqui só para não oferecer um botão que voltaria
+  // com erro; a checagem que vale é a de lá.
+  const nadaContado = itensLocal.every((it) => it.contadoEm == null);
+
+  async function handleVirarMes() {
+    setVirandoMes(true);
+    try {
+      // `abrirCiclo` fecha o ciclo aberto de mês anterior antes de criar o do mês
+      // corrente — o ciclo velho vira histórico em vez de desaparecer.
+      const res = await abrirCiclo(local.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      toast.success(`Contagem de ${rotuloMes(mesAtualIsoClient())} aberta`);
+      router.refresh();
+    } finally {
+      setVirandoMes(false);
+    }
+  }
+
+  async function handleDescartar() {
+    setDescartando(true);
+    try {
+      const res = await descartarCiclo(ciclo.id);
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      toast.success("Contagem descartada");
+      router.refresh();
+    } finally {
+      setDescartando(false);
+    }
+  }
 
   async function handleSincronizar() {
     setSincronizando(true);
@@ -362,6 +411,73 @@ function CicloAbertoView({
       </header>
 
       <main className="flex-1 px-4 py-4 space-y-3">
+        {/*
+          O mês virou e o ciclo aberto é do mês passado.
+
+          Sem este aviso o módulo ficava trancado: `fecharCiclo` exige todos os
+          itens contados e o botão "Abrir contagem" só aparece quando NÃO há
+          ciclo aberto — então não havia caminho nenhum até o mês novo. Aconteceu
+          com o ciclo de agosto/2026 do Lush Ipiranga, aberto num teste.
+        */}
+        {cicloAtrasado && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">
+            <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm font-semibold text-foreground">
+                Esta contagem é de {rotuloMes(ciclo.mes)} e o mês já virou
+              </p>
+              <p className="text-xs text-muted-foreground">
+                A tela mostra sempre a contagem aberta. Abrir a de{" "}
+                {rotuloMes(mesAtualIsoClient())} fecha esta aqui e leva o que já foi
+                contado para o histórico
+                {nadaContado && " — ou descarte, já que ninguém preencheu nada nela"}.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleVirarMes}
+                  disabled={virandoMes || descartando}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-amber-500/40 bg-amber-500/10 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-60"
+                >
+                  {virandoMes ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                  Abrir contagem de {rotuloMes(mesAtualIsoClient())}
+                </button>
+
+                {/* Descarte só quando não há número digitado para perder — a
+                    condição que vale é a do servidor, em `descartarCiclo`.
+                    Confirmação inline, nunca window.confirm (CLAUDE.md §11). */}
+                {nadaContado && !confirmandoDescarte && (
+                  <button
+                    onClick={() => setConfirmandoDescarte(true)}
+                    disabled={virandoMes || descartando}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors disabled:opacity-60"
+                  >
+                    descartar esta contagem
+                  </button>
+                )}
+                {nadaContado && confirmandoDescarte && (
+                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    Apagar a contagem de {rotuloMes(ciclo.mes)}?
+                    <button
+                      onClick={handleDescartar}
+                      disabled={descartando}
+                      className="inline-flex items-center gap-1 font-semibold text-red-400 hover:text-red-300 transition-colors disabled:opacity-60"
+                    >
+                      {descartando && <Loader2 size={12} className="animate-spin" />}
+                      apagar
+                    </button>
+                    <button
+                      onClick={() => setConfirmandoDescarte(false)}
+                      disabled={descartando}
+                      className="hover:text-foreground transition-colors disabled:opacity-60"
+                    >
+                      cancelar
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {/*
           Item cadastrado depois da abertura não entra no ciclo sozinho —
           `abrirCiclo` materializa as linhas no momento da abertura. Sem este

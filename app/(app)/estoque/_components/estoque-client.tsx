@@ -103,13 +103,15 @@ export function EstoqueClient({
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [removendo, setRemovendo] = useState<string | null>(null);
+  const [confirmandoRemocao, setConfirmandoRemocao] = useState<string | null>(null);
   const [editando, setEditando] = useState<Edicao | null>(null);
   const [draft, setDraft] = useState("");
 
   const semMapeamento = itens.filter((i) => i.automo_produto_id == null).length;
 
-  async function remover(id: string, nome: string) {
-    if (!confirm(`Remover "${nome}" da lista de itens controlados?`)) return;
+  // Confirmação inline (o botão vira "remover? sim/não" na própria linha), não
+  // window.confirm — proibido pelo §11 do CLAUDE.md.
+  async function remover(id: string) {
     setRemovendo(id);
     try {
       const res = await removerItemEstoque(id);
@@ -118,6 +120,7 @@ export function EstoqueClient({
         return;
       }
       toast.success("Item removido do controle");
+      setConfirmandoRemocao(null);
       router.refresh();
     } finally {
       setRemovendo(null);
@@ -258,17 +261,34 @@ export function EstoqueClient({
                           onCancelar={() => setEditando(null)}
                         />
                       </td>
-                      <td className="py-3 text-right">
-                        <button
-                          onClick={() => remover(item.id, nome)}
-                          disabled={removendo === item.id}
-                          title="Remover do controle"
-                          className="p-1 rounded text-muted-foreground/40 hover:text-destructive transition-colors disabled:opacity-50"
-                        >
-                          {removendo === item.id
-                            ? <Loader2 size={13} className="animate-spin" />
-                            : <Trash2 size={13} />}
-                        </button>
+                      <td className="py-3 text-right whitespace-nowrap">
+                        {confirmandoRemocao === item.id ? (
+                          <span className="inline-flex items-center gap-2 text-xs">
+                            <button
+                              onClick={() => remover(item.id)}
+                              disabled={removendo === item.id}
+                              className="inline-flex items-center gap-1 font-semibold text-destructive hover:opacity-80 transition-opacity disabled:opacity-50"
+                            >
+                              {removendo === item.id && <Loader2 size={12} className="animate-spin" />}
+                              remover
+                            </button>
+                            <button
+                              onClick={() => setConfirmandoRemocao(null)}
+                              disabled={removendo === item.id}
+                              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                            >
+                              cancelar
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmandoRemocao(item.id)}
+                            title="Remover do controle"
+                            className="p-1 rounded text-muted-foreground/40 hover:text-destructive transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
