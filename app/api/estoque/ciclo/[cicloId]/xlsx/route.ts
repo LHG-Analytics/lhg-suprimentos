@@ -100,24 +100,43 @@ const COLUNAS_ABERTURA: ColunaDef[] = [
   COL_IDEAL, COL_POR, COL_ID,
 ];
 
-/** Colunas do arquivo de contagem de fechamento — a planilha completa. */
-const COLUNAS_FECHAMENTO: ColunaDef[] = [
-  COL_ITEM, COL_CODIGO, COL_UN, COL_CATEGORIA,
-  { header: "CONTAGEM ANTERIOR", width: 18, valor: (c) => c.it.contagem_anterior, numerica: true },
-  { header: "ENTRADAS",          width: 12, valor: (c) => c.it.entradas,           numerica: true },
-  { header: "VENDAS PERÍODO",    width: 15, valor: (c) => c.it.saidas,             numerica: true },
-  { header: "TEÓRICO",           width: 12, valor: (c) => c.teorico,               numerica: true },
-  { header: CABECALHO_VALOR_FECHAMENTO, width: 14, valor: (c) => c.it.contagem_atual, numerica: true },
-  {
-    header: "DIVERGÊNCIA", width: 13, numerica: true,
-    valor: (c) => c.diverg,
-    // A cor só reforça; o número é sempre o dado principal.
-    destaque: (c) => (c.diverg != null && c.diverg !== 0 ? (c.diverg < 0 ? VERMELHO : AMBAR) : null),
-  },
-  COL_IDEAL,
-  { header: "A REPOR", width: 11, valor: (c) => c.repor, numerica: true },
-  COL_POR, COL_ID,
-];
+/**
+ * Colunas do arquivo de contagem de fechamento — a planilha completa.
+ *
+ * `montarColunasFechamento` recebe `ehPrimeiroCiclo` porque a coluna do saldo
+ * inicial muda de nome: no primeiro ciclo do local não existe mês anterior, e
+ * chamá-la de "CONTAGEM ANTERIOR" no papel é a mesma mentira que estava na tela.
+ *
+ * ⚠️ O rótulo leva "(INFORMATIVO)" de propósito. `CABECALHO_VALOR_ABERTURA` é a
+ * constante que o IMPORT procura para saber em qual coluna gravar; se este
+ * cabeçalho fosse idêntico a ela, uma planilha de fechamento passaria a ter duas
+ * colunas candidatas e alguém poderia preencher a errada e ver o número ser
+ * ignorado em silêncio.
+ */
+function montarColunasFechamento(ehPrimeiroCiclo: boolean): ColunaDef[] {
+  return [
+    COL_ITEM, COL_CODIGO, COL_UN, COL_CATEGORIA,
+    {
+      header: ehPrimeiroCiclo ? `${CABECALHO_VALOR_ABERTURA} (INFORMATIVO)` : "CONTAGEM ANTERIOR",
+      width: 20,
+      valor: (c) => c.it.contagem_anterior,
+      numerica: true,
+    },
+    { header: "ENTRADAS",       width: 12, valor: (c) => c.it.entradas, numerica: true },
+    { header: "VENDAS PERÍODO", width: 15, valor: (c) => c.it.saidas,   numerica: true },
+    { header: "TEÓRICO",        width: 12, valor: (c) => c.teorico,     numerica: true },
+    { header: CABECALHO_VALOR_FECHAMENTO, width: 14, valor: (c) => c.it.contagem_atual, numerica: true },
+    {
+      header: "DIVERGÊNCIA", width: 13, numerica: true,
+      valor: (c) => c.diverg,
+      // A cor só reforça; o número é sempre o dado principal.
+      destaque: (c) => (c.diverg != null && c.diverg !== 0 ? (c.diverg < 0 ? VERMELHO : AMBAR) : null),
+    },
+    COL_IDEAL,
+    { header: "A REPOR", width: 11, valor: (c) => c.repor, numerica: true },
+    COL_POR, COL_ID,
+  ];
+}
 
 function contextoDe(it: CicloItemRow): Contexto {
   const ideal = it.estoque_itens?.estoque_ideal ?? 0;
@@ -175,12 +194,13 @@ export async function GET(
     .select("id", { count: "exact", head: true })
     .eq("local_id", ciclo.local_id)
     .lt("mes", ciclo.mes);
+  const ehPrimeiroCiclo = (ciclosAnteriores ?? 0) === 0;
   const modo: ModoContagem =
-    (ciclosAnteriores ?? 0) === 0 && itens.some((it) => it.contagem_anterior == null)
+    ehPrimeiroCiclo && itens.some((it) => it.contagem_anterior == null)
       ? "abertura"
       : "fechamento";
 
-  const colunas = modo === "abertura" ? COLUNAS_ABERTURA : COLUNAS_FECHAMENTO;
+  const colunas = modo === "abertura" ? COLUNAS_ABERTURA : montarColunasFechamento(ehPrimeiroCiclo);
   const visiveis = colunas.filter((c) => !c.oculta).length;
 
   const wb = new ExcelJS.Workbook();

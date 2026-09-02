@@ -21,6 +21,12 @@ interface Props {
   itens:          CicloItemView[];
   dataEmissao:    string;
   unidadesFiscais: string[];
+  /**
+   * Primeiro ciclo do local: nao existe mes anterior, entao a coluna
+   * contagem_anterior se chama "Saldo de abertura". Rotulo errado no papel e
+   * pior que na tela — o PDF circula por e-mail e e discutido em reuniao.
+   */
+  ehPrimeiroCiclo: boolean;
 }
 
 /** `—` e não vazio: célula vazia se confunde com zero, e a distinção importa. */
@@ -33,7 +39,7 @@ const TH = "border border-zinc-300 px-2 py-1.5 text-[9px] font-bold uppercase tr
 const TD = "border border-zinc-300 px-2 py-1.5 text-[10px] text-zinc-800";
 
 export function EstoquePrintDoc({
-  localNome, mesIso, status, itens, dataEmissao, unidadesFiscais,
+  localNome, mesIso, status, itens, dataEmissao, unidadesFiscais, ehPrimeiroCiclo,
 }: Props) {
   const calculado = itens.map(i => {
     const teorico = calcularTeorico({
@@ -116,7 +122,7 @@ export function EstoquePrintDoc({
           <tr className="bg-emerald-800">
             <th className={`${TH} text-left`}>Item</th>
             <th className={TH}>Un</th>
-            <th className={TH}>Contagem anterior</th>
+            <th className={TH}>{ehPrimeiroCiclo ? "Saldo de abertura" : "Contagem anterior"}</th>
             <th className={TH}>Entradas</th>
             <th className={TH}>Vendas período</th>
             <th className={TH}>Teórico</th>

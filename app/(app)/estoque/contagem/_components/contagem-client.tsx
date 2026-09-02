@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Check, AlertCircle, Boxes, Download, Info, Printer, FileSpreadsheet, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
 import {
   abrirCiclo,
@@ -46,6 +47,13 @@ interface Props {
   itens:                       CicloItemView[];
   /** Itens controlados que ficaram fora do ciclo aberto (cadastrados após a abertura). */
   itensForaDoCiclo:            number;
+  /**
+   * Primeiro ciclo deste local. Não existe mês anterior, então o campo
+   * `contagem_anterior` é rotulado "Saldo de abertura" — chamá-lo de "contagem
+   * anterior" fez a compradora pedir para remover números que eram justamente
+   * a abertura que ela mesma tinha lançado.
+   */
+  ehPrimeiroCiclo:             boolean;
   /** True enquanto sobrar item sem saldo de abertura (`contagem_anterior` null) no primeiro ciclo do local — modo "saldo de abertura" (ver bloco 6). Vira false sozinho quando o último saldo é registrado. */
   faltaSaldoAbertura:          boolean;
   /** True quando o local tem mais de uma unidade fiscal (CNPJ) — controla se o rateio por CNPJ aparece nos cards. */
@@ -79,6 +87,7 @@ export function ContagemClient({
   ciclo,
   itens,
   itensForaDoCiclo,
+  ehPrimeiroCiclo,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
   unidadesFiscais,
@@ -147,6 +156,7 @@ export function ContagemClient({
       ciclo={ciclo}
       itensIniciais={itens}
       itensForaDoCiclo={itensForaDoCiclo}
+      ehPrimeiroCiclo={ehPrimeiroCiclo}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
       unidadesFiscais={unidadesFiscais}
@@ -159,6 +169,7 @@ interface CicloAbertoViewProps {
   ciclo:                       CicloView;
   itensIniciais:               CicloItemView[];
   itensForaDoCiclo:            number;
+  ehPrimeiroCiclo:             boolean;
   faltaSaldoAbertura:          boolean;
   temMultiplasUnidadesFiscais: boolean;
   unidadesFiscais:             string[];
@@ -175,6 +186,7 @@ function CicloAbertoView({
   ciclo,
   itensIniciais,
   itensForaDoCiclo,
+  ehPrimeiroCiclo,
   faltaSaldoAbertura,
   temMultiplasUnidadesFiscais,
   unidadesFiscais,
@@ -533,15 +545,25 @@ function CicloAbertoView({
             </div>
           </div>
         )}
-        {itensLocal.map((item) => (
-          <ItemCard
-            key={item.id}
-            item={item}
-            faltaSaldoAbertura={faltaSaldoAbertura}
-            temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
-            onSalvo={handleItemSalvo}
-          />
-        ))}
+        {/*
+          No desktop a lista vira tabela com as colunas do PDF; no celular
+          continua sendo cards, que é como a contagem é feita de fato. O
+          agrupamento com `lg:space-y-0` remove o espaço entre cards para as
+          linhas ficarem encostadas, como numa tabela.
+        */}
+        <div className="space-y-3 lg:space-y-0 lg:rounded-xl lg:border lg:border-border lg:bg-card lg:pt-3 lg:pb-1">
+          <CabecalhoContagem ehPrimeiroCiclo={ehPrimeiroCiclo} />
+          {itensLocal.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              faltaSaldoAbertura={faltaSaldoAbertura}
+              ehPrimeiroCiclo={ehPrimeiroCiclo}
+              temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
+              onSalvo={handleItemSalvo}
+            />
+          ))}
+        </div>
       </main>
 
       <footer className="sticky bottom-0 z-20 bg-background/95 backdrop-blur border-t border-border px-4 py-3 space-y-2">
@@ -607,6 +629,7 @@ function CicloAbertoView({
               itens={itensLocal}
               dataEmissao={new Date().toLocaleDateString("pt-BR")}
               unidadesFiscais={unidadesFiscais}
+              ehPrimeiroCiclo={ehPrimeiroCiclo}
             />
           </div>
         </div>,
@@ -618,9 +641,56 @@ function CicloAbertoView({
 
 type EstadoSalvar = "idle" | "salvando" | "salvo" | "erro";
 
+/**
+ * Colunas do desktop, na ordem e na proporção do PDF (`estoque-print-doc`).
+ * Compartilhado entre o cabeçalho e cada linha — se as duas listas divergirem,
+ * a tabela desalinha, então precisa ser uma constante só.
+ */
+const GRID_CONTAGEM =
+  "lg:grid-cols-[minmax(0,1fr)_3rem_6rem_5rem_5rem_5rem_8rem_6.5rem_5rem_9rem]";
+
+/**
+ * Rótulo do campo `contagem_anterior`.
+ *
+ * ⚠️ No primeiro ciclo de um local, "Contagem anterior" é mentira: não existe
+ * mês anterior, e aquele número é o saldo de abertura que a própria pessoa
+ * lançou hoje. Foi exatamente essa confusão que gerou o pedido de "remover
+ * esses valores" — os valores estavam certos (são a base do teórico), o nome
+ * estava errado.
+ */
+function rotuloAnterior(ehPrimeiroCiclo: boolean): string {
+  return ehPrimeiroCiclo ? "Saldo de abertura" : "Contagem anterior";
+}
+
+/** Cabeçalho da tabela — só no desktop; no celular cada valor traz seu rótulo. */
+function CabecalhoContagem({ ehPrimeiroCiclo }: { ehPrimeiroCiclo: boolean }) {
+  const TH = "text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium";
+  return (
+    <div
+      className={cn(
+        "hidden lg:grid lg:items-end lg:gap-2 lg:px-3 lg:pb-2 lg:border-b lg:border-border",
+        GRID_CONTAGEM,
+      )}
+    >
+      <span className={TH}>Item</span>
+      <span className={cn(TH, "text-center")}>Un</span>
+      <span className={cn(TH, "text-right")}>{rotuloAnterior(ehPrimeiroCiclo)}</span>
+      <span className={cn(TH, "text-right")}>Entradas</span>
+      <span className={cn(TH, "text-right")}>Vendas período</span>
+      <span className={cn(TH, "text-right")}>Teórico</span>
+      <span className={cn(TH, "text-right")}>Estoque atual</span>
+      <span className={cn(TH, "text-right")}>Divergência</span>
+      <span className={cn(TH, "text-right")}>A repor</span>
+      <span className={TH}>Contado por</span>
+    </div>
+  );
+}
+
 interface ItemCardProps {
   item:                        CicloItemView;
   faltaSaldoAbertura:          boolean;
+  /** Primeiro ciclo do local — muda o rótulo de `contagem_anterior`. */
+  ehPrimeiroCiclo:             boolean;
   temMultiplasUnidadesFiscais: boolean;
   onSalvo:                     (id: string, patch: Partial<CicloItemView>) => void;
 }
@@ -641,7 +711,7 @@ interface ItemCardProps {
  * preenchido, então o mesmo card volta a gravar `contagem_atual` sem
  * precisar de nenhuma ação explícita de "encerrar abertura".
  */
-function ItemCard({ item, faltaSaldoAbertura, temMultiplasUnidadesFiscais, onSalvo }: ItemCardProps) {
+function ItemCard({ item, faltaSaldoAbertura, ehPrimeiroCiclo, temMultiplasUnidadesFiscais, onSalvo }: ItemCardProps) {
   const valorSalvo = faltaSaldoAbertura ? item.contagemAnterior : item.contagemAtual;
   const [valor, setValor] = useState(valorSalvo != null ? String(valorSalvo) : "");
   const [estado, setEstado] = useState<EstadoSalvar>("idle");
@@ -696,65 +766,107 @@ function ItemCard({ item, faltaSaldoAbertura, temMultiplasUnidadesFiscais, onSal
     : null;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-foreground">{item.produtoNome}</p>
-          <p className="text-xs text-muted-foreground">{item.produtoUnidadeMed}</p>
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card p-4 space-y-3",
+        // No desktop o card se desfaz em linha de tabela, com as MESMAS colunas
+        // e na MESMA ordem do PDF. Uma DOM só, responsiva: renderizar tabela e
+        // cards em paralelo duplicaria os inputs (300 deles com 150 itens).
+        "lg:rounded-none lg:border-0 lg:border-b lg:border-border/40 lg:p-0 lg:space-y-0",
+        "lg:grid lg:items-center lg:gap-2 lg:px-3 lg:py-2 lg:hover:bg-muted/30 lg:transition-colors",
+        GRID_CONTAGEM,
+      )}
+    >
+      {/* Item + unidade */}
+      <div className="flex items-start justify-between gap-2 lg:contents">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground lg:truncate">{item.produtoNome}</p>
+          <p className="text-xs text-muted-foreground lg:hidden">{item.produtoUnidadeMed}</p>
+          {temMultiplasUnidadesFiscais && item.entradasDetalhe.length > 0 && (
+            <p className="hidden lg:block text-[10px] text-muted-foreground/60 truncate">
+              {item.entradasDetalhe.map((d) => `${d.unidadeNome} ${d.quantidade}`).join(" · ")}
+            </p>
+          )}
         </div>
-        <div className="shrink-0 h-4 flex items-center">
-          {estado === "salvando" && <Loader2 size={16} className="text-muted-foreground animate-spin" />}
-          {estado === "salvo" && <Check size={16} className="text-emerald-500" />}
-        </div>
+        <span className="hidden lg:block text-xs text-muted-foreground text-center">
+          {item.produtoUnidadeMed}
+        </span>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span>Anterior: {item.contagemAnterior != null ? item.contagemAnterior : "—"}</span>
-        <span>Ideal: {item.estoqueIdeal}</span>
-        <span>Entradas: {item.entradas != null ? item.entradas : "—"}</span>
-        <span>Vendas: {item.saidas != null ? item.saidas : "—"}</span>
+      {/*
+        `lg:contents` dissolve este agrupamento no desktop: os filhos passam a
+        ser células diretas do grid. No celular ele continua sendo uma linha
+        corrida de metadados, que é como se lê andando pelo estoque.
+      */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground lg:contents">
+        <span className="lg:text-right lg:tabular-nums">
+          <span className="lg:hidden">{rotuloAnterior(ehPrimeiroCiclo)}: </span>
+          {item.contagemAnterior ?? "—"}
+        </span>
+        {/* Ideal fica só no celular: o PDF não tem essa coluna, e "A repor" já
+            carrega a parte acionável dela. */}
+        <span className="lg:hidden">Ideal: {item.estoqueIdeal}</span>
+        <span className="lg:text-right lg:tabular-nums">
+          <span className="lg:hidden">Entradas: </span>
+          {item.entradas ?? "—"}
+        </span>
+        <span className="lg:text-right lg:tabular-nums">
+          <span className="lg:hidden">Vendas: </span>
+          {item.saidas ?? "—"}
+        </span>
+        <span className="lg:text-right lg:tabular-nums">
+          <span className="lg:hidden">Teórico: </span>
+          {teorico ?? "—"}
+        </span>
       </div>
 
       {temMultiplasUnidadesFiscais && item.entradasDetalhe.length > 0 && (
-        <p className="text-[11px] text-muted-foreground/70 -mt-2">
+        <p className="text-[11px] text-muted-foreground/70 -mt-2 lg:hidden">
           {item.entradasDetalhe.map((d) => `${d.unidadeNome} ${d.quantidade}`).join(" · ")}
         </p>
       )}
 
       {faltaSaldoAbertura && (
-        <p className="text-xs font-medium text-muted-foreground">Saldo de abertura</p>
+        <p className="text-xs font-medium text-muted-foreground lg:hidden">Saldo de abertura</p>
       )}
 
-      <input
-        type="text"
-        inputMode="decimal"
-        value={valor}
-        placeholder="0"
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.currentTarget.blur();
-          }
-        }}
-        className="w-full h-14 rounded-lg border border-border bg-background px-4 text-lg font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-      />
+      {/* Estoque atual — a única célula editável */}
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={valor}
+          placeholder="0"
+          onChange={(e) => setValor(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-full h-14 lg:h-9 rounded-lg border border-border bg-background px-4 lg:px-2 lg:pr-6 text-lg lg:text-sm font-mono text-foreground text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+        />
+        {/* Status dentro da célula do input: é o campo que ele reporta, e no
+            desktop não há cabeçalho de card onde pousar. */}
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+          {estado === "salvando" && <Loader2 size={14} className="text-muted-foreground animate-spin" />}
+          {estado === "salvo" && <Check size={14} className="text-emerald-500" />}
+        </span>
+      </div>
 
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span>Teórico: {teorico != null ? teorico : "—"}</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground lg:contents">
         {divergencia == null ? (
-          <span>Divergência: —</span>
+          <span className="lg:text-right">
+            <span className="lg:hidden">Divergência: </span>—
+          </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 font-medium">
+          <span className="inline-flex items-center gap-1.5 font-medium lg:justify-end lg:tabular-nums">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                divergencia < 0
-                  ? "bg-destructive"
-                  : divergencia > 0
-                    ? "bg-amber-500"
-                    : "bg-emerald-500"
-              }`}
+              className={cn(
+                "h-1.5 w-1.5 rounded-full shrink-0",
+                divergencia < 0 ? "bg-destructive" : divergencia > 0 ? "bg-amber-500" : "bg-emerald-500",
+              )}
             />
             <span
               className={
@@ -765,26 +877,30 @@ function ItemCard({ item, faltaSaldoAbertura, temMultiplasUnidadesFiscais, onSal
                     : "text-emerald-500"
               }
             >
-              Divergência: {divergencia > 0 ? `+${divergencia}` : divergencia}
+              <span className="lg:hidden">Divergência: </span>
+              {divergencia > 0 ? `+${divergencia}` : divergencia}
             </span>
           </span>
         )}
+        <span className="lg:text-right lg:tabular-nums">
+          <span className="lg:hidden">A repor: </span>
+          {aRepor ?? "—"}
+        </span>
+        <span className="hidden lg:block truncate text-muted-foreground/70">
+          {item.contadoPorNome ?? "—"}
+          {horaContado ? ` · ${horaContado}` : ""}
+        </span>
       </div>
 
-      {aRepor != null && (
-        <p className="text-xs text-muted-foreground">
-          A repor: <span className="font-medium text-foreground">{aRepor}</span>
-        </p>
-      )}
-
       {estado === "erro" && erroMsg && (
-        <p className="text-xs text-destructive flex items-center gap-1">
+        <p className="text-xs text-destructive flex items-center gap-1 lg:col-span-full">
           <AlertCircle size={12} /> {erroMsg}
         </p>
       )}
 
+      {/* No desktop esta informação já é a última coluna da linha. */}
       {valorSalvo != null && item.contadoPorNome && (
-        <p className="text-[11px] text-muted-foreground/60">
+        <p className="text-[11px] text-muted-foreground/60 lg:hidden">
           contado por {item.contadoPorNome}
           {horaContado ? ` · ${horaContado}` : ""}
         </p>

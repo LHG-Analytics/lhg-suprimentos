@@ -8,11 +8,12 @@
  * calibrado com o uso (a gramagem de uma porção muda), então precisa ser
  * ajustável sem remover e recadastrar o item.
  */
-import { Suspense, use, useState } from "react";
+import { Suspense, use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, AlertTriangle, Boxes, Loader2, Check } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, Boxes, Loader2, Check, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useDebounce } from "@/hooks/use-debounce";
 import { removerItemEstoque, atualizarItemEstoque } from "../actions";
 import { MapearItemModal } from "./mapear-item-modal";
 import { VincularAutomoModal } from "./vincular-automo-modal";
@@ -217,8 +218,49 @@ export function EstoqueClient({
   const [vinculando, setVinculando] = useState<ItemEstoque | null>(null);
   const [editando, setEditando] = useState<Edicao | null>(null);
   const [draft, setDraft] = useState("");
+  const [busca, setBusca] = useState("");
+  const buscaDebounced = useDebounce(busca, 300);
+  /**
+   * Categorias a EXIBIR. Vazio significa "todas" — e não "nenhuma": desmarcar a
+   * última categoria mostrando lista vazia seria um beco sem saída onde a pessoa
+   * não entende o que fez.
+   */
+  const [categoriasAtivas, setCategoriasAtivas] = useState<Set<string>>(new Set());
 
+  // O aviso de mapeamento fala do controle inteiro, não da visão filtrada: um
+  // item sem vínculo escondido pelo filtro continua sendo um item sem vínculo.
   const semMapeamento = itens.filter((i) => i.automo_produto_id == null).length;
+
+  const categorias = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of itens) {
+      const c = i.produtos?.categoria?.trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [itens]);
+
+  const itensVisiveis = useMemo(() => {
+    const q = buscaDebounced.trim().toLowerCase();
+    return itens.filter((i) => {
+      const categoria = i.produtos?.categoria?.trim() ?? "";
+      if (categoriasAtivas.size > 0 && !categoriasAtivas.has(categoria)) return false;
+      if (q === "") return true;
+      return (
+        (i.produtos?.nome ?? "").toLowerCase().includes(q) ||
+        (i.produtos?.codigo ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [itens, buscaDebounced, categoriasAtivas]);
+
+  function alternarCategoria(cat: string) {
+    setCategoriasAtivas((prev) => {
+      const proximo = new Set(prev);
+      if (proximo.has(cat)) proximo.delete(cat);
+      else proximo.add(cat);
+      return proximo;
+    });
+  }
 
   // Confirmação inline (o botão vira "remover? sim/não" na própria linha), não
   // window.confirm — proibido pelo §11 do CLAUDE.md.
@@ -296,6 +338,74 @@ export function EstoqueClient({
         </div>
       )}
 
+      {/* Busca + filtro de categoria. Só aparece com itens suficientes para
+          filtrar valer a pena — com 2 itens a barra é ruído. */}
+      {itens.length > 3 && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nome ou código…"
+                className="w-full h-9 rounded-lg border border-border bg-muted/30 pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-emerald-500/50"
+              />
+              {busca !== "" && (
+                <button
+                  onClick={() => setBusca("")}
+                  title="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {itensVisiveis.length === itens.length
+                ? `${itens.length} ${itens.length === 1 ? "item" : "itens"}`
+                : `${itensVisiveis.length} de ${itens.length}`}
+            </p>
+          </div>
+
+          {categorias.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* "Todas" é o conjunto vazio, não a seleção de tudo — assim
+                  limpar o filtro é um clique e não N cliques. */}
+              <button
+                onClick={() => setCategoriasAtivas(new Set())}
+                className={cn(
+                  "h-7 px-2.5 rounded-full border text-xs transition-colors",
+                  categoriasAtivas.size === 0
+                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-medium"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                )}
+              >
+                Todas
+              </button>
+              {categorias.map((cat) => {
+                const ativa = categoriasAtivas.has(cat);
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => alternarCategoria(cat)}
+                    className={cn(
+                      "h-7 px-2.5 rounded-full border text-xs transition-colors inline-flex items-center gap-1.5",
+                      ativa
+                        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-medium"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    )}
+                  >
+                    {ativa && <Check size={11} className="shrink-0" />}
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-xl border border-border/80 bg-muted/40 overflow-hidden">
         {itens.length === 0 ? (
           <div className="py-16 text-center">
@@ -304,6 +414,18 @@ export function EstoqueClient({
             <p className="text-xs text-muted-foreground/60 mt-1">
               Comece pelos itens da planilha: bebidas, bomboniere e os pratos porcionados.
             </p>
+          </div>
+        ) : itensVisiveis.length === 0 ? (
+          /* Filtro que não casa nada precisa dizer isso e oferecer a saída —
+             tabela vazia sem explicação parece item apagado. */
+          <div className="py-14 text-center">
+            <p className="text-sm text-muted-foreground">Nenhum item com esses filtros</p>
+            <button
+              onClick={() => { setBusca(""); setCategoriasAtivas(new Set()); }}
+              className="text-xs text-emerald-500 underline underline-offset-2 mt-2"
+            >
+              Limpar busca e categorias
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto p-5">
@@ -319,7 +441,7 @@ export function EstoqueClient({
                 </tr>
               </thead>
               <tbody>
-                {itens.map((item) => {
+                {itensVisiveis.map((item) => {
                   const nome = item.produtos?.nome ?? "—";
                   return (
                     <tr key={item.id} className="border-b border-border/40 hover:bg-muted/50 transition-colors">

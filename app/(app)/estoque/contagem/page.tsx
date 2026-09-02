@@ -143,6 +143,7 @@ export default async function ContagemPage() {
       ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
       itens={itens}
       itensForaDoCiclo={itensForaDoCiclo}
+      ehPrimeiroCiclo={ehPrimeiroCiclo}
       faltaSaldoAbertura={faltaSaldoAbertura}
       temMultiplasUnidadesFiscais={temMultiplasUnidadesFiscais}
       unidadesFiscais={Array.from(nomePorUnidade.values()).sort((a, b) => a.localeCompare(b, "pt-BR"))}
