@@ -982,3 +982,96 @@ export async function aplicarContagemImportada(
   revalidatePath("/estoque/contagem");
   return { ok: true, gravados };
 }
+
+const EditarSaldoAberturaSchema = z.object({
+  cicloItemId: z.string().uuid(),
+  quantidade: z.number().min(0, "Quantidade não pode ser negativa"),
+});
+
+/**
+ * Corrige o saldo de ABERTURA de um item já lançado.
+ *
+ * `registrarInventarioInicial` recusa sobrescrever de propósito, mas a trava de
+ * lá cobre dois casos com a mesma mensagem: valor HERDADO de ciclo anterior (que
+ * não pode ser tocado, senão o histórico dessincroniza) e valor DIGITADO no
+ * primeiro ciclo (que é só um número que alguém errou). Aqui só o segundo é
+ * permitido.
+ *
+ * O guard que importa é `ciclos_anteriores = 0`. Havendo ciclo anterior, este
+ * `contagem_anterior` é a `contagem_atual` de lá — corrigir aqui criaria duas
+ * verdades para o mesmo saldo, e a correção certa é no mês de origem.
+ *
+ * Mexer neste valor muda `teorico` e `divergencia`, mas os dois são calculados
+ * na leitura (`calcularTeorico`/`calcularDivergencia`), então não há nada para
+ * recalcular ou migrar.
+ */
+export async function editarSaldoAbertura(
+  input: z.infer<typeof EditarSaldoAberturaSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const parsed = EditarSaldoAberturaSchema.safeParse(input);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const { data: itemRaw, error: errItem } = await supabase
+    .from("estoque_ciclo_itens")
+    .select("id, contado_em, contado_por, estoque_ciclos(id, local_id, mes, status)")
+    .eq("id", parsed.data.cicloItemId)
+    .maybeSingle();
+  if (errItem) return { erro: errItem.message };
+
+  const item = itemRaw as {
+    id: string;
+    contado_em: string | null;
+    contado_por: string | null;
+    estoque_ciclos: { id: string; local_id: string; mes: string; status: string } | null;
+  } | null;
+  if (!item?.estoque_ciclos) return { erro: "Item de ciclo não encontrado" };
+  if (item.estoque_ciclos.status === "fechado") {
+    return { erro: "Ciclo já fechado — o saldo de abertura virou histórico." };
+  }
+
+  const { count: ciclosAnteriores, error: errAnt } = await supabase
+    .from("estoque_ciclos")
+    .select("id", { count: "exact", head: true })
+    .eq("local_id", item.estoque_ciclos.local_id)
+    .lt("mes", item.estoque_ciclos.mes);
+  if (errAnt) return { erro: errAnt.message };
+
+  if ((ciclosAnteriores ?? 0) > 0) {
+    return {
+      erro:
+        "Este saldo veio da contagem do mês anterior, não é um valor de abertura. " +
+        "Para mudá-lo, corrija a contagem do mês de origem.",
+    };
+  }
+
+  /*
+   * `contado_por`/`contado_em` só são preenchidos se estiverem vazios.
+   *
+   * Eles descrevem QUEM CONTOU o item fisicamente, e isso aparece assinado no
+   * PDF. Corrigir um número digitado errado não é uma contagem nova: sobrescrever
+   * faria o relatório dizer que quem corrigiu foi quem contou. Preencher quando
+   * está null importa porque `descartarCiclo` usa `contado_em` para saber se há
+   * número digitado a perder.
+   */
+  // Ramo explícito, não objeto montado com `Record<string, unknown>`: chave
+  // dinâmica vira índice de string no tipo e os tipos gerados do Supabase a
+  // recusam (mesmo tropeço de `aplicarContagemImportada`).
+  const patch = { contagem_anterior: parsed.data.quantidade };
+
+  const { error } = await supabase
+    .from("estoque_ciclo_itens")
+    .update(
+      item.contado_em == null
+        ? { ...patch, contado_em: new Date().toISOString(), contado_por: user.id }
+        : patch,
+    )
+    .eq("id", parsed.data.cicloItemId);
+  if (error) return { erro: error.message };
+
+  revalidatePath("/estoque/contagem");
+  return { ok: true };
+}

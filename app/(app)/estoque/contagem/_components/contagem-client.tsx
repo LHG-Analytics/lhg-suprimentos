@@ -35,6 +35,7 @@ import {
   importarSaidasDoAutomo,
   importarEntradasDoOmie,
   sincronizarItensDoCiclo,
+  editarSaldoAbertura,
 } from "../actions";
 import type { CicloView, CicloItemView } from "./tipos";
 import { EstoquePrintDoc } from "./estoque-print-doc";
@@ -662,6 +663,90 @@ function rotuloAnterior(ehPrimeiroCiclo: boolean): string {
   return ehPrimeiroCiclo ? "Saldo de abertura" : "Contagem anterior";
 }
 
+/**
+ * Célula do saldo de abertura, clicável para corrigir.
+ *
+ * Só é editável no primeiro ciclo do local. Havendo ciclo anterior, este número
+ * é a contagem de fechamento de lá — corrigir aqui criaria duas verdades para o
+ * mesmo saldo, e a action recusa (ver `editarSaldoAbertura`).
+ */
+function CelulaAbertura({
+  item,
+  editavel,
+  onSalvo,
+}: {
+  item: CicloItemView;
+  editavel: boolean;
+  onSalvo: (id: string, patch: Partial<CicloItemView>) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const valor = item.contagemAnterior;
+
+  async function salvar() {
+    const q = parseFloat(draft.replace(",", "."));
+    if (!Number.isFinite(q) || q < 0) {
+      toast.error("Valor inválido");
+      return;
+    }
+    if (q === valor) {
+      setEditando(false);
+      return;
+    }
+    setSalvando(true);
+    try {
+      const res = await editarSaldoAbertura({ cicloItemId: item.id, quantidade: q });
+      if ("erro" in res) {
+        toast.error(res.erro);
+        return;
+      }
+      // Atualiza o estado local para teórico e divergência recalcularem na hora
+      // — os dois derivam deste valor e são calculados na leitura.
+      onSalvo(item.id, { contagemAnterior: q });
+      setEditando(false);
+      toast.success("Saldo de abertura corrigido");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!editavel) {
+    return <>{valor ?? "—"}</>;
+  }
+
+  if (editando) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input
+          autoFocus
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void salvar()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); void salvar(); }
+            if (e.key === "Escape") setEditando(false);
+          }}
+          className="w-16 h-6 rounded border border-emerald-500/50 bg-background px-1.5 text-xs font-mono text-right text-foreground focus:outline-none"
+        />
+        {salvando && <Loader2 size={11} className="animate-spin text-muted-foreground shrink-0" />}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => { setDraft(valor != null ? String(valor) : ""); setEditando(true); }}
+      title="Corrigir o saldo de abertura"
+      className="rounded px-1 -mx-1 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors"
+    >
+      {valor ?? "—"}
+    </button>
+  );
+}
+
 /** Cabeçalho da tabela — só no desktop; no celular cada valor traz seu rótulo. */
 function CabecalhoContagem({ ehPrimeiroCiclo }: { ehPrimeiroCiclo: boolean }) {
   const TH = "text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium";
@@ -801,7 +886,17 @@ function ItemCard({ item, faltaSaldoAbertura, ehPrimeiroCiclo, temMultiplasUnida
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground lg:contents">
         <span className="lg:text-right lg:tabular-nums">
           <span className="lg:hidden">{rotuloAnterior(ehPrimeiroCiclo)}: </span>
-          {item.contagemAnterior ?? "—"}
+          {/*
+            Editável só quando é abertura de verdade E o campo principal já não
+            é ele: enquanto `faltaSaldoAbertura`, o input grande da linha JÁ
+            grava `contagem_anterior`, e dois caminhos para o mesmo campo na
+            mesma linha seria confusão.
+          */}
+          <CelulaAbertura
+            item={item}
+            editavel={ehPrimeiroCiclo && !faltaSaldoAbertura}
+            onSalvo={onSalvo}
+          />
         </span>
         {/* Ideal fica só no celular: o PDF não tem essa coluna, e "A repor" já
             carrega a parte acionável dela. */}
