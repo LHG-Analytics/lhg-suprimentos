@@ -1121,7 +1121,7 @@ export async function aprovarCotacao(
       cotacao_itens(
         id, quantidade, selecionado_forn,
         produtos(id, nome, omie_codigo, unidade_med, preco_custo),
-        cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias)
+        cotacao_matriz(fornecedor_id, preco_unitario, condicao_pagamento, prazo_entrega_dias, frete)
       )
     `)
     .eq("id", cotacaoId)
@@ -1130,7 +1130,8 @@ export async function aprovarCotacao(
   if (cotErr || !cotacao) return { erro: "Cotação não encontrada" };
 
   // 2. Validar que todos os itens têm fornecedor selecionado
-  type MatrizRaw = { fornecedor_id: string; preco_unitario: number; condicao_pagamento: string | null; prazo_entrega_dias: number | null };
+  // ⚠️ `frete` faltava neste select — ver o insert do pedido mais abaixo.
+  type MatrizRaw = { fornecedor_id: string; preco_unitario: number; condicao_pagamento: string | null; prazo_entrega_dias: number | null; frete: number | null };
   type ItemRaw = {
     id: string;
     quantidade: number;
@@ -1209,10 +1210,29 @@ export async function aprovarCotacao(
     const numero = `PED-${year}-${String(nextNum++).padStart(4, "0")}`;
 
     // Calcular valor total usando preço da matriz para este fornecedor
-    const valorTotal = itensForn.reduce((acc, item) => {
+    const totalItensForn = itensForn.reduce((acc, item) => {
       const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
       return acc + item.quantidade * (entrada?.preco_unitario ?? 0);
     }, 0);
+
+    /*
+     * Frete do grupo — mesma conta de `gerarPedidosDeCotacao`.
+     *
+     * ⚠️ Faltava aqui inteiro: este caminho (painel "Aprovar compra") nem pedia
+     * `frete` no select, então o pedido nascia com frete 0 e `valor_total` sem
+     * ele. O outro caminho (wizard "Gerar pedidos") sempre gravou certo — daí o
+     * sintoma ser intermitente. Medido em 18/09/2026: dos 10 pedidos com frete
+     * cotado na matriz, 7 corretos e 3 zerados, e os 3 zerados são exatamente os
+     * que vieram por aqui (assinatura: `pedido_itens.cotacao_item_id` nulo).
+     * Consequência: o frete também não ia ao Omie, porque `pushPedidoOmie` lê
+     * `pedidos.frete` para montar `nValFrete`.
+     */
+    const freteForn = itensForn.reduce((acc, item) => {
+      const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
+      return acc + Number(entrada?.frete ?? 0);
+    }, 0);
+
+    const valorTotal = totalItensForn + freteForn;
 
     // Condição de pagamento (pega do primeiro item)
     const primeiraEntrada = itensForn[0].cotacao_matriz.find(m => m.fornecedor_id === fornId);
@@ -1234,6 +1254,7 @@ export async function aprovarCotacao(
         status:        "enviado",
         omie_status:   "pendente",
         valor_total:   valorTotal,
+        frete:         freteForn,
         condicao_pgto: condicaoPgto,
         entrega_prev:  cotacao.prazo ?? null,
       })
@@ -1259,10 +1280,14 @@ export async function aprovarCotacao(
       .map(item => {
         const entrada = item.cotacao_matriz.find(m => m.fornecedor_id === fornId);
         return {
-          pedido_id:      pedidoId,
-          produto_id:     item.produtos!.id,
-          quantidade:     item.quantidade,
-          preco_unitario: entrada?.preco_unitario ?? 0,
+          pedido_id:       pedidoId,
+          produto_id:      item.produtos!.id,
+          quantidade:      item.quantidade,
+          preco_unitario:  entrada?.preco_unitario ?? 0,
+          // Faltava aqui: sem o vínculo da migration 0025, `avaliarCompletudeCotacao`
+          // não enxerga estes itens como já pedidos e a cotação pode ficar presa em
+          // rascunho (o problema que a M15b resolveu pelo outro caminho).
+          cotacao_item_id: item.id,
         };
       });
     if (pedidoItensPayload.length > 0) {

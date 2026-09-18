@@ -625,7 +625,21 @@ export async function editarPedido(
     return acc + (updated?.quantidade ?? dbItem.quantidade) * (updated?.preco_unitario ?? dbItem.preco_unitario);
   }, 0);
   const totalNovos = (dados.novosItens ?? []).reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0);
-  const novoTotal = totalExistentes + totalNovos;
+
+  /*
+   * O frete entra no total recalculado.
+   *
+   * ⚠️ Sem esta parcela, QUALQUER edição de pedido apagava o frete do
+   * `valor_total` — o número caía silenciosamente para a soma dos itens, e
+   * como `pushPedidoOmie` reenvia o pedido alterado, a diferença ia junto para
+   * o Omie. O frete continuava na coluna `pedidos.frete`; só sumia do total.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: freteAtual } = await (supabase as any)
+    .from("pedidos").select("frete").eq("id", pedidoId).single();
+  const freteDoPedido = Number(freteAtual?.frete ?? 0);
+
+  const novoTotal = totalExistentes + totalNovos + freteDoPedido;
 
   // Verifica se o fornecedor mudou ou novos itens foram adicionados
   const fornecedorAtual = (pedido as { fornecedor_id?: string | null }).fornecedor_id;
