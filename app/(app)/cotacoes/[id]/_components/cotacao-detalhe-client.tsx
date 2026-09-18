@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, vincularProdutoCotacaoItem, adicionarItemCotacao, removerItemCotacao, atualizarQuantidadeItemCotacao } from "../../actions";
+import { selecionarFornecedorItem, enviarEmailCotacao, removerFornecedorCotacao, vincularProdutoCotacaoItem, adicionarItemCotacao, removerItemCotacao, atualizarQuantidadeItemCotacao, atualizarDescricaoItemCotacao } from "../../actions";
 import { AdicionarItemModal, type ProdutoOpcao, type NovoItem } from "@/components/lhg/adicionar-item-modal";
 import { WizardGerarPedidos } from "./wizard-gerar-pedidos";
 import { AdicionarFornecedorModal } from "./adicionar-fornecedor-modal";
@@ -131,6 +131,11 @@ export function CotacaoDetalheClient({
   const [addItemOpen,      setAddItemOpen]      = useState(false);
   const [editandoQtd,      setEditandoQtd]      = useState<string | null>(null);
   const [qtdDraft,         setQtdDraft]         = useState("");
+  /** Item livre cuja descrição está sendo corrigida (só um por vez). */
+  const [editandoDesc,     setEditandoDesc]     = useState<string | null>(null);
+  const [descDraft,        setDescDraft]        = useState("");
+  const [unidDraft,        setUnidDraft]        = useState("");
+  const [salvandoDesc,     setSalvandoDesc]     = useState(false);
   const [removendoItem,    setRemovendoItem]    = useState<string | null>(null);
 
   const unidadeIdCotacao = cotacao.cotacao_unidades[0]?.unidade_id ?? "";
@@ -166,6 +171,27 @@ export function CotacaoDetalheClient({
     if ("erro" in res) { toast.error(res.erro); return; }
     setEditandoQtd(null);
     router.refresh();
+  }
+
+  async function salvarDescricaoItem(itemId: string) {
+    const nome = descDraft.trim();
+    const unid = unidDraft.trim();
+    if (nome.length < 2) { toast.error("Descreva o produto (mínimo 2 caracteres)"); return; }
+    if (unid.length < 1) { toast.error("Informe a unidade (ex: UN, KG)"); return; }
+
+    setSalvandoDesc(true);
+    try {
+      const res = await atualizarDescricaoItemCotacao(itemId, {
+        produto_nome_livre:  nome,
+        produto_unidade_med: unid,
+      });
+      if ("erro" in res) { toast.error(res.erro); return; }
+      setEditandoDesc(null);
+      toast.success("Descrição atualizada");
+      router.refresh();
+    } finally {
+      setSalvandoDesc(false);
+    }
   }
 
   async function handleRemoverItem(itemId: string, nome: string) {
@@ -771,10 +797,74 @@ export function CotacaoDetalheClient({
                           <span className="mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded bg-muted text-[10px] font-mono font-semibold text-muted-foreground/80 shrink-0 tabular-nums">
                             {idx + 1}
                           </span>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-foreground leading-snug">
-                              {nomeItem}
-                            </div>
+                          <div className="min-w-0 flex-1">
+                            {/*
+                              Descrição editável só para item LIVRE: com produto do
+                              catálogo o nome é de `produtos.nome`, e mudá-lo aqui
+                              renomearia o produto em toda cotação e todo pedido.
+                              Por isso o clique nem é oferecido — em vez de oferecer
+                              e recusar depois com um toast.
+                            */}
+                            {editandoDesc === item.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  autoFocus
+                                  value={descDraft}
+                                  onChange={e => setDescDraft(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter")  void salvarDescricaoItem(item.id);
+                                    if (e.key === "Escape") setEditandoDesc(null);
+                                  }}
+                                  placeholder="Descrição do produto"
+                                  className="flex-1 min-w-0 h-7 rounded border border-sky-500/50 bg-background px-2 text-sm text-foreground focus:outline-none"
+                                />
+                                <input
+                                  value={unidDraft}
+                                  onChange={e => setUnidDraft(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter")  void salvarDescricaoItem(item.id);
+                                    if (e.key === "Escape") setEditandoDesc(null);
+                                  }}
+                                  placeholder="UN"
+                                  title="Unidade de medida"
+                                  className="w-14 h-7 rounded border border-sky-500/50 bg-background px-1.5 text-[11px] font-mono uppercase text-foreground focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => void salvarDescricaoItem(item.id)}
+                                  disabled={salvandoDesc}
+                                  title="Salvar"
+                                  className="p-0.5 text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                                >
+                                  {salvandoDesc
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : <Check size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => setEditandoDesc(null)}
+                                  disabled={salvandoDesc}
+                                  title="Cancelar"
+                                  className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ) : editavel && precisaCadastro ? (
+                              <button
+                                onClick={() => {
+                                  setEditandoDesc(item.id);
+                                  setDescDraft(item.produto_nome_livre ?? "");
+                                  setUnidDraft(item.produto_unidade_med ?? "");
+                                }}
+                                title="Clique para corrigir a descrição"
+                                className="text-left text-sm font-medium text-foreground leading-snug rounded px-1 -mx-1 hover:bg-sky-500/10 hover:text-sky-400 transition-colors"
+                              >
+                                {nomeItem}
+                              </button>
+                            ) : (
+                              <div className="text-sm font-medium text-foreground leading-snug">
+                                {nomeItem}
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               {editandoQtd === item.id ? (
                                 <span className="inline-flex items-center gap-1">

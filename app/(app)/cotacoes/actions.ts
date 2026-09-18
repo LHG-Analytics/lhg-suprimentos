@@ -170,9 +170,11 @@ export async function vincularProdutoCotacaoItem(
 
   const { error } = await supabase
     .from("cotacao_itens")
-    // produto_novo/produto_nome_livre: colunas da migration 0023, fora dos tipos gerados
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ produto_id: produtoId, produto_novo: false, produto_nome_livre: null } as any)
+    // O `as any` que morava aqui dizia "colunas da migration 0023, fora dos tipos
+    // gerados" — já não era verdade: os tipos foram regenerados e `produto_novo`,
+    // `produto_nome_livre` e `produto_unidade_med` estão em lib/supabase/types.ts.
+    // Cast sem necessidade é pior que inútil: desliga a checagem de um UPDATE.
+    .update({ produto_id: produtoId, produto_novo: false, produto_nome_livre: null })
     .eq("id", cotacaoItemId);
 
   if (error) return { erro: error.message };
@@ -440,6 +442,77 @@ export async function atualizarQuantidadeItemCotacao(
   const { error } = await supabase
     .from("cotacao_itens")
     .update({ quantidade })
+    .eq("id", itemId);
+  if (error) return { erro: error.message };
+
+  revalidatePath(`/cotacoes/${item.cotacao_id}`);
+  return { ok: true };
+}
+
+const DescricaoItemSchema = z.object({
+  produto_nome_livre:  z.string().trim().min(2, "Descreva o produto (mínimo 2 caracteres)"),
+  produto_unidade_med: z.string().trim().min(1, "Informe a unidade (ex: UN, KG)"),
+});
+
+/**
+ * Corrige a descrição e a unidade de um item LIVRE da cotação.
+ *
+ * Item livre nasce de texto digitado no wizard ("AR CONDICIONADO 12 BTUS") e até
+ * agora não tinha volta: errou a descrição, só removendo e recriando o item — o
+ * que derruba junto os preços já lançados por cada fornecedor, porque
+ * `cotacao_matriz.cotacao_item_id` tem ON DELETE CASCADE.
+ *
+ * ⚠️ Só item livre. Com `produto_id` preenchido o nome vem de `produtos.nome`, que
+ * é do CATÁLOGO: mudar ali renomearia o produto em toda cotação e todo pedido, e
+ * ainda precisaria sincronizar com o Omie. São coisas diferentes e a mensagem de
+ * erro manda para o lugar certo.
+ */
+export async function atualizarDescricaoItemCotacao(
+  itemId: string,
+  dados: z.infer<typeof DescricaoItemSchema>,
+): Promise<{ ok: true } | { erro: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { erro: "Não autenticado" };
+
+  const parsed = DescricaoItemSchema.safeParse(dados);
+  if (!parsed.success) return { erro: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  const { data: item } = await supabase
+    .from("cotacao_itens")
+    .select("id, cotacao_id, produto_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { erro: "Item não encontrado" };
+
+  if (item.produto_id) {
+    return {
+      erro:
+        "Este item veio do catálogo — o nome dele é o do produto cadastrado. " +
+        "Para mudar, edite o produto na tela Produtos (a alteração vai para o Omie).",
+    };
+  }
+
+  const guard = await guardCotacaoEditavel(supabase, item.cotacao_id);
+  if ("erro" in guard) return guard;
+
+  /*
+   * Trava redundante hoje, mantida de propósito.
+   *
+   * Item livre não chega a virar pedido: o badge "cadastrar produto" bloqueia a
+   * geração, e cadastrar preenche `produto_id` (deixando de ser livre). Mas a
+   * regra que vale é "o fornecedor já recebeu este item descrito assim", e ela
+   * não depende de como o fluxo está montado hoje.
+   */
+  const pedido = await itemJaPedido(supabase, itemId);
+  if (pedido) return { erro: `Este item já está no pedido ${pedido} — a descrição não pode mudar.` };
+
+  const { error } = await supabase
+    .from("cotacao_itens")
+    .update({
+      produto_nome_livre:  parsed.data.produto_nome_livre,
+      produto_unidade_med: parsed.data.produto_unidade_med,
+    })
     .eq("id", itemId);
   if (error) return { erro: error.message };
 
