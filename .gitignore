@@ -63,6 +63,7 @@ prototype/
 docs/*.pdf
 docs/*.fig
 docs/*.html
+docs/fichas-tecnicas/
 
 # Superpowers brainstorm server — arquivos temporários locais
 .superpowers/
