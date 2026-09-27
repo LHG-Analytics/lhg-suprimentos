@@ -12,7 +12,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { somarSaidasPorProduto, AutomoIndisponivelError } from "@/lib/automo/client";
-import { converterSaidas, type ItemMapeado } from "@/lib/estoque/saidas";
+import { calcularSaidasDoCiclo, resumirAvisos, type LinhaCiclo, type ResumoAvisosSaidas } from "@/lib/estoque/saidas-ciclo";
+import type { Ficha } from "@/lib/estoque/fichas";
 import { resolverChavesOmiePorUnidade, somarEntradasPorItem, type ProdutoRef } from "@/lib/estoque/entradas";
 import {
   montarPrevia,
@@ -338,13 +339,20 @@ export async function fecharCiclo(
 /**
  * Importa as saídas do Automo do mês do ciclo e grava em `estoque_ciclo_itens.saidas`.
  *
- * Idempotente por natureza: `converterSaidas` recalcula do zero a partir do
- * período, então reimportar sobrescreve em vez de somar em cima do que já
- * estava lá.
+ * Idempotente por natureza: o cálculo refaz tudo do zero a partir do período,
+ * então reimportar sobrescreve em vez de somar em cima do que já estava lá.
+ *
+ * Baixa por ficha técnica: para locais que têm fichas (hoje só o Lush Ipiranga),
+ * as vendas de pratos e drinks são explodidas nos insumos e somadas ao caminho
+ * 1:1 de `fator_conversao` (`calcularSaidasDoCiclo`). Local sem ficha produz
+ * exatamente o resultado de antes. Os avisos (insumo pendente, unidade
+ * incompatível, sub-preparo sem receita, insumo fora do ciclo) NÃO bloqueiam a
+ * importação: são persistidos em `estoque_ciclos.saidas_avisos` (migration 0030)
+ * junto com o instante, e a tela mostra o painel a partir daí.
  */
 export async function importarSaidasDoAutomo(
   cicloId: string,
-): Promise<{ ok: true; itensAtualizados: number; produtosIgnorados: number } | { erro: string }> {
+): Promise<{ ok: true; itensAtualizados: number; produtosIgnorados: number; avisos: ResumoAvisosSaidas } | { erro: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { erro: "Não autenticado" };
@@ -381,35 +389,69 @@ export async function importarSaidasDoAutomo(
 
   const { data: cicloItens, error: errItens } = await supabase
     .from("estoque_ciclo_itens")
-    .select("id, estoque_itens(id, automo_produto_id, fator_conversao)")
+    .select("id, estoque_itens(id, automo_produto_id, fator_conversao, produtos(nome, unidade_med))")
     .eq("ciclo_id", cicloId);
   if (errItens) return { erro: errItens.message };
 
   type CicloItemRow = NonNullable<typeof cicloItens>[number];
   const linhas = (cicloItens ?? []) as CicloItemRow[];
 
-  // Chave do mapa é o id da própria linha de estoque_ciclo_itens — é nela
-  // que o UPDATE roda, e evita um segundo lookup por estoque_item_id.
-  const itensMapeados: ItemMapeado[] = linhas
+  // Chave do mapa é o id da própria linha de estoque_ciclo_itens — é nela que
+  // o UPDATE roda. As fichas apontam para estoque_itens.id, e
+  // `calcularSaidasDoCiclo` faz a ponte entre os dois.
+  const linhasCiclo: LinhaCiclo[] = linhas
     .filter((linha) => linha.estoque_itens != null)
     .map((linha) => ({
-      estoque_item_id: linha.id,
+      ciclo_item_id: linha.id,
+      estoque_item_id: linha.estoque_itens!.id,
       automo_produto_id: linha.estoque_itens!.automo_produto_id,
       fator_conversao: linha.estoque_itens!.fator_conversao,
+      unidade_med: linha.estoque_itens!.produtos?.unidade_med ?? "",
     }));
 
-  const mapa = converterSaidas(itensMapeados, saidasAutomo);
+  // Fichas técnicas do local. `!ficha_id` desambigua a relação: os itens têm
+  // duas FKs para fichas_tecnicas (a ficha dona e a ficha filha).
+  const { data: fichasDb, error: errFichas } = await supabase
+    .from("fichas_tecnicas")
+    .select("id, nome, automo_produto_id, rendimento, rendimento_unidade, ficha_tecnica_itens!ficha_id(estoque_item_id, ficha_filha_id, insumo_pendente, quantidade, unidade, perda_pct)")
+    .eq("local_id", ciclo.local_id)
+    .eq("ativo", true);
+  if (errFichas) return { erro: errFichas.message };
 
-  const automoIdsMapeados = new Set(
-    itensMapeados
-      .map((item) => item.automo_produto_id)
-      .filter((id): id is number => id != null),
-  );
-  const produtosIgnorados = new Set(
-    saidasAutomo
-      .map((s) => s.automo_produto_id)
-      .filter((id) => !automoIdsMapeados.has(id)),
-  ).size;
+  const fichas: Ficha[] = (fichasDb ?? []).map((f) => ({
+    id: f.id,
+    automo_produto_id: f.automo_produto_id,
+    rendimento: Number(f.rendimento),
+    rendimento_unidade: f.rendimento_unidade as Ficha["rendimento_unidade"],
+    itens: (f.ficha_tecnica_itens ?? []).map((it) => ({
+      estoque_item_id: it.estoque_item_id,
+      ficha_filha_id: it.ficha_filha_id,
+      insumo_pendente: it.insumo_pendente,
+      quantidade: Number(it.quantidade ?? 0),
+      unidade: (it.unidade ?? "un") as Ficha["itens"][number]["unidade"],
+      perda_pct: Number(it.perda_pct ?? 0),
+    })),
+  }));
+
+  // Nomes para os avisos: fichas + itens de estoque do local (inclusive os que
+  // ficaram fora do ciclo por terem sido cadastrados depois da abertura).
+  const nomes = new Map<string, string>();
+  const unidadesForaDoCiclo = new Map<string, string>();
+  for (const f of fichasDb ?? []) nomes.set(f.id, f.nome);
+  if (fichas.length > 0) {
+    const { data: itensLocal } = await supabase
+      .from("estoque_itens")
+      .select("id, produtos(nome, unidade_med)")
+      .eq("local_id", ciclo.local_id);
+    for (const item of itensLocal ?? []) {
+      nomes.set(item.id, item.produtos?.nome ?? item.id);
+      unidadesForaDoCiclo.set(item.id, item.produtos?.unidade_med ?? "");
+    }
+  }
+
+  const resultado = calcularSaidasDoCiclo(linhasCiclo, saidasAutomo, fichas, nomes, unidadesForaDoCiclo);
+  const mapa = resultado.porLinha;
+  const produtosIgnorados = resultado.produtosIgnorados;
 
   const resultados = await Promise.all(
     linhas.map(async (linha) => {
@@ -434,8 +476,19 @@ export async function importarSaidasDoAutomo(
     };
   }
 
+  // Resumo dos avisos persistido junto ao ciclo (migration 0030): a tela lê
+  // daqui, com o mesmo instante das saídas gravadas acima.
+  const resumo = resumirAvisos(resultado, new Date().toISOString());
+  const { error: errResumo } = await supabase
+    .from("estoque_ciclos")
+    .update({ saidas_avisos: JSON.parse(JSON.stringify(resumo)), saidas_importadas_em: resumo.gerado_em })
+    .eq("id", cicloId);
+  if (errResumo) {
+    return { erro: `Saídas gravadas, mas o resumo dos avisos não foi salvo: ${errResumo.message}` };
+  }
+
   revalidatePath("/estoque/contagem");
-  return { ok: true, itensAtualizados: sucessos, produtosIgnorados };
+  return { ok: true, itensAtualizados: sucessos, produtosIgnorados, avisos: resumo };
 }
 
 // ── Importação de entradas do Omie (bloco 4) ────────────────────────────────
