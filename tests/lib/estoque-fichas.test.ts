@@ -144,3 +144,34 @@ describe("converterSaidasComFichas", () => {
     expect(avisos.some((a) => /1340/.test(a))).toBe(true);
   });
 });
+
+describe("itens pendentes e sub-preparo sem receita", () => {
+  it("insumo pendente (sem produto decidido) não baixa nada e gera aviso quando a ficha vende", () => {
+    const fichas: Ficha[] = [{
+      id: "f-tartare", automo_produto_id: 1726, rendimento: 1, rendimento_unidade: "un",
+      itens: [
+        { estoque_item_id: "mignon", quantidade: 150, unidade: "g", perda_pct: 0 },
+        { insumo_pendente: "Molho especial (para finalizar)", quantidade: 20, unidade: "g", perda_pct: 0 },
+      ],
+    }];
+    const { consumo, avisos } = explodirSaidasPorFicha(fichas, [{ automo_produto_id: 1726, quantidade: 4 }], compra({ mignon: "KG" }));
+    expect(consumo.get("mignon")).toBe(0.6);
+    expect(consumo.size).toBe(1);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatch(/Molho especial/);
+    expect(avisos[0]).toMatch(/pendente/i);
+  });
+
+  it("sub-preparo sem receita (ficha vazia) gera aviso de baixa parcial, uma vez por ficha vendida", () => {
+    const fichas: Ficha[] = [
+      { id: "f-caesar", automo_produto_id: 564, rendimento: 1, rendimento_unidade: "un",
+        itens: [{ ficha_filha_id: "f-supreme", quantidade: 50, unidade: "g", perda_pct: 0 }] },
+      { id: "f-supreme", automo_produto_id: null, rendimento: 1, rendimento_unidade: "g", itens: [] },
+    ];
+    const { consumo, avisos } = explodirSaidasPorFicha(fichas, [{ automo_produto_id: 564, quantidade: 3 }], compra({}));
+    expect(consumo.size).toBe(0);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatch(/f-supreme/);
+    expect(avisos[0]).toMatch(/sem receita|sem itens/i);
+  });
+});

@@ -30,6 +30,8 @@ export interface FichaItem {
   estoque_item_id?: string | null;
   /** Sub-preparo: outra ficha (fichas_tecnicas.id). Exclusivo com `estoque_item_id`. */
   ficha_filha_id?: string | null;
+  /** Insumo ainda sem produto decidido (ambíguo / sem cadastro): não baixa, só avisa. */
+  insumo_pendente?: string | null;
   /** Quantidade por RENDIMENTO da ficha, na unidade `unidade`. */
   quantidade: number;
   unidade: UnidadeFicha;
@@ -112,6 +114,9 @@ export function explodirSaidasPorFicha(
   const consumo = new Map<string, number>();
   const invalidos = new Set<string>();
   const avisos: string[] = [];
+  const avisados = new Set<string>();
+  // o mesmo aviso não se repete por venda: uma ficha vendida 40 vezes avisa uma vez
+  const avisar = (texto: string) => { if (!avisados.has(texto)) { avisados.add(texto); avisos.push(texto); } };
 
   // Insumos alcançáveis a partir das fichas de venda começam em 0 ("não vendeu nada").
   const semear = (ficha: Ficha, pilha: string[]) => {
@@ -133,9 +138,17 @@ export function explodirSaidasPorFicha(
       return;
     }
     const lotes = emUnidadeDoRendimento / ficha.rendimento;
+    if (ficha.itens.length === 0 && ficha.automo_produto_id == null) {
+      avisar(`sub-preparo ${ficha.id} sem receita (sem itens): baixa parcial das fichas que o usam`);
+      return;
+    }
     for (const item of ficha.itens) {
       const perda = item.perda_pct ?? 0;
       const bruto = lotes * item.quantidade / (1 - perda / 100);
+      if (item.insumo_pendente) {
+        avisar(`ficha ${ficha.id}: insumo pendente "${item.insumo_pendente}" sem baixa (produto não decidido)`);
+        continue;
+      }
       if (item.estoque_item_id) {
         const id = item.estoque_item_id;
         const unidadeCompra = unidadesCompra.get(id);

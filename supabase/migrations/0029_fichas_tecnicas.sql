@@ -48,24 +48,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS fichas_tecnicas_local_automo_vigencia_idx
   WHERE automo_produto_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS fichas_tecnicas_local_idx ON fichas_tecnicas (local_id) WHERE ativo;
 
+-- Sub-preparo é único pelo nome dentro do local (idempotência da carga e da tela).
+CREATE UNIQUE INDEX IF NOT EXISTS fichas_tecnicas_local_nome_sub_preparo_idx
+  ON fichas_tecnicas (local_id, nome)
+  WHERE tipo = 'sub_preparo';
+
 CREATE TABLE IF NOT EXISTS ficha_tecnica_itens (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ficha_id         uuid NOT NULL REFERENCES fichas_tecnicas(id) ON DELETE CASCADE,
-  -- insumo comprado OU sub-preparo (outra ficha) — exatamente um dos dois
+  -- insumo comprado OU sub-preparo (outra ficha) OU insumo ainda PENDENTE de decisão
+  -- (ambíguo / sem produto no catálogo) — exatamente um dos três. O pendente fica
+  -- registrado com nome e motivo para a baixa avisar em vez de fingir que não existe.
   estoque_item_id  uuid REFERENCES estoque_itens(id) ON DELETE RESTRICT,
   ficha_filha_id   uuid REFERENCES fichas_tecnicas(id) ON DELETE RESTRICT,
-  -- por RENDIMENTO da ficha, na `unidade`
-  quantidade       numeric(12,4) NOT NULL CHECK (quantidade > 0),
-  unidade          text NOT NULL CHECK (unidade IN ('g', 'kg', 'ml', 'L', 'un')),
+  insumo_pendente  text,
+  pendente_motivo  text,
+  -- por RENDIMENTO da ficha, na `unidade`. Só podem faltar em item PENDENTE
+  -- (ficha diz "q.b." ou "porção" sem peso): registrar sem número é honesto,
+  -- inventar quantidade não é.
+  quantidade       numeric(12,4) CHECK (quantidade > 0),
+  unidade          text CHECK (unidade IN ('g', 'kg', 'ml', 'L', 'un')),
   -- % perdida antes de chegar ao prato (casca, aparas). Consumo = quantidade / (1 - perda/100).
   perda_pct        numeric(5,2) NOT NULL DEFAULT 0 CHECK (perda_pct >= 0 AND perda_pct < 100),
   ordem            integer NOT NULL DEFAULT 0,
   obs              text,
   CONSTRAINT ficha_tecnica_itens_um_destino CHECK (
-    (estoque_item_id IS NOT NULL AND ficha_filha_id IS NULL) OR
-    (estoque_item_id IS NULL AND ficha_filha_id IS NOT NULL)
+    (estoque_item_id IS NOT NULL)::int + (ficha_filha_id IS NOT NULL)::int + (insumo_pendente IS NOT NULL)::int = 1
   ),
-  CONSTRAINT ficha_tecnica_itens_sem_auto_referencia CHECK (ficha_filha_id IS DISTINCT FROM ficha_id)
+  CONSTRAINT ficha_tecnica_itens_sem_auto_referencia CHECK (ficha_filha_id IS DISTINCT FROM ficha_id),
+  CONSTRAINT ficha_tecnica_itens_quantidade_obrigatoria CHECK (
+    insumo_pendente IS NOT NULL OR (quantidade IS NOT NULL AND unidade IS NOT NULL)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS ficha_tecnica_itens_ficha_idx   ON ficha_tecnica_itens (ficha_id);
