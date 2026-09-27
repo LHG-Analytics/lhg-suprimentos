@@ -40,6 +40,7 @@ import {
 import type { CicloView, CicloItemView } from "./tipos";
 import { EstoquePrintDoc } from "./estoque-print-doc";
 import { ImportarContagemModal } from "./importar-contagem-modal";
+import { AvisosSaidasPanel } from "./avisos-saidas-panel";
 
 interface Props {
   local:                        { id: string; nome: string };
@@ -323,6 +324,13 @@ function CicloAbertoView({
           ? ` · ${res.produtosIgnorados} ${res.produtosIgnorados === 1 ? "produto" : "produtos"} do Automo sem mapeamento foram ignorados`
           : "";
       toast.success(`${res.itensAtualizados} ${rotuloItens}${complemento}`);
+      // Avisos da baixa por ficha nunca bloqueiam a importação: o painel logo
+      // abaixo do cabeçalho lista tudo por tipo (persistido junto ao ciclo).
+      if (res.avisos.total > 0) {
+        toast.warning(
+          `${res.avisos.total} ${res.avisos.total === 1 ? "aviso" : "avisos"} na baixa por ficha — veja o painel abaixo do cabeçalho`,
+        );
+      }
       router.refresh();
     } finally {
       setImportando(false);
@@ -437,6 +445,9 @@ function CicloAbertoView({
       </header>
 
       <main className="flex-1 px-4 py-4 space-y-3">
+        {/* Avisos da última importação de saídas (baixa por ficha) — só aparece
+            depois de importar; local sem ficha importa sem aviso nenhum. */}
+        <AvisosSaidasPanel resumo={ciclo.avisosSaidas} />
         {/*
           O mês virou e o ciclo aberto é do mês passado.
 

@@ -1,8 +1,12 @@
 /** Tipos compartilhados entre a página de contagem e a tela cliente. */
 
+import type { ResumoAvisosSaidas } from "@/lib/estoque/saidas-ciclo";
+
 export interface CicloView {
   id:  string;
   mes: string; // ISO, dia 1 do mês — ver rotuloMes em lib/estoque/ciclo.ts
+  /** Resumo da última importação de saídas (`estoque_ciclos.saidas_avisos`). `null` = ainda não importou. */
+  avisosSaidas: ResumoAvisosSaidas | null;
 }
 
 /** Uma origem (CNPJ) das entradas de um item — ver bloco 5, entradas por CNPJ. */

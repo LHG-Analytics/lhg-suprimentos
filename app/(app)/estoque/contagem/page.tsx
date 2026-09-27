@@ -11,6 +11,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { ContagemClient } from "./_components/contagem-client";
 import type { CicloView, CicloItemView } from "./_components/tipos";
+import type { ResumoAvisosSaidas } from "@/lib/estoque/saidas-ciclo";
 
 export const metadata = { title: "Contagem" };
 
@@ -55,7 +56,7 @@ export default async function ContagemPage() {
 
   const { data: cicloAberto } = await supabase
     .from("estoque_ciclos")
-    .select("id, mes")
+    .select("id, mes, saidas_avisos")
     .eq("local_id", local.id)
     .eq("status", "aberto")
     .maybeSingle();
@@ -140,7 +141,16 @@ export default async function ContagemPage() {
     <ContagemClient
       local={{ id: local.id, nome: local.nome }}
       temItensControlados={(totalItensAtivos ?? 0) > 0}
-      ciclo={cicloAberto ? ({ id: cicloAberto.id, mes: cicloAberto.mes } satisfies CicloView) : null}
+      ciclo={
+        cicloAberto
+          ? ({
+              id: cicloAberto.id,
+              mes: cicloAberto.mes,
+              // jsonb gravado por `resumirAvisos` na importação — o formato é nosso
+              avisosSaidas: (cicloAberto.saidas_avisos as unknown as ResumoAvisosSaidas | null) ?? null,
+            } satisfies CicloView)
+          : null
+      }
       itens={itens}
       itensForaDoCiclo={itensForaDoCiclo}
       ehPrimeiroCiclo={ehPrimeiroCiclo}

@@ -516,6 +516,8 @@ export type Database = {
           id: string
           local_id: string
           mes: string
+          saidas_avisos: Json | null
+          saidas_importadas_em: string | null
           status: string
         }
         Insert: {
@@ -526,6 +528,8 @@ export type Database = {
           id?: string
           local_id: string
           mes: string
+          saidas_avisos?: Json | null
+          saidas_importadas_em?: string | null
           status?: string
         }
         Update: {
@@ -536,6 +540,8 @@ export type Database = {
           id?: string
           local_id?: string
           mes?: string
+          saidas_avisos?: Json | null
+          saidas_importadas_em?: string | null
           status?: string
         }
         Relationships: [
