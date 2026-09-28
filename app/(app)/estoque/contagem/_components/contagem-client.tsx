@@ -20,12 +20,13 @@
  */
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Check, AlertCircle, Boxes, Download, Info, Printer, FileSpreadsheet, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { calcularARepor, calcularTeorico, calcularDivergencia, rotuloMes } from "@/lib/estoque/ciclo";
+import { contarPorCategoria, filtrarPorCategoria, normalizarCategoriaParam } from "@/lib/estoque/filtro-categoria";
 import {
   abrirCiclo,
   registrarContagem,
@@ -41,6 +42,7 @@ import type { CicloView, CicloItemView } from "./tipos";
 import { EstoquePrintDoc } from "./estoque-print-doc";
 import { ImportarContagemModal } from "./importar-contagem-modal";
 import { AvisosSaidasPanel } from "./avisos-saidas-panel";
+import { FiltroCategoriaChips } from "./filtro-categoria-chips";
 
 interface Props {
   local:                        { id: string; nome: string };
@@ -194,8 +196,27 @@ function CicloAbertoView({
   unidadesFiscais,
 }: CicloAbertoViewProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [itensLocal, setItensLocal] = useState(itensIniciais);
   const [fechando, setFechando] = useState(false);
+
+  /*
+   * Filtro de "Categoria" (família do Omie — ver lib/estoque/filtro-categoria.ts).
+   * O estado é a URL (`?categoria=`), não um useState: recarregar ou compartilhar
+   * o link mantém a prateleira escolhida. Só a exibição muda — `itensLocal`,
+   * `total`, `contados`, a importação e o PDF seguem sobre todos os itens.
+   */
+  const categoriaAtiva = normalizarCategoriaParam(searchParams.get("categoria"));
+  const categorias = contarPorCategoria(itensLocal);
+  const itensVisiveis = filtrarPorCategoria(itensLocal, categoriaAtiva);
+  function selecionarCategoria(categoria: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (categoria == null) params.delete("categoria");
+    else params.set("categoria", categoria);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
   const [importando, setImportando] = useState(false);
   const [importandoEntradas, setImportandoEntradas] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
@@ -563,9 +584,29 @@ function CicloAbertoView({
           agrupamento com `lg:space-y-0` remove o espaço entre cards para as
           linhas ficarem encostadas, como numa tabela.
         */}
+        <FiltroCategoriaChips
+          categorias={categorias}
+          ativa={categoriaAtiva}
+          total={itensLocal.length}
+          onSelecionar={selecionarCategoria}
+        />
+        {categoriaAtiva != null && itensVisiveis.length === 0 && (
+          // URL com categoria que não existe mais neste ciclo (link antigo, item
+          // removido): explica e oferece a saída, em vez de lista vazia muda.
+          <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-2">
+            <span>Nenhum item na categoria <span className="font-medium text-foreground">{categoriaAtiva}</span> neste ciclo.</span>
+            <button
+              type="button"
+              onClick={() => selecionarCategoria(null)}
+              className="inline-flex items-center h-8 px-2.5 rounded-md border border-border text-xs font-medium text-foreground hover:bg-muted transition-colors"
+            >
+              Mostrar todas
+            </button>
+          </div>
+        )}
         <div className="space-y-3 lg:space-y-0 lg:rounded-xl lg:border lg:border-border lg:bg-card lg:pt-3 lg:pb-1">
           <CabecalhoContagem ehPrimeiroCiclo={ehPrimeiroCiclo} />
-          {itensLocal.map((item) => (
+          {itensVisiveis.map((item) => (
             <ItemCard
               key={item.id}
               item={item}

@@ -19,6 +19,8 @@ export interface CicloItemView {
   id:               string; // id de estoque_ciclo_itens — é o que registrarContagem espera
   produtoNome:      string;
   produtoUnidadeMed: string;
+  /** `produtos.familia_omie` — na interface chama-se "Categoria" (ver lib/estoque/filtro-categoria.ts). */
+  produtoCategoria: string | null;
   estoqueIdeal:     number;
   contagemAnterior: number | null;
   entradas:         number | null;
