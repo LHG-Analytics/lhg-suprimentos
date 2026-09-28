@@ -90,7 +90,7 @@ export default async function ContagemPage() {
     const { data: itensCiclo } = await supabase
       .from("estoque_ciclo_itens")
       .select(
-        "id, contagem_anterior, entradas, saidas, contagem_atual, contado_em, estoque_itens(estoque_ideal, produtos(nome, unidade_med)), user_profiles(nome), estoque_ciclo_item_entradas(unidade_id, quantidade)",
+        "id, contagem_anterior, entradas, saidas, contagem_atual, contado_em, estoque_itens(estoque_ideal, produtos(nome, unidade_med, familia_omie)), user_profiles(nome), estoque_ciclo_item_entradas(unidade_id, quantidade)",
       )
       .eq("ciclo_id", cicloAberto.id);
 
@@ -101,6 +101,8 @@ export default async function ContagemPage() {
         id: row.id,
         produtoNome: row.estoque_itens?.produtos?.nome ?? "—",
         produtoUnidadeMed: row.estoque_itens?.produtos?.unidade_med ?? "",
+        // "Categoria" na tela = família do Omie (ver lib/estoque/filtro-categoria.ts)
+        produtoCategoria: row.estoque_itens?.produtos?.familia_omie ?? null,
         estoqueIdeal: row.estoque_itens?.estoque_ideal ?? 0,
         contagemAnterior: row.contagem_anterior,
         entradas: row.entradas,
